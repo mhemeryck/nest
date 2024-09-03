@@ -25,7 +25,7 @@ type Device struct {
 	ReadEvents  chan<- DevicePayload
 
 	filehandle *os.File
-	prev       []byte
+	prev       DevicePayload
 }
 
 func (d *Device) Read() (DevicePayload, error) {
@@ -92,7 +92,10 @@ func (d *Device) Loop() {
 				logger.Fatalf("Error reading file: %w", err)
 			}
 			logger.Printf("Current value: %v", value)
-			d.ReadEvents <- value
+			if d.prev != value {
+				d.ReadEvents <- value
+				d.prev = value
+			}
 		case msg := <-d.WriteEvents:
 			logger.Printf("Got message to write %v", msg)
 			d.Write(msg)
@@ -120,7 +123,7 @@ func main() {
 	}()
 
 	// test setup to send occasional tick to write something to a file
-	ticker := time.NewTicker(time.Second)
+	ticker := time.NewTicker(3 * time.Second)
 	for {
 		select {
 		case t := <-ticker.C:
