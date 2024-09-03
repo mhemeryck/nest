@@ -1,44 +1,93 @@
 package main
 
 import (
-	"bytes"
 	"io"
 	"log"
 	"os"
 	"time"
 )
 
-const filename = "./foo"
+const (
+	filename           = "./foo"
+	pollIntervalMillis = 250
+)
 
-func main() {
-	logger := log.New(os.Stdout, "nest: ", log.LstdFlags)
+var (
+	logger *log.Logger
+)
 
-	f, err := os.Open(filename)
-	defer f.Close()
-	if err != nil {
-		logger.Fatalf("Could not open file handle %v", err)
+type DevicePayload bool
+
+type Device struct {
+	Filename string
+
+	WriteEvents <-chan DevicePayload
+	ReadEvents  chan<- DevicePayload
+
+	filehandle *os.File
+	prev       []byte
+}
+
+func (d *Device) Read() (DevicePayload, error) {
+	var err error
+
+	if d.filehandle == nil {
+		d.filehandle, err = os.Open(d.Filename)
+		if err != nil {
+			return DevicePayload(false), err
+		}
 	}
 
-	prev := []byte("0")
+	_, err = d.filehandle.Seek(0, io.SeekStart)
+	if err != nil {
+		return DevicePayload(false), err
+	}
 
-	ticker := time.NewTicker(250 * time.Millisecond)
+	b := make([]byte, 1)
+	_, err = d.filehandle.Read(b)
+	if err != nil {
+		return DevicePayload(false), err
+	}
+
+	switch b[0] {
+	case '0':
+		return DevicePayload(false), err
+	case '1':
+		return DevicePayload(true), err
+	}
+	return DevicePayload(false), err
+}
+
+func (d *Device) Loop() {
+	logger.Printf("Start device loop")
+
+	ticker := time.NewTicker(pollIntervalMillis * time.Millisecond)
 
 	for {
 		select {
 		case <-ticker.C:
-			_, err = f.Seek(0, io.SeekStart)
+			value, err := d.Read()
 			if err != nil {
-				logger.Fatalf("Could not seek back to beginning of file: %v", err)
+				logger.Fatalf("Error reading file: %w", err)
 			}
-			b := make([]byte, 1)
-			n, err := f.Read(b)
-			if err != nil {
-				logger.Fatalf("Could not read bytes: %v, %d", err, n)
-			}
-			if !bytes.Equal(b, prev) {
-				logger.Printf("Read %v\n", string(b))
-				prev = b
-			}
+			logger.Printf("Current value: %v", value)
+			d.ReadEvents <- value
 		}
+	}
+}
+
+func main() {
+	logger = log.New(os.Stdout, "nest: ", log.LstdFlags)
+
+	reader := make(chan DevicePayload)
+
+	device := &Device{
+		Filename:   filename,
+		ReadEvents: reader,
+	}
+	go device.Loop()
+
+	for msg := range reader {
+		logger.Printf("Reader got value %v", msg)
 	}
 }
