@@ -4,11 +4,16 @@ import (
 	"io"
 	"log"
 	"os"
+	"regexp"
 	"time"
 )
 
 const (
 	pollIntervalMillis = 250
+)
+
+var (
+	filenameRegex = regexp.MustCompile("/io_group(1|2|3)/(?P<device_fmt>di|do|ro)_(?P<io_group>1|2|3)_(?P<number>[0-9]{2})/(di|do|ro)_value$")
 )
 
 type DevicePayload bool
