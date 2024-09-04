@@ -1,4 +1,4 @@
-package main
+package device
 
 import (
 	"io"
@@ -8,12 +8,7 @@ import (
 )
 
 const (
-	filename           = "./foo"
 	pollIntervalMillis = 250
-)
-
-var (
-	logger *log.Logger
 )
 
 type DevicePayload bool
@@ -80,7 +75,7 @@ func (d *Device) Write(payload DevicePayload) error {
 }
 
 func (d *Device) Loop() {
-	logger.Printf("Start device loop")
+	log.Printf("Start device loop")
 
 	ticker := time.NewTicker(pollIntervalMillis * time.Millisecond)
 
@@ -89,45 +84,16 @@ func (d *Device) Loop() {
 		case <-ticker.C:
 			value, err := d.Read()
 			if err != nil {
-				logger.Fatalf("Error reading file: %v", err)
+				log.Fatalf("Error reading file: %v", err)
 			}
-			logger.Printf("Current value: %v", value)
+			log.Printf("Current value: %v", value)
 			if d.prev != value {
 				d.ReadEvents <- value
 				d.prev = value
 			}
 		case msg := <-d.WriteEvents:
-			logger.Printf("Got message to write %v", msg)
+			log.Printf("Got message to write %v", msg)
 			d.Write(msg)
-		}
-	}
-}
-
-func main() {
-	logger = log.New(os.Stdout, "nest: ", log.LstdFlags)
-
-	reader := make(chan DevicePayload)
-	writer := make(chan DevicePayload)
-
-	device := &Device{
-		Filename:    filename,
-		ReadEvents:  reader,
-		WriteEvents: writer,
-	}
-	go device.Loop()
-
-	go func() {
-		for msg := range reader {
-			logger.Printf("Reader got value %v", msg)
-		}
-	}()
-
-	// test setup to send occasional tick to write something to a file
-	ticker := time.NewTicker(3 * time.Second)
-	for {
-		select {
-		case t := <-ticker.C:
-			writer <- DevicePayload(t.Second()%2 == 0)
 		}
 	}
 }
