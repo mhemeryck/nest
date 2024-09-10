@@ -1,10 +1,12 @@
 package device
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"os"
 	"regexp"
+	"strconv"
 	"time"
 )
 
@@ -13,13 +15,23 @@ const (
 )
 
 var (
-	filenameRegex = regexp.MustCompile("/io_group(1|2|3)/(?P<device_fmt>di|do|ro)_(?P<io_group>1|2|3)_(?P<number>[0-9]{2})/(di|do|ro)_value$")
+	filenameRegex = regexp.MustCompile(`/io_group(1|2|3)/(?P<device_fmt>di|do|ro)_(?P<io_group>1|2|3)_(?P<number>[0-9]{2})/(di|do|ro)_value$`)
+
+	DeviceFormat_DigitalInput  = DeviceFormat("DigitalInput")
+	DeviceFormat_DigitalOutput = DeviceFormat("DigitalOutput")
+	DeviceFormat_RelayOutput   = DeviceFormat("RelayOutput")
 )
 
 type DevicePayload bool
+type DeviceFormat string
+type IOGroup int
+type DeviceNumber int
 
 type Device struct {
-	Filename string
+	Path   string
+	Format DeviceFormat
+	Group  IOGroup
+	Number DeviceNumber
 
 	WriteEvents <-chan DevicePayload
 	ReadEvents  chan<- DevicePayload
@@ -28,11 +40,52 @@ type Device struct {
 	prev       DevicePayload
 }
 
+func NewDeviceFromPath(path string) (Device, error) {
+	match := filenameRegex.FindStringSubmatch(path)
+	if len(match) == 0 {
+		return Device{}, fmt.Errorf("No device matched path")
+	}
+
+	d := Device{Path: path}
+
+	for k, name := range filenameRegex.SubexpNames() {
+		if k != 0 && name != "" {
+			switch name {
+			case "device_fmt":
+				switch match[k] {
+				case "di":
+					d.Format = DeviceFormat_DigitalInput
+
+				case "do":
+					d.Format = DeviceFormat_DigitalOutput
+
+				case "ro":
+					d.Format = DeviceFormat_RelayOutput
+				}
+			case "io_group":
+				i, err := strconv.Atoi(match[k])
+				if err != nil {
+					return d, err
+				}
+				d.Group = IOGroup(i)
+			case "number":
+				i, err := strconv.Atoi(match[k])
+				if err != nil {
+					return d, err
+				}
+				d.Number = DeviceNumber(i)
+			}
+		}
+	}
+
+	return d, nil
+}
+
 func (d *Device) Read() (DevicePayload, error) {
 	var err error
 
 	if d.filehandle == nil {
-		d.filehandle, err = os.Open(d.Filename)
+		d.filehandle, err = os.Open(d.Path)
 		if err != nil {
 			return DevicePayload(false), err
 		}
@@ -61,7 +114,7 @@ func (d *Device) Read() (DevicePayload, error) {
 func (d *Device) Write(payload DevicePayload) error {
 	var err error
 
-	f, err := os.Create(d.Filename)
+	f, err := os.Create(d.Path)
 	defer f.Close()
 	if err != nil {
 		return err

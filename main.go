@@ -17,7 +17,7 @@ const (
 )
 
 var (
-	filenameRegex = regexp.MustCompile("/io_group(1|2|3)/(?P<device_fmt>di|do|ro)_(?P<io_group>1|2|3)_(?P<number>[0-9]{2})/(di|do|ro)_value$")
+	filenameRegex = regexp.MustCompile(`/io_group(1|2|3)/(?P<device_fmt>di|do|ro)_(?P<io_group>1|2|3)_(?P<number>[0-9]{2})/(di|do|ro)_value$`)
 
 	DeviceFormat_DigitalInput  = DeviceFormat("DigitalInput")
 	DeviceFormat_DigitalOutput = DeviceFormat("DigitalOutput")
@@ -29,7 +29,7 @@ func main2() {
 	writer := make(chan device.DevicePayload)
 
 	d := &device.Device{
-		Filename:    filename,
+		Path:        filename,
 		ReadEvents:  reader,
 		WriteEvents: writer,
 	}
@@ -59,6 +59,7 @@ type DeviceMeta struct {
 	Format DeviceFormat
 	Group  IOGroup
 	Number DeviceNumber
+	Path   string
 }
 
 func DeviceMetaFromPath(path string) (DeviceMeta, error) {
@@ -67,7 +68,7 @@ func DeviceMetaFromPath(path string) (DeviceMeta, error) {
 		return DeviceMeta{}, fmt.Errorf("No device matched path")
 	}
 
-	d := DeviceMeta{}
+	d := DeviceMeta{Path: path}
 
 	for k, name := range filenameRegex.SubexpNames() {
 		if k != 0 && name != "" {
