@@ -103,7 +103,7 @@ func DeviceMetaFromPath(path string) (DeviceMeta, error) {
 	return d, nil
 }
 
-func main() {
+func main3() {
 	// paths := make([]string, 0)
 	metas := make([]DeviceMeta, 0)
 	err := filepath.WalkDir("test/fixtures",
@@ -127,4 +127,26 @@ func main() {
 		panic(err)
 	}
 	log.Printf("Found %d matching paths", len(metas))
+}
+
+func main() {
+	mgr, err := device.NewDeviceManagerFromPath("test/fixtures")
+	if err != nil {
+		log.Fatalf("Can't start a device manager: %v", err)
+	}
+
+	reader := make(chan device.DevicePayload)
+
+	for k, d := range mgr.Devices {
+		log.Printf("Found device %v\n", d)
+		d.ReadEvents = reader
+		go d.Loop()
+		if k > 0 {
+			break
+		}
+	}
+
+	for msg := range reader {
+		log.Printf("Reader got value %v", msg)
+	}
 }
