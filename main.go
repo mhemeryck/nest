@@ -153,10 +153,10 @@ func main() {
 	}()
 
 	d := mgr.Devices[0]
+	log.Printf("device %v\n", d)
 	for i := 0; i < 5; i++ {
-		d.Write(device.DevicePayload(true))
+		d.Write(device.DevicePayload(i%2 == 0))
 		time.Sleep(3 * time.Second)
-		d.Write(device.DevicePayload(false))
 	}
 
 }

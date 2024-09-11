@@ -117,6 +117,7 @@ func (d *Device) Read() (DevicePayload, error) {
 }
 
 func (d *Device) Write(payload DevicePayload) error {
+	log.Printf("Writing payload %v for device %d\n", payload, d)
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
@@ -141,7 +142,7 @@ func (d *Device) Write(payload DevicePayload) error {
 }
 
 func (d *Device) Loop() {
-	log.Printf("Start device loop for %v\n", d)
+	log.Printf("Start device loop for %v", d)
 
 	ticker := time.NewTicker(pollIntervalMillis * time.Millisecond)
 
@@ -152,7 +153,7 @@ func (d *Device) Loop() {
 			if err != nil {
 				log.Fatalf("Error reading file: %v", err)
 			}
-			// log.Printf("Current value: %v", value)
+			// log.Printf("Current value: %v for %v", value, d.Number)
 			if d.prev != value {
 				d.ReadEvents <- value
 				d.prev = value
