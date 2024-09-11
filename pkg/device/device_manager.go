@@ -22,7 +22,7 @@ func NewDeviceManagerFromPath(path string) (DeviceManager, error) {
 			device, err := NewDeviceFromPath(p)
 			// We're only interested if there's a match
 			if err == nil {
-				devices = append(devices, &device)
+				devices = append(devices, device)
 			}
 			return nil
 		})

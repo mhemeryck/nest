@@ -141,12 +141,22 @@ func main() {
 		log.Printf("Found device %v\n", d)
 		d.ReadEvents = reader
 		go d.Loop()
-		if k > 0 {
+		if k > 1 {
 			break
 		}
 	}
 
-	for msg := range reader {
-		log.Printf("Reader got value %v", msg)
+	go func() {
+		for msg := range reader {
+			log.Printf("Reader got value %v", msg)
+		}
+	}()
+
+	d := mgr.Devices[0]
+	for i := 0; i < 5; i++ {
+		d.Write(device.DevicePayload(true))
+		time.Sleep(3 * time.Second)
+		d.Write(device.DevicePayload(false))
 	}
+
 }

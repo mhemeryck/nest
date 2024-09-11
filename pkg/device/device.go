@@ -7,6 +7,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -38,15 +39,16 @@ type Device struct {
 
 	filehandle *os.File
 	prev       DevicePayload
+	lock       sync.RWMutex
 }
 
-func NewDeviceFromPath(path string) (Device, error) {
+func NewDeviceFromPath(path string) (*Device, error) {
 	match := filenameRegex.FindStringSubmatch(path)
 	if len(match) == 0 {
-		return Device{}, fmt.Errorf("No device matched path")
+		return &Device{}, fmt.Errorf("No device matched path")
 	}
 
-	d := Device{Path: path}
+	d := &Device{Path: path}
 
 	for k, name := range filenameRegex.SubexpNames() {
 		if k != 0 && name != "" {
@@ -82,6 +84,9 @@ func NewDeviceFromPath(path string) (Device, error) {
 }
 
 func (d *Device) Read() (DevicePayload, error) {
+	d.lock.RLock()
+	defer d.lock.RUnlock()
+
 	var err error
 
 	if d.filehandle == nil {
@@ -112,6 +117,9 @@ func (d *Device) Read() (DevicePayload, error) {
 }
 
 func (d *Device) Write(payload DevicePayload) error {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
 	var err error
 
 	f, err := os.Create(d.Path)
