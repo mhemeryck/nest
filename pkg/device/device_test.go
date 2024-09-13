@@ -11,21 +11,19 @@ func Test_DeviceReadWrite(t *testing.T) {
 	temp_dir := t.TempDir()
 
 	reader := make(chan DevicePayload)
-	writer := make(chan DevicePayload)
 
 	device := &Device{
-		Path:        path.Join(temp_dir, "bar"),
-		ReadEvents:  reader,
-		WriteEvents: writer,
+		Path:       path.Join(temp_dir, "bar"),
+		ReadEvents: reader,
 	}
 
 	go device.Loop()
 
-	writer <- DevicePayload(true)
+	device.Write(DevicePayload(true))
 	msg := <-reader
 	assert.Equal(t, msg, DevicePayload(true))
 
-	writer <- DevicePayload(false)
+	device.Write(DevicePayload(false))
 	msg = <-reader
 	assert.Equal(t, msg, DevicePayload(false))
 }

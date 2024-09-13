@@ -34,8 +34,7 @@ type Device struct {
 	Group  IOGroup
 	Number DeviceNumber
 
-	WriteEvents <-chan DevicePayload
-	ReadEvents  chan<- DevicePayload
+	ReadEvents chan<- DevicePayload
 
 	filehandle *os.File
 	prev       DevicePayload
@@ -117,7 +116,7 @@ func (d *Device) Read() (DevicePayload, error) {
 }
 
 func (d *Device) Write(payload DevicePayload) error {
-	log.Printf("Writing payload %v for device %d\n", payload, d)
+	log.Printf("Writing payload %v for device %v\n", payload, d)
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
@@ -158,9 +157,6 @@ func (d *Device) Loop() {
 				d.ReadEvents <- value
 				d.prev = value
 			}
-		case msg := <-d.WriteEvents:
-			log.Printf("Got message to write %v", msg)
-			d.Write(msg)
 		}
 	}
 }
