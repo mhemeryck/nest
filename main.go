@@ -12,10 +12,6 @@ import (
 	"github.com/mhemeryck/nest/pkg/device"
 )
 
-const (
-	filename = "./foo"
-)
-
 var (
 	filenameRegex = regexp.MustCompile(`/io_group(1|2|3)/(?P<device_fmt>di|do|ro)_(?P<io_group>1|2|3)_(?P<number>[0-9]{2})/(di|do|ro)_value$`)
 
@@ -131,5 +127,4 @@ func main() {
 		d.Write(device.DevicePayload(i%2 == 0))
 		time.Sleep(3 * time.Second)
 	}
-
 }
