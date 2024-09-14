@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -116,6 +117,10 @@ func (d *Device) Read() (DevicePayload, error) {
 }
 
 func (d *Device) Write(payload DevicePayload) error {
+	if !slices.Contains([]DeviceFormat{DeviceFormat_DigitalOutput, DeviceFormat_RelayOutput}, d.Format) {
+		return fmt.Errorf("Cannot write to device %v: wrong format %v", d, d.Format)
+	}
+
 	log.Printf("Writing payload %v for device %v\n", payload, d)
 	d.lock.Lock()
 	defer d.lock.Unlock()

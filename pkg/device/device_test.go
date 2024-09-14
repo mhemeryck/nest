@@ -15,6 +15,7 @@ func Test_DeviceReadWrite(t *testing.T) {
 	device := &Device{
 		Path:       path.Join(temp_dir, "bar"),
 		ReadEvents: reader,
+		Format:     DeviceFormat_DigitalOutput,
 	}
 
 	go device.Loop()
@@ -26,6 +27,21 @@ func Test_DeviceReadWrite(t *testing.T) {
 	device.Write(DevicePayload(false))
 	msg = <-reader
 	assert.Equal(t, msg, DevicePayload(false))
+}
+
+func Test_DeviceReadWriteDigitalInput(t *testing.T) {
+	temp_dir := t.TempDir()
+
+	reader := make(chan DevicePayload)
+
+	device := &Device{
+		Path:       path.Join(temp_dir, "bar"),
+		ReadEvents: reader,
+		Format:     DeviceFormat_DigitalInput,
+	}
+
+	err := device.Write(DevicePayload(true))
+	assert.Error(t, err)
 }
 
 func Test_NewDeviceFromPath(t *testing.T) {
