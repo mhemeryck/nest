@@ -106,13 +106,10 @@ func main() {
 
 	reader := make(chan device.DevicePayload)
 
-	for k, d := range mgr.Devices {
+	for _, d := range mgr.Devices {
 		log.Printf("Found device %v\n", d)
 		d.ReadEvents = reader
 		go d.Loop()
-		if k > 1 {
-			break
-		}
 	}
 
 	go func() {
@@ -121,7 +118,7 @@ func main() {
 		}
 	}()
 
-	d := mgr.Devices[0]
+	d := mgr.Devices[5]
 	log.Printf("device %v\n", d)
 	for i := 0; i < 5; i++ {
 		d.Write(i%2 == 0)
