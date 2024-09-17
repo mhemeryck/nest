@@ -24,7 +24,13 @@ var (
 	DeviceFormat_RelayOutput   = DeviceFormat("RelayOutput")
 )
 
-type DevicePayload bool
+type DevicePayload struct {
+	// Message is just on or off for now
+	Message bool
+	// Id is just a string / slug to identify the device for now
+	Id string
+}
+
 type DeviceFormat string
 type IOGroup int
 type DeviceNumber int
@@ -116,31 +122,37 @@ func (d *Device) Read() (DevicePayload, error) {
 	if d.filehandle == nil {
 		d.filehandle, err = os.Open(d.Path)
 		if err != nil {
-			return DevicePayload(false), err
+			return DevicePayload{
+				Message: false,
+				Id:      d.Slug(),
+			}, err
 		}
 	}
 
 	_, err = d.filehandle.Seek(0, io.SeekStart)
 	if err != nil {
-		return DevicePayload(false), err
+		return DevicePayload{
+			Message: false,
+			Id:      d.Slug(),
+		}, err
 	}
 
 	b := make([]byte, 1)
 	_, err = d.filehandle.Read(b)
 	if err != nil {
-		return DevicePayload(false), err
+		return DevicePayload{Message: false, Id: d.Slug()}, err
 	}
 
 	switch b[0] {
 	case '0':
-		return DevicePayload(false), err
+		return DevicePayload{Message: false, Id: d.Slug()}, err
 	case '1':
-		return DevicePayload(true), err
+		return DevicePayload{Message: true, Id: d.Slug()}, err
 	}
-	return DevicePayload(false), err
+	return DevicePayload{Message: false, Id: d.Slug()}, err
 }
 
-func (d *Device) Write(payload DevicePayload) error {
+func (d *Device) Write(payload bool) error {
 	if !slices.Contains([]DeviceFormat{DeviceFormat_DigitalOutput, DeviceFormat_RelayOutput}, d.Format) {
 		return fmt.Errorf("Cannot write to device %v: wrong format %v", d, d.Format)
 	}

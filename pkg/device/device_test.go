@@ -22,13 +22,13 @@ func Test_DeviceReadWrite(t *testing.T) {
 
 	go device.Loop()
 
-	device.Write(DevicePayload(true))
+	device.Write(true)
 	msg := <-reader
-	assert.Equal(t, msg, DevicePayload(true))
+	assert.Equal(t, msg.Message, true)
 
-	device.Write(DevicePayload(false))
+	device.Write(false)
 	msg = <-reader
-	assert.Equal(t, msg, DevicePayload(false))
+	assert.Equal(t, msg.Message, false)
 }
 
 func Test_DeviceReadWriteDigitalInput(t *testing.T) {
@@ -44,7 +44,7 @@ func Test_DeviceReadWriteDigitalInput(t *testing.T) {
 		},
 	}
 
-	err := device.Write(DevicePayload(true))
+	err := device.Write(true)
 	assert.Error(t, err)
 }
 
