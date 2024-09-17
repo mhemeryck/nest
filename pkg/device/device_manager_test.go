@@ -12,5 +12,5 @@ func Test_NewDeviceManagerFromPath(t *testing.T) {
 	mgr, err := NewDeviceManagerFromPath("../../test/fixtures")
 
 	require.NoError(t, err, "Could not crawl fixtures path")
-	assert.Equal(t, len(mgr.Devices), 69)
+	assert.Equal(t, len(mgr.Devices), 68)
 }

@@ -35,6 +35,7 @@ type DeviceFormat string
 type IOGroup int
 type DeviceNumber int
 
+// String implements the stringer interface, such that we can easily get an abbreviation for a given device format
 func (f DeviceFormat) String() string {
 	switch f {
 	case DeviceFormat_DigitalInput:
@@ -55,7 +56,6 @@ type DeviceIdentifier struct {
 
 // Slug generates a unique identifier for
 func (id DeviceIdentifier) Slug() string {
-	// group := strconv.Itoa(int(id.Group))
 	return fmt.Sprintf("%s-%d-%02d", id.Format, id.Group, id.Number)
 }
 

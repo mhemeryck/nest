@@ -6,12 +6,12 @@ import (
 )
 
 type DeviceManager struct {
-	Devices []*Device
+	Devices map[string]*Device
 }
 
 // NewDeviceManagerFromPath crawls given `path` for devices and accumulates them
 func NewDeviceManagerFromPath(path string) (DeviceManager, error) {
-	devices := make([]*Device, 0)
+	devices := make(map[string]*Device, 0)
 
 	err := filepath.WalkDir(path,
 		func(p string, d fs.DirEntry, err error) error {
@@ -22,7 +22,7 @@ func NewDeviceManagerFromPath(path string) (DeviceManager, error) {
 			device, err := NewDeviceFromPath(p)
 			// We're only interested if there's a match
 			if err == nil {
-				devices = append(devices, device)
+				devices[device.Slug()] = device
 			}
 			return nil
 		})
