@@ -29,17 +29,39 @@ type DeviceFormat string
 type IOGroup int
 type DeviceNumber int
 
-type Device struct {
-	Path   string
+func (f DeviceFormat) String() string {
+	switch f {
+	case DeviceFormat_DigitalInput:
+		return "di"
+	case DeviceFormat_DigitalOutput:
+		return "do"
+	case DeviceFormat_RelayOutput:
+		return "ro"
+	}
+	return ""
+}
+
+type DeviceIdentifier struct {
 	Format DeviceFormat
 	Group  IOGroup
 	Number DeviceNumber
+}
 
+// Slug generates a unique identifier for
+func (id DeviceIdentifier) Slug() string {
+	// group := strconv.Itoa(int(id.Group))
+	return fmt.Sprintf("%s-%d-%02d", id.Format, id.Group, id.Number)
+}
+
+type Device struct {
+	Path       string
 	ReadEvents chan<- DevicePayload
 
 	filehandle *os.File
 	prev       DevicePayload
 	lock       sync.RWMutex
+
+	DeviceIdentifier
 }
 
 func NewDeviceFromPath(path string) (*Device, error) {
@@ -49,6 +71,7 @@ func NewDeviceFromPath(path string) (*Device, error) {
 	}
 
 	d := &Device{Path: path}
+	id := DeviceIdentifier{}
 
 	for k, name := range filenameRegex.SubexpNames() {
 		if k != 0 && name != "" {
@@ -56,29 +79,30 @@ func NewDeviceFromPath(path string) (*Device, error) {
 			case "device_fmt":
 				switch match[k] {
 				case "di":
-					d.Format = DeviceFormat_DigitalInput
+					id.Format = DeviceFormat_DigitalInput
 
 				case "do":
-					d.Format = DeviceFormat_DigitalOutput
+					id.Format = DeviceFormat_DigitalOutput
 
 				case "ro":
-					d.Format = DeviceFormat_RelayOutput
+					id.Format = DeviceFormat_RelayOutput
 				}
 			case "io_group":
 				i, err := strconv.Atoi(match[k])
 				if err != nil {
 					return d, err
 				}
-				d.Group = IOGroup(i)
+				id.Group = IOGroup(i)
 			case "number":
 				i, err := strconv.Atoi(match[k])
 				if err != nil {
 					return d, err
 				}
-				d.Number = DeviceNumber(i)
+				id.Number = DeviceNumber(i)
 			}
 		}
 	}
+	d.DeviceIdentifier = id
 
 	return d, nil
 }

@@ -15,7 +15,9 @@ func Test_DeviceReadWrite(t *testing.T) {
 	device := &Device{
 		Path:       path.Join(temp_dir, "bar"),
 		ReadEvents: reader,
-		Format:     DeviceFormat_DigitalOutput,
+		DeviceIdentifier: DeviceIdentifier{
+			Format: DeviceFormat_DigitalOutput,
+		},
 	}
 
 	go device.Loop()
@@ -37,7 +39,9 @@ func Test_DeviceReadWriteDigitalInput(t *testing.T) {
 	device := &Device{
 		Path:       path.Join(temp_dir, "bar"),
 		ReadEvents: reader,
-		Format:     DeviceFormat_DigitalInput,
+		DeviceIdentifier: DeviceIdentifier{
+			Format: DeviceFormat_DigitalInput,
+		},
 	}
 
 	err := device.Write(DevicePayload(true))
@@ -85,4 +89,13 @@ func Test_NewDeviceFromPath(t *testing.T) {
 
 		})
 	}
+}
+
+func Test_DeviceIdentifierSlug(t *testing.T) {
+	id := DeviceIdentifier{
+		Format: DeviceFormat_DigitalOutput,
+		Group:  3,
+		Number: 7,
+	}
+	assert.Equal(t, "do-3-07", id.Slug())
 }
