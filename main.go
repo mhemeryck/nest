@@ -19,6 +19,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Can't start a device manager: %v", err)
 	}
+	defer mgr.Close()
 
 	reader := make(chan device.DevicePayload)
 

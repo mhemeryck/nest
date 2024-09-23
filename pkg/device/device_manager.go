@@ -1,6 +1,7 @@
 package device
 
 import (
+	"errors"
 	"io/fs"
 	"path/filepath"
 )
@@ -28,4 +29,13 @@ func NewDeviceManagerFromPath(path string) (DeviceManager, error) {
 		})
 
 	return DeviceManager{Devices: devices}, err
+}
+
+// Close calls close on all the devices contained
+func (dm DeviceManager) Close() error {
+	var err error
+	for _, device := range dm.Devices {
+		err = errors.Join(err, device.Close())
+	}
+	return err
 }
