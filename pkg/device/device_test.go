@@ -31,6 +31,31 @@ func Test_DeviceReadWrite(t *testing.T) {
 	assert.Equal(t, msg.Message, MessageType_TurnOff)
 }
 
+func Test_DeviceLoopUpdateOnly(t *testing.T) {
+	temp_dir := t.TempDir()
+
+	reader := make(chan DevicePayload)
+
+	device := &Device{
+		Path:       path.Join(temp_dir, "bar"),
+		ReadEvents: reader,
+		DeviceIdentifier: DeviceIdentifier{
+			Format: DeviceFormat_DigitalOutput,
+		},
+	}
+
+	go device.Loop()
+
+	device.Write(true)
+	msg := <-reader
+	assert.Equal(t, msg.Message, MessageType_TurnOn)
+
+	device.Write(true)
+	device.Write(false)
+	msg = <-reader
+	assert.Equal(t, msg.Message, MessageType_TurnOff)
+}
+
 func Test_DeviceReadWriteDigitalInput(t *testing.T) {
 	temp_dir := t.TempDir()
 

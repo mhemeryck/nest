@@ -195,11 +195,13 @@ func (d *Device) Loop() {
 		if err != nil {
 			log.Fatalf("Error reading file: %v", err)
 		}
-		// log.Printf("Current value: %v for %v", value, d.Number)
 		if d.prev != value {
 			d.ReadEvents <- value
 			d.prev = value
 		}
+		// }else {
+		// 	log.Printf("Got the same value twice in a row")
+		// }
 		time.Sleep(pollIntervalMillis * time.Millisecond)
 	}
 }
