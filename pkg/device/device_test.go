@@ -124,3 +124,24 @@ func Test_DeviceIdentifierSlug(t *testing.T) {
 	}
 	assert.Equal(t, "do-3-07", id.Slug())
 }
+
+func Test_DeviceClose(t *testing.T) {
+	temp_dir := t.TempDir()
+
+	reader := make(chan DevicePayload)
+
+	device := &Device{
+		Path:       path.Join(temp_dir, "bar"),
+		ReadEvents: reader,
+		DeviceIdentifier: DeviceIdentifier{
+			Format: DeviceFormat_DigitalOutput,
+		},
+	}
+
+	go device.Loop()
+	defer device.Close()
+
+	device.Write(true)
+	msg := <-reader
+	assert.Equal(t, msg.Message, MessageType_TurnOn)
+}

@@ -72,6 +72,7 @@ type Device struct {
 	filehandle *os.File
 	prev       DevicePayload
 	lock       sync.RWMutex
+	loop       bool
 
 	DeviceIdentifier
 }
@@ -189,8 +190,9 @@ func (d *Device) Write(payload bool) error {
 
 func (d *Device) Loop() {
 	log.Printf("Start device loop for %v", d)
+	d.loop = true
 
-	for {
+	for d.loop {
 		value, err := d.Read()
 		if err != nil {
 			log.Fatalf("Error reading file: %v", err)
@@ -204,4 +206,11 @@ func (d *Device) Loop() {
 		// }
 		time.Sleep(pollIntervalMillis * time.Millisecond)
 	}
+}
+
+// Close will just do some simple cleanup
+func (d *Device) Close() error {
+	d.loop = false
+	close(d.ReadEvents)
+	return nil
 }
