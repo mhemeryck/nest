@@ -24,11 +24,11 @@ func Test_DeviceReadWrite(t *testing.T) {
 
 	device.Write(true)
 	msg := <-reader
-	assert.Equal(t, msg.Message, true)
+	assert.Equal(t, msg.Message, MessageType_TurnOn)
 
 	device.Write(false)
 	msg = <-reader
-	assert.Equal(t, msg.Message, false)
+	assert.Equal(t, msg.Message, MessageType_TurnOff)
 }
 
 func Test_DeviceReadWriteDigitalInput(t *testing.T) {

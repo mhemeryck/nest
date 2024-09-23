@@ -33,7 +33,13 @@ func main() {
 			log.Printf("Reader got value %v", msg)
 			if output, ok := automations[msg.Id]; ok {
 				log.Printf("Got a match on the input, can now trigger the output: %v", output)
-				err = mgr.Devices[output].Write(msg.Message)
+				var payload bool
+				if msg.Message == device.MessageType_TurnOff {
+					payload = false
+				} else if msg.Message == device.MessageType_TurnOn {
+					payload = true
+				}
+				err = mgr.Devices[output].Write(payload)
 				if err != nil {
 					panic(err)
 				}

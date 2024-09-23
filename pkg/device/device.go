@@ -22,11 +22,17 @@ var (
 	DeviceFormat_DigitalInput  = DeviceFormat("DigitalInput")
 	DeviceFormat_DigitalOutput = DeviceFormat("DigitalOutput")
 	DeviceFormat_RelayOutput   = DeviceFormat("RelayOutput")
+
+	MessageType_Unknown = MessageType("Unknown")
+	MessageType_TurnOn  = MessageType("TurnOn")
+	MessageType_TurnOff = MessageType("TurnOff")
 )
+
+type MessageType string
 
 type DevicePayload struct {
 	// Message is just on or off for now
-	Message bool
+	Message MessageType
 	// Id is just a string / slug to identify the device for now
 	Id string
 }
@@ -123,7 +129,7 @@ func (d *Device) Read() (DevicePayload, error) {
 		d.filehandle, err = os.Open(d.Path)
 		if err != nil {
 			return DevicePayload{
-				Message: false,
+				Message: MessageType_Unknown,
 				Id:      d.Slug(),
 			}, err
 		}
@@ -132,7 +138,7 @@ func (d *Device) Read() (DevicePayload, error) {
 	_, err = d.filehandle.Seek(0, io.SeekStart)
 	if err != nil {
 		return DevicePayload{
-			Message: false,
+			Message: MessageType_Unknown,
 			Id:      d.Slug(),
 		}, err
 	}
@@ -140,16 +146,16 @@ func (d *Device) Read() (DevicePayload, error) {
 	b := make([]byte, 1)
 	_, err = d.filehandle.Read(b)
 	if err != nil {
-		return DevicePayload{Message: false, Id: d.Slug()}, err
+		return DevicePayload{Message: MessageType_Unknown, Id: d.Slug()}, err
 	}
 
 	switch b[0] {
 	case '0':
-		return DevicePayload{Message: false, Id: d.Slug()}, err
+		return DevicePayload{Message: MessageType_TurnOff, Id: d.Slug()}, err
 	case '1':
-		return DevicePayload{Message: true, Id: d.Slug()}, err
+		return DevicePayload{Message: MessageType_TurnOn, Id: d.Slug()}, err
 	}
-	return DevicePayload{Message: false, Id: d.Slug()}, err
+	return DevicePayload{Message: MessageType_Unknown, Id: d.Slug()}, err
 }
 
 func (d *Device) Write(payload bool) error {
