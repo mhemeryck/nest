@@ -15,17 +15,15 @@ var (
 )
 
 func main() {
-	mgr, err := device.NewDeviceManagerFromPath("test/fixtures")
+	reader := make(chan device.DevicePayload)
+	mgr, err := device.NewDeviceManagerFromPath("test/fixtures", reader)
 	if err != nil {
 		log.Fatalf("Can't start a device manager: %v", err)
 	}
 	defer mgr.Close()
 
-	reader := make(chan device.DevicePayload)
-
 	for _, d := range mgr.Devices {
 		log.Printf("Found device %v\n", d)
-		d.ReadEvents = reader
 		go d.Loop()
 	}
 

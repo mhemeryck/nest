@@ -211,6 +211,5 @@ func (d *Device) Loop() {
 // Close will just do some simple cleanup
 func (d *Device) Close() error {
 	d.loop = false
-	close(d.ReadEvents)
 	return nil
 }

@@ -11,7 +11,7 @@ type DeviceManager struct {
 }
 
 // NewDeviceManagerFromPath crawls given `path` for devices and accumulates them
-func NewDeviceManagerFromPath(path string) (DeviceManager, error) {
+func NewDeviceManagerFromPath(path string, readEvents chan<- DevicePayload) (DeviceManager, error) {
 	devices := make(map[string]*Device, 0)
 
 	err := filepath.WalkDir(path,
@@ -23,6 +23,7 @@ func NewDeviceManagerFromPath(path string) (DeviceManager, error) {
 			device, err := NewDeviceFromPath(p)
 			// We're only interested if there's a match
 			if err == nil {
+				device.ReadEvents = readEvents
 				devices[device.Slug()] = device
 			}
 			return nil
