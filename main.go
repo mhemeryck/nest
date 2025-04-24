@@ -29,7 +29,7 @@ type Event struct {
 
 // Hive is the hive mind that knows all
 type Hive struct {
-	EventC *chan Event
+	EventC chan Event
 
 	pushButtonToLightMap map[EntityId]EntityId
 	PushButtons          map[EntityId]*PushButton
@@ -37,7 +37,7 @@ type Hive struct {
 }
 
 func (h Hive) Loop() {
-	for msg := range *h.EventC {
+	for msg := range h.EventC {
 		log.Printf("received msg %v", msg)
 		if id, ok := h.pushButtonToLightMap[msg.EntityId]; ok {
 			log.Printf("Did get a match: %s -> %s!", msg.EntityId, id)
@@ -51,12 +51,12 @@ func (h Hive) Loop() {
 
 type Entity struct {
 	Id     EntityId
-	EventC *chan Event
+	EventC chan Event
 }
 
 type PushButton struct {
 	Id     EntityId
-	EventC *chan Event
+	EventC chan Event
 	// TODO: enum-like; with 3-state?
 	State bool
 }
@@ -72,7 +72,7 @@ func (p *PushButton) Toggle() {
 	case true:
 		m = "on"
 	}
-	*p.EventC <- Event{
+	p.EventC <- Event{
 		EntityId: p.Id,
 		Message:  m,
 	}
@@ -95,7 +95,7 @@ func (l *Light) Toggle() {
 	case true:
 		m = "on"
 	}
-	*l.EventC <- Event{
+	l.EventC <- Event{
 		EntityId: l.Id,
 		Message:  m,
 	}
@@ -131,7 +131,6 @@ func main2() {
 				}
 			}
 		}
-
 	}()
 
 	d := mgr.Devices["do-1-01"]
@@ -146,20 +145,20 @@ func main() {
 	eventChan := make(chan Event)
 	p := PushButton{
 		Id:     "office",
-		EventC: &eventChan,
+		EventC: eventChan,
 		State:  false,
 	}
 
 	l := Light{
 		Entity: Entity{
 			Id:     "office-desk",
-			EventC: &eventChan,
+			EventC: eventChan,
 		},
 		State: false,
 	}
 
 	hive := Hive{
-		EventC:               &eventChan,
+		EventC:               eventChan,
 		pushButtonToLightMap: pushButtonToLight,
 		PushButtons: map[EntityId]*PushButton{
 			p.Id: &p,
