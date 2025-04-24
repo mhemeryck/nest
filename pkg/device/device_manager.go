@@ -7,12 +7,12 @@ import (
 )
 
 type DeviceManager struct {
-	Devices map[string]*Device
+	Devices map[DeviceId]*Device
 }
 
 // NewDeviceManagerFromPath crawls given `path` for devices and accumulates them
 func NewDeviceManagerFromPath(path string, readEvents chan<- DevicePayload) (DeviceManager, error) {
-	devices := make(map[string]*Device, 0)
+	devices := make(map[DeviceId]*Device, 0)
 
 	err := filepath.WalkDir(path,
 		func(p string, d fs.DirEntry, err error) error {

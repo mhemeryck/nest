@@ -34,7 +34,7 @@ type DevicePayload struct {
 	// Message is just on or off for now
 	Message MessageType
 	// Id is just a string / slug to identify the device for now
-	Id string
+	Id DeviceId
 }
 
 type DeviceFormat string
@@ -60,9 +60,11 @@ type DeviceIdentifier struct {
 	Number DeviceNumber
 }
 
+type DeviceId string
+
 // Slug generates a unique identifier for
-func (id DeviceIdentifier) Slug() string {
-	return fmt.Sprintf("%s-%d-%02d", id.Format, id.Group, id.Number)
+func (id DeviceIdentifier) Slug() DeviceId {
+	return DeviceId(fmt.Sprintf("%s-%d-%02d", id.Format, id.Group, id.Number))
 }
 
 type Device struct {
