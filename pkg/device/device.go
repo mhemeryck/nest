@@ -93,10 +93,8 @@ func NewDeviceFromPath(path string) (*Device, error) {
 				switch match[k] {
 				case "di":
 					id.Format = DeviceFormat_DigitalInput
-
 				case "do":
 					id.Format = DeviceFormat_DigitalOutput
-
 				case "ro":
 					id.Format = DeviceFormat_RelayOutput
 				}
