@@ -29,7 +29,7 @@ type Event struct {
 
 // Hive is the hive mind that knows all
 type Hive struct {
-	EventC chan Event
+	EventC *chan Event
 
 	pushButtonToLightMap map[EntityId]EntityId
 	PushButtons          map[EntityId]*PushButton
@@ -37,13 +37,13 @@ type Hive struct {
 }
 
 func (h Hive) Loop() {
-	for msg := range h.EventC {
+	for msg := range *h.EventC {
 		log.Printf("received msg %v", msg)
 		if id, ok := h.pushButtonToLightMap[msg.EntityId]; ok {
 			log.Printf("Did get a match: %s -> %s!", msg.EntityId, id)
 			if l, ok := h.Lights[id]; ok {
-				l.Toggle()
-				log.Printf("Here's the light %s", l)
+				go l.Toggle()
+				log.Printf("Here's the light %v", l)
 			}
 		}
 	}
@@ -51,12 +51,12 @@ func (h Hive) Loop() {
 
 type Entity struct {
 	Id     EntityId
-	EventC chan Event
+	EventC *chan Event
 }
 
 type PushButton struct {
 	Id     EntityId
-	EventC chan Event
+	EventC *chan Event
 	// TODO: enum-like; with 3-state?
 	State bool
 }
@@ -72,7 +72,7 @@ func (p *PushButton) Toggle() {
 	case true:
 		m = "on"
 	}
-	p.EventC <- Event{
+	*p.EventC <- Event{
 		EntityId: p.Id,
 		Message:  m,
 	}
@@ -88,17 +88,17 @@ type Light struct {
 func (l *Light) Toggle() {
 	l.State = !l.State
 
-	// var m string
-	// switch l.State {
-	// case false:
-	// 	m = "off"
-	// case true:
-	// 	m = "on"
-	// }
-	// l.EventC <- Event{
-	// 	EntityId: l.Id,
-	// 	Message:  m,
-	// }
+	var m string
+	switch l.State {
+	case false:
+		m = "off"
+	case true:
+		m = "on"
+	}
+	*l.EventC <- Event{
+		EntityId: l.Id,
+		Message:  m,
+	}
 }
 
 func main2() {
@@ -136,7 +136,7 @@ func main2() {
 
 	d := mgr.Devices["do-1-01"]
 	log.Printf("device %v\n", d)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		d.Write(i%2 == 0)
 		time.Sleep(3 * time.Second)
 	}
@@ -146,20 +146,20 @@ func main() {
 	eventChan := make(chan Event)
 	p := PushButton{
 		Id:     "office",
-		EventC: eventChan,
+		EventC: &eventChan,
 		State:  false,
 	}
 
 	l := Light{
 		Entity: Entity{
 			Id:     "office-desk",
-			EventC: eventChan,
+			EventC: &eventChan,
 		},
 		State: false,
 	}
 
 	hive := Hive{
-		EventC:               eventChan,
+		EventC:               &eventChan,
 		pushButtonToLightMap: pushButtonToLight,
 		PushButtons: map[EntityId]*PushButton{
 			p.Id: &p,
