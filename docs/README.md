@@ -3,6 +3,7 @@
 ## Architecture
 
 - [Overview](architecture.md) - High-level system architecture and guiding principles
+- [Design](design.md) - Nest controller design and configuration approach
 - [Repositories](repos.md) - Detailed overview of all home automation repositories
 - [Covers](covers.md) - Motorized shade controller design and implementation
 - [Sysfs](sysfs.md) - Unipi sysfs interface reference
