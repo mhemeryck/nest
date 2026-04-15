@@ -38,11 +38,11 @@ Output unit: "I expose these relays"
 
 ### Transport Options
 
-| Transport | Use Case | Notes |
-|-----------|----------|-------|
-| **Modbus RTU** | Inter-unit communication | RS-485 serial, reliable |
-| **MQTT** | HA integration | Publish state, subscribe commands |
-| **Sysfs** | Local relay control | For covers, same-unit setups |
+| Transport      | Use Case                 | Notes                             |
+| -------------- | ------------------------ | --------------------------------- |
+| **Modbus RTU** | Inter-unit communication | RS-485 serial, reliable           |
+| **MQTT**       | HA integration           | Publish state, subscribe commands |
+| **Sysfs**      | Local relay control      | For covers, same-unit setups      |
 
 ## Config Structure
 
@@ -117,7 +117,7 @@ mappings:
   - input: di-{io_group}-{number}
     name: human-readable name
     modbus:
-      coil: N          # Modbus coil address
+      coil: N # Modbus coil address
 ```
 
 ### Relay Definition (Output Unit)
