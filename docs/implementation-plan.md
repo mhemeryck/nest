@@ -49,6 +49,7 @@ Phased approach to building Nest, a universal controller for Unipi hardware.
 ## Open Questions
 
 - [ ] Cover support timing requirements
-- [x] Testing strategy (fixtures in test/fixtures/)
+- [ ] Testing strategy (mock sysfs vs real hardware)
 - [ ] Multi-input triggers (same light, multiple buttons)
 - [ ] Output unit relay state publishing to MQTT
+- [ ] CLI interface design (flags, config file, commands)
