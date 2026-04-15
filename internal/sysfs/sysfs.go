@@ -61,6 +61,19 @@ func ListDevices(sysfsPath string) ([]string, error) {
 	return devices, err
 }
 
+func ListIOValueFiles(root string) ([]string, error) {
+	var paths []string
+	patterns := []string{"di_*/di_value", "do_*/do_value"}
+	for _, pattern := range patterns {
+		matches, err := filepath.Glob(filepath.Join(root, "sys/devices/platform/unipi_plc/*/", pattern))
+		if err != nil {
+			return nil, err
+		}
+		paths = append(paths, matches...)
+	}
+	return paths, nil
+}
+
 type DeviceEntry struct {
 	Path     string
 	Name     string

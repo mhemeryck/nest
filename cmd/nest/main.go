@@ -6,14 +6,15 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/mhemeryck/nest/internal/sysfs"
 )
 
 func main() {
+	root := "/home/mhemeryck/Projects/nest/test/fixtures"
+
 	fmt.Println("Crawling sysfs device tree...")
-	devices, err := sysfs.ListDevices("/sys/devices/platform")
+	devices, err := sysfs.ListDevices(root)
 	if err != nil {
 		log.Printf("Crawl failed: %v", err)
 	} else {
@@ -23,12 +24,17 @@ func main() {
 		}
 	}
 
-	configs := []sysfs.WorkerConfig{
-		{
-			Interval: 100 * time.Millisecond,
-			Paths:    []string{"/sys/devices/platform/unipi_plc/io_group1/di_1_01/di_value"},
-		},
+	ioPaths, err := sysfs.ListIOValueFiles(root)
+	if err != nil {
+		log.Printf("IO files listing failed: %v", err)
+	} else {
+		fmt.Printf("Found %d IO value files\n", len(ioPaths))
 	}
+
+	diDevices := sysfs.MatchDevices(ioPaths)
+	fmt.Printf("Matched %d devices\n", len(diDevices))
+
+	configs := sysfs.BuildWorkerConfigs(diDevices)
 
 	stopChs := sysfs.StartWorkers(configs, func(event sysfs.PollEvent) {
 		fmt.Printf("%s: %d -> %d (rising=%t)\n",
