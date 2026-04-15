@@ -105,12 +105,12 @@ func TestBuildWorkerConfigs(t *testing.T) {
 	configByType := make(map[DeviceType]WorkerConfig)
 	for _, cfg := range configs {
 		for _, path := range cfg.Paths {
-			switch {
-			case path == "/di1" || path == "/di2":
+			switch path {
+			case "/di1", "/di2":
 				configByType[DigitalInput] = cfg
-			case path == "/do1":
+			case "/do1":
 				configByType[DigitalOutput] = cfg
-			case path == "/ro1":
+			case "/ro1":
 				configByType[RelayOutput] = cfg
 			}
 		}
