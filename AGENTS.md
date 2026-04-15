@@ -12,6 +12,13 @@ It also makes it simple to reorder or modify individual sentences.
 
 ## Git Commit Messages
 
+NEVER commit changes without explicit permission from the user.
+Always ask before running git add, git commit, or any other git commands that modify the repository state.
+This includes git push, git merge, git rebase, etc.
+
+NEVER use --no-gpg-sign or -n flags to bypass GPG signing.
+Always sign commits normally.
+
 Follow the standard commit message format.
 The first line should be 50 characters or fewer.
 It should be a concise summary of the change.
