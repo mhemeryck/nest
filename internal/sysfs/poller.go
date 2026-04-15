@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -14,7 +15,12 @@ type WorkerConfig struct {
 }
 
 type WorkerState struct {
+	mu         sync.Mutex
 	LastValues map[string]int
+}
+
+func NewWorkerState() *WorkerState {
+	return &WorkerState{LastValues: make(map[string]int)}
 }
 
 type PollEvent struct {
@@ -24,17 +30,31 @@ type PollEvent struct {
 	IsRising bool
 }
 
+type PollHandler struct {
+	mu      sync.Mutex
+	OnEvent func(PollEvent)
+}
+
+func (h *PollHandler) Emit(event PollEvent) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.OnEvent != nil {
+		h.OnEvent(event)
+	}
+}
+
 func StartWorkers(
 	configs []WorkerConfig,
 	onEvent func(PollEvent),
 ) []chan struct{} {
 	stopChs := make([]chan struct{}, len(configs))
+	handler := &PollHandler{OnEvent: onEvent}
 
 	for i, cfg := range configs {
 		stopCh := make(chan struct{})
 		stopChs[i] = stopCh
 
-		go pollWorker(cfg, stopCh, onEvent)
+		go pollWorker(cfg, stopCh, handler.Emit)
 	}
 
 	return stopChs
@@ -51,7 +71,7 @@ func pollWorker(
 	stopCh chan struct{},
 	onEvent func(PollEvent),
 ) {
-	state := WorkerState{LastValues: make(map[string]int)}
+	state := NewWorkerState()
 	ticker := time.NewTicker(cfg.Interval)
 	defer ticker.Stop()
 
@@ -67,7 +87,9 @@ func pollWorker(
 				}
 				v, _ := strconv.Atoi(strings.TrimSpace(val))
 
-				if last, ok := state.LastValues[path]; ok && v != last {
+				state.mu.Lock()
+				last, ok := state.LastValues[path]
+				if ok && v != last {
 					onEvent(PollEvent{
 						Path:     path,
 						OldValue: last,
@@ -76,6 +98,7 @@ func pollWorker(
 					})
 				}
 				state.LastValues[path] = v
+				state.mu.Unlock()
 			}
 		}
 	}
