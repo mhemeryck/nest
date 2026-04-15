@@ -42,3 +42,34 @@ Use functions and modules over classes when possible.
 Run lint and typecheck before marking a task complete.
 Verify solutions with tests when possible.
 Never assume specific test frameworks are available.
+
+### Go Testing
+
+Use [stretchr/testify](https://pkg.go.dev/github.com/stretchr/testify) for assertions and requires.
+Import packages as:
+
+```go
+import (
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+```
+
+Use `assert` for checks that should not halt the test.
+Use `require` for checks that must pass or the test should stop.
+
+### Go Project Layout
+
+Follow the [Go project layout](https://github.com/golang-standards/project-layout) conventions.
+
+Key directories:
+
+- `/cmd/` - application entry points
+- `/internal/` - private application code
+- `/pkg/` - library code importable by external applications
+- `/test/` - integration and external test fixtures
+- `/docs/` - design and user documentation
+- `/go.mod` and `/go.sum` - module definitions
+
+Do not use a `/vendor/` directory.
+Use `/internal/` over `/pkg/` when code should not be imported externally.
