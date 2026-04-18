@@ -3,6 +3,7 @@ package sysfs
 import (
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -40,9 +41,12 @@ func TestPollWorkerDetectsChange(t *testing.T) {
 		{Interval: 20 * time.Millisecond, Paths: []string{path1, path2}},
 	}
 
+	var mu sync.Mutex
 	var events []PollEvent
 	onEvent := func(e PollEvent) {
+		mu.Lock()
 		events = append(events, e)
+		mu.Unlock()
 	}
 
 	stopChs := StartWorkers(configs, onEvent)
@@ -57,12 +61,14 @@ func TestPollWorkerDetectsChange(t *testing.T) {
 	StopWorkers(stopChs)
 
 	foundRising := false
+	mu.Lock()
 	for _, e := range events {
 		if e.Path == path1 && e.IsRising && e.OldValue == 0 && e.NewValue == 1 {
 			foundRising = true
 			break
 		}
 	}
+	mu.Unlock()
 	assert.True(t, foundRising, "Should detect rising edge on path1")
 }
 

@@ -37,9 +37,11 @@ type PollHandler struct {
 
 func (h *PollHandler) Emit(event PollEvent) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
-	if h.OnEvent != nil {
-		h.OnEvent(event)
+	callback := h.OnEvent
+	h.mu.Unlock()
+
+	if callback != nil {
+		callback(event)
 	}
 }
 
