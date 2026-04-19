@@ -6,9 +6,10 @@ Phased approach to building Nest, a universal controller for Unipi hardware.
 
 ## Phase 1: Sysfs Layer
 
-- [ ] Read digital inputs from sysfs (`/sys/class/gpio/...`)
-- [ ] Write relay outputs to sysfs
-- [ ] Basic error handling for hardware access
+- [x] Read digital inputs from sysfs (`/sys/devices/platform/unipi_plc/...`)
+- [x] Write relay outputs to sysfs
+- [x] Basic error handling for hardware access
+- [x] Worker pool for configurable poll intervals per device type
 
 **Deliverable**: Can read input state and toggle relays locally.
 
@@ -51,3 +52,4 @@ Phased approach to building Nest, a universal controller for Unipi hardware.
 - [ ] Testing strategy (mock sysfs vs real hardware)
 - [ ] Multi-input triggers (same light, multiple buttons)
 - [ ] Output unit relay state publishing to MQTT
+- [ ] CLI interface design (flags, config file, commands)

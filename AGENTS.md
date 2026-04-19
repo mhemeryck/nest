@@ -12,6 +12,13 @@ It also makes it simple to reorder or modify individual sentences.
 
 ## Git Commit Messages
 
+NEVER commit changes without explicit permission from the user.
+Always ask before running git add, git commit, or any other git commands that modify the repository state.
+This includes git push, git merge, git rebase, etc.
+
+NEVER use --no-gpg-sign or -n flags to bypass GPG signing.
+Always sign commits normally.
+
 Follow the standard commit message format.
 The first line should be 50 characters or fewer.
 It should be a concise summary of the change.
@@ -42,3 +49,34 @@ Use functions and modules over classes when possible.
 Run lint and typecheck before marking a task complete.
 Verify solutions with tests when possible.
 Never assume specific test frameworks are available.
+
+### Go Testing
+
+Use [stretchr/testify](https://pkg.go.dev/github.com/stretchr/testify) for assertions and requires.
+Import packages as:
+
+```go
+import (
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+```
+
+Use `assert` for checks that should not halt the test.
+Use `require` for checks that must pass or the test should stop.
+
+### Go Project Layout
+
+Follow the [Go project layout](https://github.com/golang-standards/project-layout) conventions.
+
+Key directories:
+
+- `/cmd/` - application entry points
+- `/internal/` - private application code
+- `/pkg/` - library code importable by external applications
+- `/test/` - integration and external test fixtures
+- `/docs/` - design and user documentation
+- `/go.mod` and `/go.sum` - module definitions
+
+Do not use a `/vendor/` directory.
+Use `/internal/` over `/pkg/` when code should not be imported externally.
