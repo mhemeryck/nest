@@ -43,6 +43,9 @@ Match the style of surrounding code.
 Use existing libraries and utilities before adding new dependencies.
 Prefer procedural programming over object-oriented programming.
 Use functions and modules over classes when possible.
+Do not introduce receiver functions on project types by default.
+Prefer plain package-level functions that take explicit arguments.
+Only use receiver functions when there is a clear external constraint, such as implementing a required library interface.
 
 ## Testing
 

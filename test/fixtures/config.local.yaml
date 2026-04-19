@@ -1,0 +1,19 @@
+sysfs:
+  root: test/fixtures
+
+digital_inputs:
+  - id: office_button_input
+    device: di_3_16
+
+push_buttons:
+  - id: office_button
+    name: Office shade button
+    input: office_button_input
+
+relays:
+  - id: office_shade_up
+    name: Office shade up
+    device: ro_3_14
+  - id: office_shade_down
+    name: Office shade down
+    device: ro_3_13
