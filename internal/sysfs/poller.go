@@ -61,7 +61,7 @@ func pollWorker(
 			return
 		case <-ticker.C:
 			for _, device := range cfg.Devices {
-				changed, oldValue, err := ReadDevice(device)
+				changed, oldValue, err := readDevice(device)
 				if err != nil {
 					continue
 				}

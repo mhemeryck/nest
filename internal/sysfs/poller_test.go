@@ -28,9 +28,9 @@ func TestPollWorkerDetectsChange(t *testing.T) {
 	path1 := filepath.Join(tmp, "gpio1")
 	path2 := filepath.Join(tmp, "gpio2")
 
-	err := WriteValue(path1, Off)
+	err := writeValue(path1, Off)
 	require.NoError(t, err)
-	err = WriteValue(path2, Off)
+	err = writeValue(path2, Off)
 	require.NoError(t, err)
 
 	configs := []WorkerConfig{
@@ -54,7 +54,7 @@ func TestPollWorkerDetectsChange(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	err = WriteValue(path1, On)
+	err = writeValue(path1, On)
 	require.NoError(t, err)
 
 	time.Sleep(50 * time.Millisecond)
@@ -75,22 +75,22 @@ func TestPollWorkerDetectsChange(t *testing.T) {
 }
 
 func TestNewDevice(t *testing.T) {
-	device, ok := NewDevice("/sys/devices/platform/unipi_plc/io_group1/di_1_01/di_value")
+	device, ok := newDevice("/sys/devices/platform/unipi_plc/io_group1/di_1_01/di_value")
 	require.True(t, ok)
 	assert.Equal(t, DigitalInput, device.Type)
 	assert.Equal(t, "di_1_01", device.Identifier)
 
-	device, ok = NewDevice("/sys/devices/platform/unipi_plc/io_group1/do_1_01/do_value")
+	device, ok = newDevice("/sys/devices/platform/unipi_plc/io_group1/do_1_01/do_value")
 	require.True(t, ok)
 	assert.Equal(t, DigitalOutput, device.Type)
 	assert.Equal(t, "do_1_01", device.Identifier)
 
-	device, ok = NewDevice("/sys/devices/platform/unipi_plc/io_group1/ro_1_01/ro_value")
+	device, ok = newDevice("/sys/devices/platform/unipi_plc/io_group1/ro_1_01/ro_value")
 	require.True(t, ok)
 	assert.Equal(t, RelayOutput, device.Type)
 	assert.Equal(t, "ro_1_01", device.Identifier)
 
-	device, ok = NewDevice("/sys/devices/platform/unipi_plc/io_group1/ai_1_01/in_voltage0_raw")
+	device, ok = newDevice("/sys/devices/platform/unipi_plc/io_group1/ai_1_01/in_voltage0_raw")
 	assert.False(t, ok)
 	assert.Nil(t, device)
 }
@@ -136,17 +136,17 @@ func TestReadValue(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "di_value")
 
-	err := WriteValue(path, Off)
+	err := writeValue(path, Off)
 	require.NoError(t, err)
 
-	val, err := ReadValue(path)
+	val, err := readValue(path)
 	require.NoError(t, err)
 	assert.Equal(t, Off, val)
 
-	err = WriteValue(path, On)
+	err = writeValue(path, On)
 	require.NoError(t, err)
 
-	val, err = ReadValue(path)
+	val, err = readValue(path)
 	require.NoError(t, err)
 	assert.Equal(t, On, val)
 }
@@ -158,35 +158,30 @@ func TestReadValueRejectsInvalidByte(t *testing.T) {
 	err := os.WriteFile(path, []byte("x\n"), 0o644)
 	require.NoError(t, err)
 
-	_, err = ReadValue(path)
+	_, err = readValue(path)
 	assert.Error(t, err)
-}
-
-func TestValueInt(t *testing.T) {
-	assert.Equal(t, 0, ValueInt(Off))
-	assert.Equal(t, 1, ValueInt(On))
 }
 
 func TestReadDeviceUpdatesDeviceValue(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "value")
 
-	err := WriteValue(path, Off)
+	err := writeValue(path, Off)
 	require.NoError(t, err)
 
 	device := &Device{Path: path, Identifier: "di_1_01"}
 
-	changed, oldValue, err := ReadDevice(device)
+	changed, oldValue, err := readDevice(device)
 	require.NoError(t, err)
 	assert.False(t, changed)
 	assert.Equal(t, Off, oldValue)
 	assert.Equal(t, Off, device.Value)
 	assert.True(t, device.Ready)
 
-	err = WriteValue(path, On)
+	err = writeValue(path, On)
 	require.NoError(t, err)
 
-	changed, oldValue, err = ReadDevice(device)
+	changed, oldValue, err = readDevice(device)
 	require.NoError(t, err)
 	assert.True(t, changed)
 	assert.Equal(t, Off, oldValue)

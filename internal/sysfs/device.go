@@ -1,9 +1,17 @@
 package sysfs
 
 import (
+	"errors"
+	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"regexp"
+)
+
+var (
+	errEmptyValue   = errors.New("empty value")
+	errInvalidValue = errors.New("invalid value")
 )
 
 type Value byte
@@ -50,7 +58,7 @@ func ListDevices(root string) ([]*Device, error) {
 			return nil
 		}
 
-		device, ok := NewDevice(path)
+		device, ok := newDevice(path)
 		if ok {
 			devices = append(devices, device)
 		}
@@ -61,7 +69,7 @@ func ListDevices(root string) ([]*Device, error) {
 	return devices, err
 }
 
-func NewDevice(path string) (*Device, bool) {
+func newDevice(path string) (*Device, bool) {
 	for _, pattern := range devicePatterns {
 		if pattern.Regex.MatchString(path) {
 			return &Device{
@@ -75,16 +83,25 @@ func NewDevice(path string) (*Device, bool) {
 	return nil, false
 }
 
-func ValueInt(value Value) int {
-	if value == On {
-		return 1
+func readFileBytes(path string) ([]byte, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read file %s: %w", path, err)
 	}
 
-	return 0
+	return data, nil
 }
 
-func ReadDevice(device *Device) (bool, Value, error) {
-	value, err := ReadValue(device.Path)
+func writeValue(path string, value Value) error {
+	if value != Off && value != On {
+		return fmt.Errorf("invalid value %q", value)
+	}
+
+	return os.WriteFile(path, []byte{byte(value), '\n'}, 0o644)
+}
+
+func readDevice(device *Device) (bool, Value, error) {
+	value, err := readValue(device.Path)
 	if err != nil {
 		return false, Off, err
 	}
@@ -102,13 +119,13 @@ func ReadDevice(device *Device) (bool, Value, error) {
 	return changed, oldValue, nil
 }
 
-func ReadValue(path string) (Value, error) {
-	data, err := ReadFileBytes(path)
+func readValue(path string) (Value, error) {
+	data, err := readFileBytes(path)
 	if err != nil {
 		return Off, err
 	}
 	if len(data) == 0 {
-		return Off, ErrEmptyValue
+		return Off, errEmptyValue
 	}
 
 	switch data[0] {
@@ -117,6 +134,6 @@ func ReadValue(path string) (Value, error) {
 	case '1':
 		return On, nil
 	default:
-		return Off, ErrInvalidValue
+		return Off, errInvalidValue
 	}
 }

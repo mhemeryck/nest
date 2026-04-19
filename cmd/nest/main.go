@@ -33,8 +33,8 @@ func main() {
 			fmt.Printf("%s (%s): %d -> %d (rising=%t)\n",
 				event.Device.Identifier,
 				event.Device.Path,
-				sysfs.ValueInt(event.OldValue),
-				sysfs.ValueInt(event.NewValue),
+				int(event.OldValue-'0'),
+				int(event.NewValue-'0'),
 				event.IsRising,
 			)
 		}

@@ -15,13 +15,13 @@ func TestReadFileBytes(t *testing.T) {
 	err := os.WriteFile(f, []byte("42\n"), 0o644)
 	require.NoError(t, err)
 
-	val, err := ReadFileBytes(f)
+	val, err := readFileBytes(f)
 	require.NoError(t, err)
 	assert.Equal(t, []byte("42\n"), val)
 }
 
 func TestReadFileBytesNotExist(t *testing.T) {
-	_, err := ReadFileBytes("/nonexistent/file")
+	_, err := readFileBytes("/nonexistent/file")
 	assert.Error(t, err)
 }
 
@@ -29,7 +29,7 @@ func TestWriteValue(t *testing.T) {
 	tmp := t.TempDir()
 	f := filepath.Join(tmp, "test")
 
-	err := WriteValue(f, On)
+	err := writeValue(f, On)
 	require.NoError(t, err)
 
 	data, err := os.ReadFile(f)
@@ -41,7 +41,7 @@ func TestWriteValueRejectsInvalidValue(t *testing.T) {
 	tmp := t.TempDir()
 	f := filepath.Join(tmp, "test")
 
-	err := WriteValue(f, Value('2'))
+	err := writeValue(f, Value('2'))
 	assert.Error(t, err)
 }
 
