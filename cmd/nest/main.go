@@ -10,6 +10,8 @@ import (
 	"syscall"
 
 	"github.com/mhemeryck/nest/internal/config"
+	"github.com/mhemeryck/nest/internal/event"
+	"github.com/mhemeryck/nest/internal/registry"
 	"github.com/mhemeryck/nest/internal/sysfs"
 )
 
@@ -28,6 +30,8 @@ func main() {
 		return
 	}
 
+	index := registry.Build(file)
+
 	fmt.Println("Crawling sysfs device tree...")
 	devices, err := sysfs.ListDevices(file.Sysfs.Root)
 	if err != nil {
@@ -35,7 +39,7 @@ func main() {
 		return
 	}
 
-	configuredDevices, missing := configuredDevices(devices, config.DeviceIDs(file))
+	configuredDevices, missing := configuredDevices(devices, registry.DeviceIDs(index))
 	if len(missing) > 0 {
 		for _, deviceID := range missing {
 			log.Printf("Configured device not found in sysfs: %s", deviceID)
@@ -50,17 +54,48 @@ func main() {
 
 	configs := sysfs.BuildWorkerConfigs(configuredDevices)
 
-	stopChs, events := sysfs.StartWorkers(configs)
+	stopChs, pollEvents := sysfs.StartWorkers(configs)
+	bus := event.NewBus(32)
 
 	go func() {
-		for event := range events {
+		for pollEvent := range pollEvents {
+			digitalInputEvent, ok := event.PollEventToDigitalInputEvent(index, pollEvent)
+			if ok {
+				bus <- digitalInputEvent
+				continue
+			}
+
 			fmt.Printf("%s (%s): %d -> %d (rising=%t)\n",
-				event.Device.Identifier,
-				event.Device.Path,
-				int(event.OldValue-'0'),
-				int(event.NewValue-'0'),
-				event.IsRising,
+				pollEvent.Device.Identifier,
+				pollEvent.Device.Path,
+				int(pollEvent.OldValue-'0'),
+				int(pollEvent.NewValue-'0'),
+				pollEvent.IsRising,
 			)
+		}
+	}()
+
+	go func() {
+		for busEvent := range bus {
+			switch busEvent.Kind {
+			case event.DigitalInputKind:
+				fmt.Printf("digital_input %s (%s): rising=%t falling=%t\n",
+					busEvent.DigitalInput.InputID,
+					busEvent.DigitalInput.DeviceID,
+					busEvent.DigitalInput.IsRising,
+					busEvent.DigitalInput.IsFalling,
+				)
+
+				for _, pushButtonEvent := range event.DigitalInputEventToPushButtonEvents(index, *busEvent.DigitalInput) {
+					bus <- pushButtonEvent
+				}
+			case event.PushButtonKind:
+				fmt.Printf("push_button %s (%s): kind=%s\n",
+					busEvent.PushButton.ButtonID,
+					busEvent.PushButton.Name,
+					busEvent.PushButton.Kind,
+				)
+			}
 		}
 	}()
 
