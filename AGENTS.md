@@ -25,6 +25,9 @@ It should be a concise summary of the change.
 Leave a blank line after the first line.
 Body text should wrap at 72 characters.
 Use the body to explain the what and why rather than the how.
+When creating commit messages from the shell, do not embed literal `\n` escape sequences in `git commit -m` arguments.
+Prefer `git commit -F -` with a heredoc for multi-line messages.
+Using multiple `-m` flags is acceptable for short messages when the body does not need careful wrapping.
 
 Example:
 
