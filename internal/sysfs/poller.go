@@ -1,29 +1,13 @@
 package sysfs
 
 import (
-	"regexp"
 	"sync"
 	"time"
-)
-
-type Value byte
-
-const (
-	Off Value = '0'
-	On  Value = '1'
 )
 
 type WorkerConfig struct {
 	Interval time.Duration
 	Devices  []*Device
-}
-
-type Device struct {
-	Type       DeviceType
-	Path       string
-	Identifier string
-	Value      Value
-	Ready      bool
 }
 
 type PollEvent struct {
@@ -83,34 +67,15 @@ func pollWorker(
 				}
 				if changed {
 					events <- PollEvent{
-						Device:    *device,
-						OldValue:  oldValue,
-						NewValue:  device.Value,
-						IsRising:  oldValue == Off && device.Value == On,
+						Device:   *device,
+						OldValue: oldValue,
+						NewValue: device.Value,
+						IsRising: oldValue == Off && device.Value == On,
 					}
 				}
 			}
 		}
 	}
-}
-
-type DeviceType int
-
-const (
-	DigitalInput DeviceType = iota
-	DigitalOutput
-	RelayOutput
-)
-
-type DevicePattern struct {
-	Type  DeviceType
-	Regex *regexp.Regexp
-}
-
-var devicePatterns = []DevicePattern{
-	{Type: DigitalInput, Regex: regexp.MustCompile(`/di_\d+_\d+/di_value$`)},
-	{Type: DigitalOutput, Regex: regexp.MustCompile(`/do_\d+_\d+/do_value$`)},
-	{Type: RelayOutput, Regex: regexp.MustCompile(`/ro_\d+_\d+/ro_value$`)},
 }
 
 func BuildWorkerConfigs(devices []*Device) []WorkerConfig {
@@ -136,50 +101,4 @@ func BuildWorkerConfigs(devices []*Device) []WorkerConfig {
 		result = append(result, cfg)
 	}
 	return result
-}
-
-func ValueInt(value Value) int {
-	if value == On {
-		return 1
-	}
-
-	return 0
-}
-
-func ReadDevice(device *Device) (bool, Value, error) {
-	value, err := ReadValue(device.Path)
-	if err != nil {
-		return false, Off, err
-	}
-	if !device.Ready {
-		device.Value = value
-		device.Ready = true
-
-		return false, value, nil
-	}
-
-	oldValue := device.Value
-	changed := oldValue != value
-	device.Value = value
-
-	return changed, oldValue, nil
-}
-
-func ReadValue(path string) (Value, error) {
-	data, err := ReadFileBytes(path)
-	if err != nil {
-		return Off, err
-	}
-	if len(data) == 0 {
-		return Off, ErrEmptyValue
-	}
-
-	switch data[0] {
-	case '0':
-		return Off, nil
-	case '1':
-		return On, nil
-	default:
-		return Off, ErrInvalidValue
-	}
 }

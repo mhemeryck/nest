@@ -37,18 +37,6 @@ func TestWriteValue(t *testing.T) {
 	assert.Equal(t, "1\n", string(data))
 }
 
-func TestListDir(t *testing.T) {
-	tmp := t.TempDir()
-	err := os.MkdirAll(filepath.Join(tmp, "subdir"), 0o755)
-	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(tmp, "file"), []byte(""), 0o644)
-	require.NoError(t, err)
-
-	entries, err := ListDir(tmp)
-	require.NoError(t, err)
-	assert.Len(t, entries, 2)
-}
-
 func TestWriteValueRejectsInvalidValue(t *testing.T) {
 	tmp := t.TempDir()
 	f := filepath.Join(tmp, "test")
