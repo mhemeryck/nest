@@ -74,28 +74,25 @@ func TestPollWorkerDetectsChange(t *testing.T) {
 	assert.True(t, foundRising, "Should detect rising edge on path1")
 }
 
-func TestMatchDevices(t *testing.T) {
-	paths := []string{
-		"/sys/devices/platform/unipi_plc/io_group1/di_1_01/di_value",
-		"/sys/devices/platform/unipi_plc/io_group1/do_1_01/do_value",
-		"/sys/devices/platform/unipi_plc/io_group1/ro_1_01/ro_value",
-		"/sys/devices/platform/unipi_plc/io_group1/ai_1_01/in_voltage0_raw",
-		"/sys/devices/platform/unipi_plc/io_group1/leds/test/brightness",
-	}
+func TestNewDevice(t *testing.T) {
+	device, ok := NewDevice("/sys/devices/platform/unipi_plc/io_group1/di_1_01/di_value")
+	require.True(t, ok)
+	assert.Equal(t, DigitalInput, device.Type)
+	assert.Equal(t, "di_1_01", device.Identifier)
 
-	matched := MatchDevices(paths)
+	device, ok = NewDevice("/sys/devices/platform/unipi_plc/io_group1/do_1_01/do_value")
+	require.True(t, ok)
+	assert.Equal(t, DigitalOutput, device.Type)
+	assert.Equal(t, "do_1_01", device.Identifier)
 
-	assert.Len(t, matched, 3)
-	for _, m := range matched {
-		switch m.Type {
-		case DigitalInput:
-			assert.Contains(t, m.Path, "di_1_01/di_value")
-		case DigitalOutput:
-			assert.Contains(t, m.Path, "do_1_01/do_value")
-		case RelayOutput:
-			assert.Contains(t, m.Path, "ro_1_01/ro_value")
-		}
-	}
+	device, ok = NewDevice("/sys/devices/platform/unipi_plc/io_group1/ro_1_01/ro_value")
+	require.True(t, ok)
+	assert.Equal(t, RelayOutput, device.Type)
+	assert.Equal(t, "ro_1_01", device.Identifier)
+
+	device, ok = NewDevice("/sys/devices/platform/unipi_plc/io_group1/ai_1_01/in_voltage0_raw")
+	assert.False(t, ok)
+	assert.Nil(t, device)
 }
 
 func TestBuildWorkerConfigs(t *testing.T) {
@@ -165,10 +162,9 @@ func TestReadValueRejectsInvalidByte(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestDeviceTypeString(t *testing.T) {
-	assert.Equal(t, "di", DigitalInput.String())
-	assert.Equal(t, "do", DigitalOutput.String())
-	assert.Equal(t, "ro", RelayOutput.String())
+func TestValueInt(t *testing.T) {
+	assert.Equal(t, 0, ValueInt(Off))
+	assert.Equal(t, 1, ValueInt(On))
 }
 
 func TestReadDeviceUpdatesDeviceValue(t *testing.T) {

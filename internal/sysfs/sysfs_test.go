@@ -58,18 +58,30 @@ func TestWriteValueRejectsInvalidValue(t *testing.T) {
 }
 
 func TestListDevices(t *testing.T) {
-	fixtures := filepath.Join("..", "..", "test", "fixtures", "sys")
+	fixtures := filepath.Join("..", "..", "test", "fixtures")
 
 	devices, err := ListDevices(fixtures)
 	require.NoError(t, err)
 	assert.NotEmpty(t, devices)
+	assert.Contains(t, devices[0].Path, "sys/devices/platform/unipi_plc/")
 }
 
-func TestListIOValueFilesIncludesRelayOutputs(t *testing.T) {
+func TestListDevicesIncludesRelayOutputs(t *testing.T) {
 	fixtures := filepath.Join("..", "..", "test", "fixtures")
 
-	paths, err := ListIOValueFiles(fixtures)
+	devices, err := ListDevices(fixtures)
 	require.NoError(t, err)
-	assert.NotEmpty(t, paths)
-	assert.Contains(t, paths, filepath.Join(fixtures, "sys", "devices", "platform", "unipi_plc", "io_group2", "ro_2_01", "ro_value"))
+	assert.NotEmpty(t, devices)
+
+	found := false
+	for _, device := range devices {
+		if device.Path == filepath.Join(fixtures, "sys", "devices", "platform", "unipi_plc", "io_group2", "ro_2_01", "ro_value") {
+			found = true
+			assert.Equal(t, RelayOutput, device.Type)
+			assert.Equal(t, "ro_2_01", device.Identifier)
+			break
+		}
+	}
+
+	assert.True(t, found)
 }

@@ -1,7 +1,6 @@
 package sysfs
 
 import (
-	"path/filepath"
 	"regexp"
 	"sync"
 	"time"
@@ -13,14 +12,6 @@ const (
 	Off Value = '0'
 	On  Value = '1'
 )
-
-func (v Value) Int() int {
-	if v == On {
-		return 1
-	}
-
-	return 0
-}
 
 type WorkerConfig struct {
 	Interval time.Duration
@@ -111,18 +102,6 @@ const (
 	RelayOutput
 )
 
-func (d DeviceType) String() string {
-	switch d {
-	case DigitalInput:
-		return "di"
-	case DigitalOutput:
-		return "do"
-	case RelayOutput:
-		return "ro"
-	}
-	return ""
-}
-
 type DevicePattern struct {
 	Type  DeviceType
 	Regex *regexp.Regexp
@@ -132,27 +111,6 @@ var devicePatterns = []DevicePattern{
 	{Type: DigitalInput, Regex: regexp.MustCompile(`/di_\d+_\d+/di_value$`)},
 	{Type: DigitalOutput, Regex: regexp.MustCompile(`/do_\d+_\d+/do_value$`)},
 	{Type: RelayOutput, Regex: regexp.MustCompile(`/ro_\d+_\d+/ro_value$`)},
-}
-
-func MatchDevices(paths []string) []*Device {
-	return MatchDevicesWithPatterns(paths, devicePatterns)
-}
-
-func MatchDevicesWithPatterns(paths []string, patterns []DevicePattern) []*Device {
-	var matched []*Device
-	for _, path := range paths {
-		for _, p := range patterns {
-			if p.Regex.MatchString(path) {
-				matched = append(matched, &Device{
-					Path:       path,
-					Type:       p.Type,
-					Identifier: filepath.Base(filepath.Dir(path)),
-				})
-				break
-			}
-		}
-	}
-	return matched
 }
 
 func BuildWorkerConfigs(devices []*Device) []WorkerConfig {
@@ -178,6 +136,14 @@ func BuildWorkerConfigs(devices []*Device) []WorkerConfig {
 		result = append(result, cfg)
 	}
 	return result
+}
+
+func ValueInt(value Value) int {
+	if value == On {
+		return 1
+	}
+
+	return 0
 }
 
 func ReadDevice(device *Device) (bool, Value, error) {

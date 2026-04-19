@@ -56,29 +56,36 @@ func WriteValue(path string, value Value) error {
 	return os.WriteFile(path, []byte{byte(value), '\n'}, 0o644)
 }
 
-func ListDevices(sysfsPath string) ([]string, error) {
-	var devices []string
-	err := filepath.WalkDir(sysfsPath, func(path string, d fs.DirEntry, err error) error {
+func ListDevices(root string) ([]*Device, error) {
+	var devices []*Device
+	err := filepath.WalkDir(filepath.Join(root, "sys", "devices", "platform", "unipi_plc"), func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
-		if d.Name() == "uevent" {
-			devices = append(devices, filepath.Dir(path))
+		if d.IsDir() {
+			return nil
+		}
+
+		device, ok := NewDevice(path)
+		if ok {
+			devices = append(devices, device)
 		}
 		return nil
 	})
 	return devices, err
 }
 
-func ListIOValueFiles(root string) ([]string, error) {
-	var paths []string
-	patterns := []string{"di_*/di_value", "do_*/do_value", "ro_*/ro_value"}
-	for _, pattern := range patterns {
-		matches, err := filepath.Glob(filepath.Join(root, "sys/devices/platform/unipi_plc/*/", pattern))
-		if err != nil {
-			return nil, err
+
+func NewDevice(path string) (*Device, bool) {
+	for _, pattern := range devicePatterns {
+		if pattern.Regex.MatchString(path) {
+			return &Device{
+				Path:       path,
+				Type:       pattern.Type,
+				Identifier: filepath.Base(filepath.Dir(path)),
+			}, true
 		}
-		paths = append(paths, matches...)
 	}
-	return paths, nil
+
+	return nil, false
 }

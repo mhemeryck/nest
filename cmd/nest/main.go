@@ -20,21 +20,11 @@ func main() {
 	} else {
 		fmt.Printf("Found %d devices\n", len(devices))
 		for _, d := range devices[:5] {
-			fmt.Printf("  %s\n", d)
+			fmt.Printf("  %s (%s)\n", d.Identifier, d.Path)
 		}
 	}
 
-	ioPaths, err := sysfs.ListIOValueFiles(root)
-	if err != nil {
-		log.Printf("IO files listing failed: %v", err)
-	} else {
-		fmt.Printf("Found %d IO value files\n", len(ioPaths))
-	}
-
-	diDevices := sysfs.MatchDevices(ioPaths)
-	fmt.Printf("Matched %d devices\n", len(diDevices))
-
-	configs := sysfs.BuildWorkerConfigs(diDevices)
+	configs := sysfs.BuildWorkerConfigs(devices)
 
 	stopChs, events := sysfs.StartWorkers(configs)
 
@@ -43,8 +33,8 @@ func main() {
 			fmt.Printf("%s (%s): %d -> %d (rising=%t)\n",
 				event.Device.Identifier,
 				event.Device.Path,
-				event.OldValue.Int(),
-				event.NewValue.Int(),
+				sysfs.ValueInt(event.OldValue),
+				sysfs.ValueInt(event.NewValue),
 				event.IsRising,
 			)
 		}
