@@ -36,10 +36,19 @@ func main() {
 
 	configs := sysfs.BuildWorkerConfigs(diDevices)
 
-	stopChs := sysfs.StartWorkers(configs, func(event sysfs.PollEvent) {
-		fmt.Printf("%s: %d -> %d (rising=%t)\n",
-			event.Path, event.OldValue, event.NewValue, event.IsRising)
-	})
+	stopChs, events := sysfs.StartWorkers(configs)
+
+	go func() {
+		for event := range events {
+			fmt.Printf("%s (%s): %d -> %d (rising=%t)\n",
+				event.Device.Identifier,
+				event.Device.Path,
+				event.OldValue.Int(),
+				event.NewValue.Int(),
+				event.IsRising,
+			)
+		}
+	}()
 
 	fmt.Println("Polling devices... Press Ctrl+C to exit")
 

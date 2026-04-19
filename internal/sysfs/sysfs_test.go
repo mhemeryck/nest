@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestReadFileValue(t *testing.T) {
+func TestReadFileBytes(t *testing.T) {
 	tmp := t.TempDir()
 	f := filepath.Join(tmp, "test")
 	err := os.WriteFile(f, []byte("42\n"), 0o644)
@@ -29,7 +29,7 @@ func TestWriteValue(t *testing.T) {
 	tmp := t.TempDir()
 	f := filepath.Join(tmp, "test")
 
-	err := WriteValue(f, 1)
+	err := WriteValue(f, On)
 	require.NoError(t, err)
 
 	data, err := os.ReadFile(f)
@@ -53,7 +53,7 @@ func TestWriteValueRejectsInvalidValue(t *testing.T) {
 	tmp := t.TempDir()
 	f := filepath.Join(tmp, "test")
 
-	err := WriteValue(f, 2)
+	err := WriteValue(f, Value('2'))
 	assert.Error(t, err)
 }
 

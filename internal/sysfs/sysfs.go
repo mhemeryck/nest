@@ -1,10 +1,16 @@
 package sysfs
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+)
+
+var (
+	ErrEmptyValue   = errors.New("empty value")
+	ErrInvalidValue = errors.New("invalid value")
 )
 
 func ListDir(path string) ([]FileInfo, error) {
@@ -42,12 +48,12 @@ func ReadFileBytes(path string) ([]byte, error) {
 	return data, nil
 }
 
-func WriteValue(path string, value int) error {
-	if value != 0 && value != 1 {
-		return fmt.Errorf("invalid value %d", value)
+func WriteValue(path string, value Value) error {
+	if value != Off && value != On {
+		return fmt.Errorf("invalid value %q", value)
 	}
 
-	return os.WriteFile(path, []byte{byte('0' + value), '\n'}, 0o644)
+	return os.WriteFile(path, []byte{byte(value), '\n'}, 0o644)
 }
 
 func ListDevices(sysfsPath string) ([]string, error) {
