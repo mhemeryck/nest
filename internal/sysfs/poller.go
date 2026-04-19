@@ -61,16 +61,17 @@ func pollWorker(
 			return
 		case <-ticker.C:
 			for _, device := range cfg.Devices {
-				changed, oldValue, err := readDevice(device)
+				oldValue := device.Value
+				newValue, err := readDevice(device)
 				if err != nil {
 					continue
 				}
-				if changed {
+				if newValue != oldValue {
 					events <- PollEvent{
 						Device:   *device,
 						OldValue: oldValue,
-						NewValue: device.Value,
-						IsRising: oldValue == Off && device.Value == On,
+						NewValue: newValue,
+						IsRising: oldValue == Off && newValue == On,
 					}
 				}
 			}

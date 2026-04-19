@@ -34,7 +34,6 @@ type Device struct {
 	Path       string
 	Identifier string
 	Value      Value
-	Ready      bool
 }
 
 type DevicePattern struct {
@@ -58,7 +57,10 @@ func ListDevices(root string) ([]*Device, error) {
 			return nil
 		}
 
-		device, ok := newDevice(path)
+		device, ok, err := newDevice(path)
+		if err != nil {
+			return err
+		}
 		if ok {
 			devices = append(devices, device)
 		}
@@ -69,18 +71,24 @@ func ListDevices(root string) ([]*Device, error) {
 	return devices, err
 }
 
-func newDevice(path string) (*Device, bool) {
+func newDevice(path string) (*Device, bool, error) {
 	for _, pattern := range devicePatterns {
 		if pattern.Regex.MatchString(path) {
+			value, err := readValue(path)
+			if err != nil {
+				return nil, false, err
+			}
+
 			return &Device{
 				Path:       path,
 				Type:       pattern.Type,
 				Identifier: filepath.Base(filepath.Dir(path)),
-			}, true
+				Value:      value,
+			}, true, nil
 		}
 	}
 
-	return nil, false
+	return nil, false, nil
 }
 
 func readFileBytes(path string) ([]byte, error) {
@@ -100,23 +108,14 @@ func writeValue(path string, value Value) error {
 	return os.WriteFile(path, []byte{byte(value), '\n'}, 0o644)
 }
 
-func readDevice(device *Device) (bool, Value, error) {
+func readDevice(device *Device) (Value, error) {
 	value, err := readValue(device.Path)
 	if err != nil {
-		return false, Off, err
+		return Off, err
 	}
-	if !device.Ready {
-		device.Value = value
-		device.Ready = true
-
-		return false, value, nil
-	}
-
-	oldValue := device.Value
-	changed := oldValue != value
 	device.Value = value
 
-	return changed, oldValue, nil
+	return value, nil
 }
 
 func readValue(path string) (Value, error) {
