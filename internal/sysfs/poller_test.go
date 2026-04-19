@@ -32,9 +32,9 @@ func TestPollWorkerDetectsChange(t *testing.T) {
 	path1 := filepath.Join(tmp, "gpio1")
 	path2 := filepath.Join(tmp, "gpio2")
 
-	err := WriteFileValue(path1, "0")
+	err := WriteValue(path1, 0)
 	require.NoError(t, err)
-	err = WriteFileValue(path2, "0")
+	err = WriteValue(path2, 0)
 	require.NoError(t, err)
 
 	configs := []WorkerConfig{
@@ -53,7 +53,7 @@ func TestPollWorkerDetectsChange(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	err = WriteFileValue(path1, "1")
+	err = WriteValue(path1, 1)
 	require.NoError(t, err)
 
 	time.Sleep(50 * time.Millisecond)
@@ -133,26 +133,34 @@ func TestBuildWorkerConfigs(t *testing.T) {
 	assert.Equal(t, 1*time.Second, roCfg.Interval)
 }
 
-func TestReadWriteDIValue(t *testing.T) {
+func TestReadValue(t *testing.T) {
 	tmp := t.TempDir()
-	devicePath := filepath.Join(tmp, "di_1_01")
+	path := filepath.Join(tmp, "di_value")
 
-	err := os.MkdirAll(devicePath, 0o755)
+	err := WriteValue(path, 0)
 	require.NoError(t, err)
 
-	err = WriteFileValue(filepath.Join(devicePath, "di_value"), "0")
-	require.NoError(t, err)
-
-	val, err := ReadDIValue(devicePath)
+	val, err := ReadValue(path)
 	require.NoError(t, err)
 	assert.Equal(t, 0, val)
 
-	err = WriteFileValue(filepath.Join(devicePath, "di_value"), "1")
+	err = WriteValue(path, 1)
 	require.NoError(t, err)
 
-	val, err = ReadDIValue(devicePath)
+	val, err = ReadValue(path)
 	require.NoError(t, err)
 	assert.Equal(t, 1, val)
+}
+
+func TestReadValueRejectsInvalidByte(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "value")
+
+	err := os.WriteFile(path, []byte("x\n"), 0o644)
+	require.NoError(t, err)
+
+	_, err = ReadValue(path)
+	assert.Error(t, err)
 }
 
 func TestDeviceTypeString(t *testing.T) {

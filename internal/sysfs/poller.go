@@ -1,10 +1,8 @@
 package sysfs
 
 import (
-	"fmt"
+	"errors"
 	"regexp"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -30,33 +28,17 @@ type PollEvent struct {
 	IsRising bool
 }
 
-type PollHandler struct {
-	mu      sync.Mutex
-	OnEvent func(PollEvent)
-}
-
-func (h *PollHandler) Emit(event PollEvent) {
-	h.mu.Lock()
-	callback := h.OnEvent
-	h.mu.Unlock()
-
-	if callback != nil {
-		callback(event)
-	}
-}
-
 func StartWorkers(
 	configs []WorkerConfig,
 	onEvent func(PollEvent),
 ) []chan struct{} {
 	stopChs := make([]chan struct{}, len(configs))
-	handler := &PollHandler{OnEvent: onEvent}
 
 	for i, cfg := range configs {
 		stopCh := make(chan struct{})
 		stopChs[i] = stopCh
 
-		go pollWorker(cfg, stopCh, handler.Emit)
+		go pollWorker(cfg, stopCh, onEvent)
 	}
 
 	return stopChs
@@ -83,11 +65,10 @@ func pollWorker(
 			return
 		case <-ticker.C:
 			for _, path := range cfg.Paths {
-				val, err := ReadFileValue(path)
+				v, err := ReadValue(path)
 				if err != nil {
 					continue
 				}
-				v, _ := strconv.Atoi(strings.TrimSpace(val))
 
 				state.mu.Lock()
 				last, ok := state.LastValues[path]
@@ -132,16 +113,14 @@ type DevicePattern struct {
 }
 
 var devicePatterns = []DevicePattern{
-	{Type: DigitalInput, Regex: regexp.MustCompile(`/di_(?P<group>\d+)_(?P<num>\d+)/di_value$`)},
-	{Type: DigitalOutput, Regex: regexp.MustCompile(`/do_(?P<group>\d+)_(?P<num>\d+)/do_value$`)},
-	{Type: RelayOutput, Regex: regexp.MustCompile(`/ro_(?P<group>\d+)_(?P<num>\d+)/ro_value$`)},
+	{Type: DigitalInput, Regex: regexp.MustCompile(`/di_\d+_\d+/di_value$`)},
+	{Type: DigitalOutput, Regex: regexp.MustCompile(`/do_\d+_\d+/do_value$`)},
+	{Type: RelayOutput, Regex: regexp.MustCompile(`/ro_\d+_\d+/ro_value$`)},
 }
 
 type MatchedDevice struct {
-	Path  string
-	Type  DeviceType
-	Group string
-	Num   string
+	Path string
+	Type DeviceType
 }
 
 func MatchDevices(paths []string) []MatchedDevice {
@@ -189,30 +168,21 @@ func BuildWorkerConfigs(devices []MatchedDevice) []WorkerConfig {
 	return result
 }
 
-func ReadDIValue(devicePath string) (int, error) {
-	return ReadGPIOValueFromPath(fmt.Sprintf("%s/di_value", devicePath))
-}
-
-func ReadDOValue(devicePath string) (int, error) {
-	return ReadGPIOValueFromPath(fmt.Sprintf("%s/do_value", devicePath))
-}
-
-func ReadROValue(devicePath string) (int, error) {
-	return ReadGPIOValueFromPath(fmt.Sprintf("%s/ro_value", devicePath))
-}
-
-func ReadGPIOValueFromPath(path string) (int, error) {
-	val, err := ReadFileValue(path)
+func ReadValue(path string) (int, error) {
+	data, err := ReadFileBytes(path)
 	if err != nil {
 		return 0, err
 	}
-	return strconv.Atoi(strings.TrimSpace(val))
-}
+	if len(data) == 0 {
+		return 0, errors.New("empty file")
+	}
 
-func WriteDOValue(devicePath string, value int) error {
-	return WriteFileValue(fmt.Sprintf("%s/do_value", devicePath), fmt.Sprintf("%d", value))
-}
-
-func WriteROValue(devicePath string, value int) error {
-	return WriteFileValue(fmt.Sprintf("%s/ro_value", devicePath), fmt.Sprintf("%d", value))
+	switch data[0] {
+	case '0':
+		return 0, nil
+	case '1':
+		return 1, nil
+	default:
+		return 0, errors.New("invalid value")
+	}
 }

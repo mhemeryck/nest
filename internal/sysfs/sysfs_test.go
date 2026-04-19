@@ -15,26 +15,26 @@ func TestReadFileValue(t *testing.T) {
 	err := os.WriteFile(f, []byte("42\n"), 0o644)
 	require.NoError(t, err)
 
-	val, err := ReadFileValue(f)
+	val, err := ReadFileBytes(f)
 	require.NoError(t, err)
-	assert.Equal(t, "42", val)
+	assert.Equal(t, []byte("42\n"), val)
 }
 
-func TestReadFileValueNotExist(t *testing.T) {
-	_, err := ReadFileValue("/nonexistent/file")
+func TestReadFileBytesNotExist(t *testing.T) {
+	_, err := ReadFileBytes("/nonexistent/file")
 	assert.Error(t, err)
 }
 
-func TestWriteFileValue(t *testing.T) {
+func TestWriteValue(t *testing.T) {
 	tmp := t.TempDir()
 	f := filepath.Join(tmp, "test")
 
-	err := WriteFileValue(f, "hello")
+	err := WriteValue(f, 1)
 	require.NoError(t, err)
 
 	data, err := os.ReadFile(f)
 	require.NoError(t, err)
-	assert.Equal(t, "hello\n", string(data))
+	assert.Equal(t, "1\n", string(data))
 }
 
 func TestListDir(t *testing.T) {
@@ -49,13 +49,12 @@ func TestListDir(t *testing.T) {
 	assert.Len(t, entries, 2)
 }
 
-func TestCrawlDeviceFixtures(t *testing.T) {
-	fixtures := filepath.Join("..", "..", "test", "fixtures", "sys", "devices", "platform", "unipi_plc")
+func TestWriteValueRejectsInvalidValue(t *testing.T) {
+	tmp := t.TempDir()
+	f := filepath.Join(tmp, "test")
 
-	entry, err := CrawlDevice(fixtures)
-	require.NoError(t, err)
-	assert.NotEmpty(t, entry.Path)
-	assert.NotEmpty(t, entry.Children)
+	err := WriteValue(f, 2)
+	assert.Error(t, err)
 }
 
 func TestListDevices(t *testing.T) {
@@ -64,4 +63,13 @@ func TestListDevices(t *testing.T) {
 	devices, err := ListDevices(fixtures)
 	require.NoError(t, err)
 	assert.NotEmpty(t, devices)
+}
+
+func TestListIOValueFilesIncludesRelayOutputs(t *testing.T) {
+	fixtures := filepath.Join("..", "..", "test", "fixtures")
+
+	paths, err := ListIOValueFiles(fixtures)
+	require.NoError(t, err)
+	assert.NotEmpty(t, paths)
+	assert.Contains(t, paths, filepath.Join(fixtures, "sys", "devices", "platform", "unipi_plc", "io_group2", "ro_2_01", "ro_value"))
 }

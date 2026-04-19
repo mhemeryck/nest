@@ -5,7 +5,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 func ListDir(path string) ([]FileInfo, error) {
@@ -35,16 +34,20 @@ type FileInfo struct {
 	Mode  fs.FileMode
 }
 
-func ReadFileValue(path string) (string, error) {
+func ReadFileBytes(path string) ([]byte, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return "", fmt.Errorf("read file %s: %w", path, err)
+		return nil, fmt.Errorf("read file %s: %w", path, err)
 	}
-	return strings.TrimSpace(string(data)), nil
+	return data, nil
 }
 
-func WriteFileValue(path string, value string) error {
-	return os.WriteFile(path, []byte(value+"\n"), 0o644)
+func WriteValue(path string, value int) error {
+	if value != 0 && value != 1 {
+		return fmt.Errorf("invalid value %d", value)
+	}
+
+	return os.WriteFile(path, []byte{byte('0' + value), '\n'}, 0o644)
 }
 
 func ListDevices(sysfsPath string) ([]string, error) {
@@ -63,7 +66,7 @@ func ListDevices(sysfsPath string) ([]string, error) {
 
 func ListIOValueFiles(root string) ([]string, error) {
 	var paths []string
-	patterns := []string{"di_*/di_value", "do_*/do_value"}
+	patterns := []string{"di_*/di_value", "do_*/do_value", "ro_*/ro_value"}
 	for _, pattern := range patterns {
 		matches, err := filepath.Glob(filepath.Join(root, "sys/devices/platform/unipi_plc/*/", pattern))
 		if err != nil {
@@ -72,30 +75,4 @@ func ListIOValueFiles(root string) ([]string, error) {
 		paths = append(paths, matches...)
 	}
 	return paths, nil
-}
-
-type DeviceEntry struct {
-	Path     string
-	Name     string
-	Children []DeviceEntry
-}
-
-func CrawlDevice(rootPath string) (DeviceEntry, error) {
-	name, _ := ReadFileValue(filepath.Join(rootPath, "name"))
-
-	var children []DeviceEntry
-	entries, err := os.ReadDir(rootPath)
-	if err == nil {
-		for _, entry := range entries {
-			if !entry.IsDir() || entry.Name() == "power" {
-				continue
-			}
-			child, err := CrawlDevice(filepath.Join(rootPath, entry.Name()))
-			if err == nil {
-				children = append(children, child)
-			}
-		}
-	}
-
-	return DeviceEntry{Path: rootPath, Name: name, Children: children}, nil
 }
