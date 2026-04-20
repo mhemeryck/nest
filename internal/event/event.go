@@ -1,6 +1,7 @@
 package event
 
 import (
+	"github.com/mhemeryck/nest/internal/entity"
 	"github.com/mhemeryck/nest/internal/registry"
 	"github.com/mhemeryck/nest/internal/sysfs"
 )
@@ -21,14 +22,14 @@ type Event struct {
 }
 
 type DigitalInputEvent struct {
-	InputID   string
-	DeviceID  string
+	InputID   entity.DigitalInputID
+	DeviceID  entity.DeviceID
 	IsRising  bool
 	IsFalling bool
 }
 
 type PushButtonEvent struct {
-	ButtonID string
+	ButtonID entity.PushButtonID
 	Name     string
 	Kind     string
 }
@@ -38,7 +39,7 @@ func NewBus(buffer int) chan Event {
 }
 
 func PollEventToDigitalInputEvent(index *registry.Index, pollEvent sysfs.PollEvent) (Event, bool) {
-	input, ok := index.DigitalInputsByDevice[pollEvent.Device.Identifier]
+	input, ok := index.DigitalInputsByDevice[entity.DeviceID(pollEvent.Device.Identifier)]
 	if !ok {
 		return Event{}, false
 	}
@@ -47,7 +48,7 @@ func PollEventToDigitalInputEvent(index *registry.Index, pollEvent sysfs.PollEve
 		Kind: DigitalInputKind,
 		DigitalInput: &DigitalInputEvent{
 			InputID:   input.ID,
-			DeviceID:  pollEvent.Device.Identifier,
+			DeviceID:  entity.DeviceID(pollEvent.Device.Identifier),
 			IsRising:  pollEvent.IsRising,
 			IsFalling: pollEvent.OldValue == sysfs.On && pollEvent.NewValue == sysfs.Off,
 		},

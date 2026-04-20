@@ -2,6 +2,13 @@ package entity
 
 import "github.com/mhemeryck/nest/internal/config"
 
+type (
+	DeviceID       string
+	DigitalInputID string
+	PushButtonID   string
+	RelayID        string
+)
+
 type Root struct {
 	SysfsRoot     string
 	DigitalInputs []DigitalInput
@@ -10,20 +17,20 @@ type Root struct {
 }
 
 type DigitalInput struct {
-	ID     string
-	Device string
+	ID     DigitalInputID
+	Device DeviceID
 }
 
 type PushButton struct {
-	ID    string
+	ID    PushButtonID
 	Name  string
-	Input string
+	Input DigitalInputID
 }
 
 type Relay struct {
-	ID     string
+	ID     RelayID
 	Name   string
-	Device string
+	Device DeviceID
 }
 
 func FromConfig(root *config.Root) *Root {
@@ -40,24 +47,24 @@ func FromConfig(root *config.Root) *Root {
 
 	for _, input := range root.DigitalInputs {
 		entities.DigitalInputs = append(entities.DigitalInputs, DigitalInput{
-			ID:     input.ID,
-			Device: input.Device,
+			ID:     DigitalInputID(input.ID),
+			Device: DeviceID(input.Device),
 		})
 	}
 
 	for _, button := range root.PushButtons {
 		entities.PushButtons = append(entities.PushButtons, PushButton{
-			ID:    button.ID,
+			ID:    PushButtonID(button.ID),
 			Name:  button.Name,
-			Input: button.Input,
+			Input: DigitalInputID(button.Input),
 		})
 	}
 
 	for _, relay := range root.Relays {
 		entities.Relays = append(entities.Relays, Relay{
-			ID:     relay.ID,
+			ID:     RelayID(relay.ID),
 			Name:   relay.Name,
-			Device: relay.Device,
+			Device: DeviceID(relay.Device),
 		})
 	}
 

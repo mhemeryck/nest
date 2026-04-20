@@ -7,16 +7,16 @@ import (
 )
 
 type Index struct {
-	DigitalInputsByDevice map[string]entity.DigitalInput
-	PushButtonsByInputID  map[string][]entity.PushButton
-	RelaysByDevice        map[string]entity.Relay
+	DigitalInputsByDevice map[entity.DeviceID]entity.DigitalInput
+	PushButtonsByInputID  map[entity.DigitalInputID][]entity.PushButton
+	RelaysByDevice        map[entity.DeviceID]entity.Relay
 }
 
 func Build(root *entity.Root) *Index {
 	index := &Index{
-		DigitalInputsByDevice: make(map[string]entity.DigitalInput, len(root.DigitalInputs)),
-		PushButtonsByInputID:  make(map[string][]entity.PushButton),
-		RelaysByDevice:        make(map[string]entity.Relay, len(root.Relays)),
+		DigitalInputsByDevice: make(map[entity.DeviceID]entity.DigitalInput, len(root.DigitalInputs)),
+		PushButtonsByInputID:  make(map[entity.DigitalInputID][]entity.PushButton),
+		RelaysByDevice:        make(map[entity.DeviceID]entity.Relay, len(root.Relays)),
 	}
 
 	for _, input := range root.DigitalInputs {
@@ -37,10 +37,10 @@ func Build(root *entity.Root) *Index {
 func DeviceIDs(index *Index) []string {
 	deviceIDs := make([]string, 0, len(index.DigitalInputsByDevice)+len(index.RelaysByDevice))
 	for deviceID := range index.DigitalInputsByDevice {
-		deviceIDs = append(deviceIDs, deviceID)
+		deviceIDs = append(deviceIDs, string(deviceID))
 	}
 	for deviceID := range index.RelaysByDevice {
-		deviceIDs = append(deviceIDs, deviceID)
+		deviceIDs = append(deviceIDs, string(deviceID))
 	}
 
 	sort.Strings(deviceIDs)
