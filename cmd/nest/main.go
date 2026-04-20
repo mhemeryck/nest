@@ -2,8 +2,7 @@ package main
 
 import (
 	"flag"
-	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"sort"
@@ -16,40 +15,43 @@ import (
 )
 
 func main() {
+	logger := slog.Default()
+
 	configPath := flag.String("config", "", "Path to config file")
 	validateOnly := flag.Bool("validate", false, "Validate config and exit")
 	flag.Parse()
 
 	file, err := config.Load(*configPath)
 	if err != nil {
-		log.Fatalf("Load config failed: %v", err)
+		logger.Error("load config failed", "error", err)
+		os.Exit(1)
 	}
 
 	if *validateOnly {
-		fmt.Printf("Config is valid: %s\n", *configPath)
+		logger.Info("config is valid", "path", *configPath)
 		return
 	}
 
 	index := registry.Build(file)
 
-	fmt.Println("Crawling sysfs device tree...")
+	logger.Info("crawling sysfs device tree", "root", file.Sysfs.Root)
 	devices, err := sysfs.ListDevices(file.Sysfs.Root)
 	if err != nil {
-		log.Printf("Crawl failed: %v", err)
+		logger.Error("crawl failed", "error", err)
 		return
 	}
 
 	configuredDevices, missing := configuredDevices(devices, registry.DeviceIDs(index))
 	if len(missing) > 0 {
 		for _, deviceID := range missing {
-			log.Printf("Configured device not found in sysfs: %s", deviceID)
+			logger.Error("configured device not found in sysfs", "device_id", deviceID)
 		}
 		os.Exit(1)
 	}
 
-	fmt.Printf("Configured %d devices\n", len(configuredDevices))
+	logger.Info("configured devices", "count", len(configuredDevices))
 	for _, device := range configuredDevices {
-		fmt.Printf("  %s (%s)\n", device.Identifier, device.Path)
+		logger.Info("configured device", "identifier", device.Identifier, "path", device.Path)
 	}
 
 	configs := sysfs.BuildWorkerConfigs(configuredDevices)
@@ -65,11 +67,17 @@ func main() {
 				continue
 			}
 
-			fmt.Printf("%s (%s): %d -> %d (rising=%t)\n",
+			logger.Info(
+				"poll event",
+				"identifier",
 				pollEvent.Device.Identifier,
+				"path",
 				pollEvent.Device.Path,
+				"old_value",
 				int(pollEvent.OldValue-'0'),
+				"new_value",
 				int(pollEvent.NewValue-'0'),
+				"rising",
 				pollEvent.IsRising,
 			)
 		}
@@ -79,10 +87,15 @@ func main() {
 		for busEvent := range bus {
 			switch busEvent.Kind {
 			case event.DigitalInputKind:
-				fmt.Printf("digital_input %s (%s): rising=%t falling=%t\n",
+				logger.Info(
+					"digital input event",
+					"input_id",
 					busEvent.DigitalInput.InputID,
+					"device_id",
 					busEvent.DigitalInput.DeviceID,
+					"rising",
 					busEvent.DigitalInput.IsRising,
+					"falling",
 					busEvent.DigitalInput.IsFalling,
 				)
 
@@ -90,22 +103,26 @@ func main() {
 					bus <- pushButtonEvent
 				}
 			case event.PushButtonKind:
-				fmt.Printf("push_button %s (%s): kind=%s\n",
+				logger.Info(
+					"push button event",
+					"button_id",
 					busEvent.PushButton.ButtonID,
+					"name",
 					busEvent.PushButton.Name,
+					"kind",
 					busEvent.PushButton.Kind,
 				)
 			}
 		}
 	}()
 
-	fmt.Println("Polling devices... Press Ctrl+C to exit")
+	logger.Info("polling devices", "message", "press Ctrl+C to exit")
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	<-sigCh
 
-	fmt.Println("\nShutting down...")
+	logger.Info("shutting down")
 	sysfs.StopWorkers(stopChs)
 }
 
