@@ -59,73 +59,88 @@ func main() {
 	configs := sysfs.BuildWorkerConfigs(configuredDevices)
 
 	stopChs, pollEvents := sysfs.StartWorkers(configs)
-	bus := event.NewBus(32)
-
-	go func() {
-		for pollEvent := range pollEvents {
-			digitalInputEvent, ok := event.PollEventToDigitalInputEvent(index, pollEvent)
-			if ok {
-				bus <- digitalInputEvent
-				continue
-			}
-
-			logger.Info(
-				"poll event",
-				"identifier",
-				pollEvent.Device.Identifier,
-				"path",
-				pollEvent.Device.Path,
-				"old_value",
-				int(pollEvent.OldValue-'0'),
-				"new_value",
-				int(pollEvent.NewValue-'0'),
-				"rising",
-				pollEvent.IsRising,
-			)
-		}
-	}()
-
-	go func() {
-		for busEvent := range bus {
-			switch busEvent.Kind {
-			case event.DigitalInputKind:
-				logger.Info(
-					"digital input event",
-					"input_id",
-					busEvent.DigitalInput.InputID,
-					"device_id",
-					busEvent.DigitalInput.DeviceID,
-					"rising",
-					busEvent.DigitalInput.IsRising,
-					"falling",
-					busEvent.DigitalInput.IsFalling,
-				)
-
-				for _, pushButtonEvent := range event.DigitalInputEventToPushButtonEvents(index, *busEvent.DigitalInput) {
-					bus <- pushButtonEvent
-				}
-			case event.PushButtonKind:
-				logger.Info(
-					"push button event",
-					"button_id",
-					busEvent.PushButton.ButtonID,
-					"name",
-					busEvent.PushButton.Name,
-					"kind",
-					busEvent.PushButton.Kind,
-				)
-			}
-		}
-	}()
 
 	logger.Info("polling devices", "message", "press Ctrl+C to exit")
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	<-sigCh
+	dispatch(logger, index, pollEvents, sigCh)
 
 	logger.Info("shutting down")
 	sysfs.StopWorkers(stopChs)
+}
+
+func dispatch(
+	logger *slog.Logger,
+	index *registry.Index,
+	pollEvents <-chan sysfs.PollEvent,
+	sigCh <-chan os.Signal,
+) {
+	for {
+		select {
+		case <-sigCh:
+			return
+		case pollEvent, ok := <-pollEvents:
+			if !ok {
+				return
+			}
+
+			handlePollEvent(logger, index, pollEvent)
+		}
+	}
+}
+
+func handlePollEvent(logger *slog.Logger, index *registry.Index, pollEvent sysfs.PollEvent) {
+	digitalInputEvent, ok := event.PollEventToDigitalInputEvent(index, pollEvent)
+	if ok {
+		handleEvent(logger, index, digitalInputEvent)
+		return
+	}
+
+	logger.Info(
+		"poll event",
+		"identifier",
+		pollEvent.Device.Identifier,
+		"path",
+		pollEvent.Device.Path,
+		"old_value",
+		int(pollEvent.OldValue-'0'),
+		"new_value",
+		int(pollEvent.NewValue-'0'),
+		"rising",
+		pollEvent.IsRising,
+	)
+}
+
+func handleEvent(logger *slog.Logger, index *registry.Index, busEvent event.Event) {
+	switch busEvent.Kind {
+	case event.DigitalInputKind:
+		logger.Info(
+			"digital input event",
+			"input_id",
+			busEvent.DigitalInput.InputID,
+			"device_id",
+			busEvent.DigitalInput.DeviceID,
+			"rising",
+			busEvent.DigitalInput.IsRising,
+			"falling",
+			busEvent.DigitalInput.IsFalling,
+		)
+
+		for _, pushButtonEvent := range event.DigitalInputEventToPushButtonEvents(index, *busEvent.DigitalInput) {
+			handleEvent(logger, index, pushButtonEvent)
+		}
+	case event.PushButtonKind:
+		logger.Info(
+			"push button event",
+			"button_id",
+			busEvent.PushButton.ButtonID,
+			"name",
+			busEvent.PushButton.Name,
+			"kind",
+			busEvent.PushButton.Kind,
+		)
+	}
 }
 
 func configuredDevices(devices []*sysfs.Device, wanted []string) ([]*sysfs.Device, []string) {

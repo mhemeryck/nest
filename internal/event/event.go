@@ -34,10 +34,6 @@ type PushButtonEvent struct {
 	Kind     string
 }
 
-func NewBus(buffer int) chan Event {
-	return make(chan Event, buffer)
-}
-
 func PollEventToDigitalInputEvent(index *registry.Index, pollEvent sysfs.PollEvent) (Event, bool) {
 	input, ok := index.DigitalInputsByDevice[entity.DeviceID(pollEvent.Device.Identifier)]
 	if !ok {
