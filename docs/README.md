@@ -19,6 +19,7 @@ codebase.
 
 - [Overview](architecture.md) - High-level system architecture and guiding principles
 - [Design](design.md) - Target design for `nest` as the consolidated controller
+- [Long-Term Ideas](ideas.md) - Parked ideas and future directions
 - [Repositories](repos.md) - Overview of existing repositories, roles, and migration context
 - [Covers](covers.md) - Cover controller behavior, legacy approach, and planned `nest` implementation
 - [Sysfs](sysfs.md) - Unipi sysfs interface and how `nest` uses or plans to use it
