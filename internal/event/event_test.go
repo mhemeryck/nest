@@ -3,7 +3,7 @@ package event
 import (
 	"testing"
 
-	"github.com/mhemeryck/nest/internal/config"
+	"github.com/mhemeryck/nest/internal/entity"
 	"github.com/mhemeryck/nest/internal/registry"
 	"github.com/mhemeryck/nest/internal/sysfs"
 	"github.com/stretchr/testify/assert"
@@ -11,8 +11,8 @@ import (
 )
 
 func TestPollEventToDigitalInputEvent(t *testing.T) {
-	index := registry.Build(&config.Root{
-		DigitalInputs: []config.DigitalInputConfig{{ID: "office_button_input", Device: "di_3_16"}},
+	index := registry.Build(&entity.Root{
+		DigitalInputs: []entity.DigitalInput{{ID: "office_button_input", Device: "di_3_16"}},
 	})
 
 	event, ok := PollEventToDigitalInputEvent(index, sysfs.PollEvent{
@@ -32,7 +32,7 @@ func TestPollEventToDigitalInputEvent(t *testing.T) {
 }
 
 func TestPollEventToDigitalInputEventIgnoresUnknownDevices(t *testing.T) {
-	index := registry.Build(&config.Root{})
+	index := registry.Build(&entity.Root{})
 
 	_, ok := PollEventToDigitalInputEvent(index, sysfs.PollEvent{
 		Device: sysfs.Device{Identifier: "ro_3_14"},
@@ -41,8 +41,8 @@ func TestPollEventToDigitalInputEventIgnoresUnknownDevices(t *testing.T) {
 }
 
 func TestDigitalInputEventToPushButtonEvents(t *testing.T) {
-	index := registry.Build(&config.Root{
-		PushButtons: []config.PushButtonConfig{
+	index := registry.Build(&entity.Root{
+		PushButtons: []entity.PushButton{
 			{ID: "office_button", Name: "Office button", Input: "office_button_input"},
 			{ID: "office_button_secondary", Name: "Office button secondary", Input: "office_button_input"},
 		},
@@ -61,8 +61,8 @@ func TestDigitalInputEventToPushButtonEvents(t *testing.T) {
 }
 
 func TestDigitalInputEventToPushButtonEventsIgnoresFallingEdge(t *testing.T) {
-	index := registry.Build(&config.Root{
-		PushButtons: []config.PushButtonConfig{{ID: "office_button", Name: "Office button", Input: "office_button_input"}},
+	index := registry.Build(&entity.Root{
+		PushButtons: []entity.PushButton{{ID: "office_button", Name: "Office button", Input: "office_button_input"}},
 	})
 
 	events := DigitalInputEventToPushButtonEvents(index, DigitalInputEvent{

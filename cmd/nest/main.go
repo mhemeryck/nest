@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/mhemeryck/nest/internal/config"
+	"github.com/mhemeryck/nest/internal/entity"
 	"github.com/mhemeryck/nest/internal/event"
 	"github.com/mhemeryck/nest/internal/registry"
 	"github.com/mhemeryck/nest/internal/sysfs"
@@ -21,7 +22,7 @@ func main() {
 	validateOnly := flag.Bool("validate", false, "Validate config and exit")
 	flag.Parse()
 
-	file, err := config.Load(*configPath)
+	configRoot, err := config.Load(*configPath)
 	if err != nil {
 		logger.Error("load config failed", "error", err)
 		os.Exit(1)
@@ -32,10 +33,11 @@ func main() {
 		return
 	}
 
-	index := registry.Build(file)
+	root := entity.FromConfig(configRoot)
+	index := registry.Build(root)
 
-	logger.Info("crawling sysfs device tree", "root", file.Sysfs.Root)
-	devices, err := sysfs.ListDevices(file.Sysfs.Root)
+	logger.Info("crawling sysfs device tree", "root", root.SysfsRoot)
+	devices, err := sysfs.ListDevices(root.SysfsRoot)
 	if err != nil {
 		logger.Error("crawl failed", "error", err)
 		return
