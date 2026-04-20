@@ -35,17 +35,17 @@ func TestLoadRejectsUnknownFields(t *testing.T) {
 func TestValidate(t *testing.T) {
 	tests := []struct {
 		name    string
-		file    File
+		file    Root
 		message string
 	}{
 		{
 			name:    "requires sysfs root",
-			file:    File{},
+			file:    Root{},
 			message: "sysfs.root: required",
 		},
 		{
 			name: "rejects duplicate digital input ids",
-			file: File{
+			file: Root{
 				Sysfs: SysfsConfig{Root: "/tmp"},
 				DigitalInputs: []DigitalInputConfig{
 					{ID: "button_input", Device: "di_3_16"},
@@ -56,7 +56,7 @@ func TestValidate(t *testing.T) {
 		},
 		{
 			name: "rejects invalid digital input devices",
-			file: File{
+			file: Root{
 				Sysfs:         SysfsConfig{Root: "/tmp"},
 				DigitalInputs: []DigitalInputConfig{{ID: "button_input", Device: "ro_3_14"}},
 			},
@@ -64,7 +64,7 @@ func TestValidate(t *testing.T) {
 		},
 		{
 			name: "requires buttons to reference known inputs",
-			file: File{
+			file: Root{
 				Sysfs:       SysfsConfig{Root: "/tmp"},
 				PushButtons: []PushButtonConfig{{ID: "button", Name: "Button", Input: "missing"}},
 			},
@@ -72,7 +72,7 @@ func TestValidate(t *testing.T) {
 		},
 		{
 			name: "rejects invalid relay devices",
-			file: File{
+			file: Root{
 				Sysfs:  SysfsConfig{Root: "/tmp"},
 				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "di_3_16"}},
 			},
@@ -90,7 +90,7 @@ func TestValidate(t *testing.T) {
 }
 
 func TestValidateAcceptsValidFile(t *testing.T) {
-	file := File{
+	file := Root{
 		Sysfs: SysfsConfig{Root: "/tmp"},
 		DigitalInputs: []DigitalInputConfig{
 			{ID: "office_button_input", Device: "di_3_16"},

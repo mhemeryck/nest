@@ -17,7 +17,7 @@ var (
 	relayPattern         = regexp.MustCompile(`^ro_\d+_\d+$`)
 )
 
-type File struct {
+type Root struct {
 	Sysfs         SysfsConfig          `yaml:"sysfs"`
 	DigitalInputs []DigitalInputConfig `yaml:"digital_inputs"`
 	PushButtons   []PushButtonConfig   `yaml:"push_buttons"`
@@ -45,7 +45,7 @@ type RelayConfig struct {
 	Device string `yaml:"device"`
 }
 
-func Load(path string) (*File, error) {
+func Load(path string) (*Root, error) {
 	if path == "" {
 		return nil, errMissingConfigPath
 	}
@@ -55,7 +55,7 @@ func Load(path string) (*File, error) {
 		return nil, fmt.Errorf("read config %s: %w", path, err)
 	}
 
-	var file File
+	var file Root
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 	decoder.KnownFields(true)
 	if err := decoder.Decode(&file); err != nil {
@@ -69,7 +69,7 @@ func Load(path string) (*File, error) {
 	return &file, nil
 }
 
-func Validate(f *File) error {
+func Validate(f *Root) error {
 	var errs error
 
 	if strings.TrimSpace(f.Sysfs.Root) == "" {
@@ -116,7 +116,7 @@ func Validate(f *File) error {
 	return errs
 }
 
-func DeviceIDs(f *File) []string {
+func DeviceIDs(f *Root) []string {
 	deviceIDs := make([]string, 0, len(f.DigitalInputs)+len(f.Relays))
 	for _, input := range f.DigitalInputs {
 		deviceIDs = append(deviceIDs, input.Device)

@@ -82,7 +82,7 @@ package config
 
 import "time"
 
-type File struct {
+type Root struct {
 	Sysfs    SysfsConfig     `yaml:"sysfs"`
 	DigitalInputs []DigitalInputConfig `yaml:"digital_inputs"`
 	PushButtons   []PushButtonConfig   `yaml:"push_buttons"`
@@ -114,8 +114,8 @@ type RelayConfig struct {
 The first loader API can stay small.
 
 ```go
-func Load(path string) (*File, error)
-func Validate(f *File) error
+func Load(path string) (*Root, error)
+func Validate(f *Root) error
 ```
 
 ## Runtime Model

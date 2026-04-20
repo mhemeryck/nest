@@ -9,7 +9,7 @@ import (
 )
 
 func TestBuild(t *testing.T) {
-	file := &config.File{
+	file := &config.Root{
 		DigitalInputs: []config.DigitalInputConfig{
 			{ID: "office_button_input", Device: "di_3_16"},
 		},

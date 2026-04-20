@@ -12,7 +12,7 @@ type Index struct {
 	RelaysByDevice        map[string]config.RelayConfig
 }
 
-func Build(file *config.File) *Index {
+func Build(file *config.Root) *Index {
 	index := &Index{
 		DigitalInputsByDevice: make(map[string]config.DigitalInputConfig, len(file.DigitalInputs)),
 		PushButtonsByInputID:  make(map[string][]config.PushButtonConfig),

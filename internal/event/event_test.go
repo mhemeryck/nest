@@ -11,7 +11,7 @@ import (
 )
 
 func TestPollEventToDigitalInputEvent(t *testing.T) {
-	index := registry.Build(&config.File{
+	index := registry.Build(&config.Root{
 		DigitalInputs: []config.DigitalInputConfig{{ID: "office_button_input", Device: "di_3_16"}},
 	})
 
@@ -32,7 +32,7 @@ func TestPollEventToDigitalInputEvent(t *testing.T) {
 }
 
 func TestPollEventToDigitalInputEventIgnoresUnknownDevices(t *testing.T) {
-	index := registry.Build(&config.File{})
+	index := registry.Build(&config.Root{})
 
 	_, ok := PollEventToDigitalInputEvent(index, sysfs.PollEvent{
 		Device: sysfs.Device{Identifier: "ro_3_14"},
@@ -41,7 +41,7 @@ func TestPollEventToDigitalInputEventIgnoresUnknownDevices(t *testing.T) {
 }
 
 func TestDigitalInputEventToPushButtonEvents(t *testing.T) {
-	index := registry.Build(&config.File{
+	index := registry.Build(&config.Root{
 		PushButtons: []config.PushButtonConfig{
 			{ID: "office_button", Name: "Office button", Input: "office_button_input"},
 			{ID: "office_button_secondary", Name: "Office button secondary", Input: "office_button_input"},
@@ -61,7 +61,7 @@ func TestDigitalInputEventToPushButtonEvents(t *testing.T) {
 }
 
 func TestDigitalInputEventToPushButtonEventsIgnoresFallingEdge(t *testing.T) {
-	index := registry.Build(&config.File{
+	index := registry.Build(&config.Root{
 		PushButtons: []config.PushButtonConfig{{ID: "office_button", Name: "Office button", Input: "office_button_input"}},
 	})
 
