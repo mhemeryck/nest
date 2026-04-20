@@ -16,62 +16,59 @@ import (
 )
 
 func main() {
-	logger := slog.Default()
-
 	configPath := flag.String("config", "", "Path to config file")
 	validateOnly := flag.Bool("validate", false, "Validate config and exit")
 	flag.Parse()
 
 	configRoot, err := config.Load(*configPath)
 	if err != nil {
-		logger.Error("load config failed", "error", err)
+		slog.Error("load config failed", "error", err)
 		os.Exit(1)
 	}
 
 	if *validateOnly {
-		logger.Info("config is valid", "path", *configPath)
+		slog.Info("config is valid", "path", *configPath)
 		return
 	}
 
 	root := entity.FromConfig(configRoot)
 	index := registry.Build(root)
 
-	logger.Info("crawling sysfs device tree", "root", root.SysfsRoot)
+	slog.Info("crawling sysfs device tree", "root", root.SysfsRoot)
 	devices, err := sysfs.ListDevices(root.SysfsRoot)
 	if err != nil {
-		logger.Error("crawl failed", "error", err)
+		slog.Error("crawl failed", "error", err)
 		return
 	}
 
 	configuredDevices, missing := configuredDevices(devices, registry.DeviceIDs(index))
 	if len(missing) > 0 {
 		for _, deviceID := range missing {
-			logger.Error("configured device not found in sysfs", "device_id", deviceID)
+			slog.Error("configured device not found in sysfs", "device_id", deviceID)
 		}
 		os.Exit(1)
 	}
 
-	logger.Info("configured devices", "count", len(configuredDevices))
+	slog.Info("configured devices", "count", len(configuredDevices))
 	for _, device := range configuredDevices {
-		logger.Info("configured device", "identifier", device.Identifier, "path", device.Path)
+		slog.Info("configured device", "identifier", device.Identifier, "path", device.Path)
 	}
 
 	configs := sysfs.BuildWorkerConfigs(configuredDevices)
 
 	stopChs, pollEvents := sysfs.StartWorkers(configs)
 
-	logger.Info("polling devices", "message", "press Ctrl+C to exit")
+	slog.Info("polling devices", "message", "press Ctrl+C to exit")
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	dispatch(logger, index, pollEvents, sigCh)
+	dispatch(index, pollEvents, sigCh)
 
-	logger.Info("shutting down")
+	slog.Info("shutting down")
 	sysfs.StopWorkers(stopChs)
 }
 
 func dispatch(
-	logger *slog.Logger,
 	index *registry.Index,
 	pollEvents <-chan sysfs.PollEvent,
 	sigCh <-chan os.Signal,
@@ -85,19 +82,19 @@ func dispatch(
 				return
 			}
 
-			handlePollEvent(logger, index, pollEvent)
+			handlePollEvent(index, pollEvent)
 		}
 	}
 }
 
-func handlePollEvent(logger *slog.Logger, index *registry.Index, pollEvent sysfs.PollEvent) {
+func handlePollEvent(index *registry.Index, pollEvent sysfs.PollEvent) {
 	digitalInputEvent, ok := event.PollEventToDigitalInputEvent(index, pollEvent)
 	if ok {
-		handleEvent(logger, index, digitalInputEvent)
+		handleEvent(index, digitalInputEvent)
 		return
 	}
 
-	logger.Info(
+	slog.Info(
 		"poll event",
 		"identifier",
 		pollEvent.Device.Identifier,
@@ -112,10 +109,10 @@ func handlePollEvent(logger *slog.Logger, index *registry.Index, pollEvent sysfs
 	)
 }
 
-func handleEvent(logger *slog.Logger, index *registry.Index, busEvent event.Event) {
+func handleEvent(index *registry.Index, busEvent event.Event) {
 	switch busEvent.Kind {
 	case event.DigitalInputKind:
-		logger.Info(
+		slog.Info(
 			"digital input event",
 			"input_id",
 			busEvent.DigitalInput.InputID,
@@ -128,10 +125,10 @@ func handleEvent(logger *slog.Logger, index *registry.Index, busEvent event.Even
 		)
 
 		for _, pushButtonEvent := range event.DigitalInputEventToPushButtonEvents(index, *busEvent.DigitalInput) {
-			handleEvent(logger, index, pushButtonEvent)
+			handleEvent(index, pushButtonEvent)
 		}
 	case event.PushButtonKind:
-		logger.Info(
+		slog.Info(
 			"push button event",
 			"button_id",
 			busEvent.PushButton.ButtonID,
