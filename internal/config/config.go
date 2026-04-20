@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"regexp"
-	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -71,49 +70,50 @@ func Load(path string) (*File, error) {
 }
 
 func Validate(f *File) error {
-	var errs []string
+	var errs error
 
 	if strings.TrimSpace(f.Sysfs.Root) == "" {
-		errs = append(errs, "sysfs.root: required")
+		errs = errors.Join(errs, fmt.Errorf("sysfs.root: required"))
 	}
 
 	inputIDs := make(map[string]struct{}, len(f.DigitalInputs))
 	for i, input := range f.DigitalInputs {
 		prefix := fmt.Sprintf("digital_inputs[%d]", i)
-		validateID(prefix+".id", input.ID, inputIDs, &errs)
-		validateDevice(prefix+".device", input.Device, digitalInputPattern, "digital input", &errs)
+		errs = errors.Join(
+			errs,
+			validateID(prefix+".id", input.ID, inputIDs),
+			validateDevice(prefix+".device", input.Device, digitalInputPattern, "digital input"),
+		)
 	}
 
 	buttonIDs := make(map[string]struct{}, len(f.PushButtons))
 	for i, button := range f.PushButtons {
 		prefix := fmt.Sprintf("push_buttons[%d]", i)
-		validateID(prefix+".id", button.ID, buttonIDs, &errs)
+		errs = errors.Join(errs, validateID(prefix+".id", button.ID, buttonIDs))
 		if strings.TrimSpace(button.Name) == "" {
-			errs = append(errs, prefix+".name: required")
+			errs = errors.Join(errs, fmt.Errorf("%s.name: required", prefix))
 		}
 		if strings.TrimSpace(button.Input) == "" {
-			errs = append(errs, prefix+".input: required")
+			errs = errors.Join(errs, fmt.Errorf("%s.input: required", prefix))
 		} else if _, ok := inputIDs[button.Input]; !ok {
-			errs = append(errs, fmt.Sprintf("%s.input: unknown digital input %q", prefix, button.Input))
+			errs = errors.Join(errs, fmt.Errorf("%s.input: unknown digital input %q", prefix, button.Input))
 		}
 	}
 
 	relayIDs := make(map[string]struct{}, len(f.Relays))
 	for i, relay := range f.Relays {
 		prefix := fmt.Sprintf("relays[%d]", i)
-		validateID(prefix+".id", relay.ID, relayIDs, &errs)
+		errs = errors.Join(
+			errs,
+			validateID(prefix+".id", relay.ID, relayIDs),
+			validateDevice(prefix+".device", relay.Device, relayPattern, "relay"),
+		)
 		if strings.TrimSpace(relay.Name) == "" {
-			errs = append(errs, prefix+".name: required")
+			errs = errors.Join(errs, fmt.Errorf("%s.name: required", prefix))
 		}
-		validateDevice(prefix+".device", relay.Device, relayPattern, "relay", &errs)
 	}
 
-	if len(errs) == 0 {
-		return nil
-	}
-
-	sort.Strings(errs)
-	return errors.New(strings.Join(errs, "; "))
+	return errs
 }
 
 func DeviceIDs(f *File) []string {
@@ -128,29 +128,29 @@ func DeviceIDs(f *File) []string {
 	return deviceIDs
 }
 
-func validateID(field string, value string, seen map[string]struct{}, errs *[]string) {
+func validateID(field string, value string, seen map[string]struct{}) error {
 	value = strings.TrimSpace(value)
 	if value == "" {
-		*errs = append(*errs, field+": required")
-		return
+		return fmt.Errorf("%s: required", field)
 	}
 
 	if _, ok := seen[value]; ok {
-		*errs = append(*errs, fmt.Sprintf("%s: duplicate id %q", field, value))
-		return
+		return fmt.Errorf("%s: duplicate id %q", field, value)
 	}
 
 	seen[value] = struct{}{}
+	return nil
 }
 
-func validateDevice(field string, value string, pattern *regexp.Regexp, kind string, errs *[]string) {
+func validateDevice(field string, value string, pattern *regexp.Regexp, kind string) error {
 	value = strings.TrimSpace(value)
 	if value == "" {
-		*errs = append(*errs, field+": required")
-		return
+		return fmt.Errorf("%s: required", field)
 	}
 
 	if !pattern.MatchString(value) {
-		*errs = append(*errs, fmt.Sprintf("%s: invalid %s device %q", field, kind, value))
+		return fmt.Errorf("%s: invalid %s device %q", field, kind, value)
 	}
+
+	return nil
 }

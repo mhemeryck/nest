@@ -49,6 +49,10 @@ Use functions and modules over classes when possible.
 Do not introduce receiver functions on project types by default.
 Prefer plain package-level functions that take explicit arguments.
 Only use receiver functions when there is a clear external constraint, such as implementing a required library interface.
+Prefer `fmt.Errorf` for constructed errors in normal control flow.
+Reserve `errors.New` for sentinel error variables that are compared or reused.
+When accumulating multiple independent errors, prefer an `error` accumulator with `errors.Join` over building ad hoc string lists.
+When several independent validations happen in the same block, prefer a single grouped `errors.Join(...)` call over repetitive one-line joins.
 
 ## Testing
 
