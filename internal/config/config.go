@@ -56,6 +56,19 @@ func Load(path string) (*Root, error) {
 		return nil, fmt.Errorf("read config %s: %w", path, err)
 	}
 
+	file, err := decodeRoot(path, data)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := Validate(file); err != nil {
+		return nil, err
+	}
+
+	return file, nil
+}
+
+func decodeRoot(path string, data []byte) (*Root, error) {
 	var file Root
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 	decoder.KnownFields(true)
@@ -70,10 +83,6 @@ func Load(path string) (*Root, error) {
 		}
 
 		return nil, fmt.Errorf("decode config %s: multiple YAML documents are not supported", path)
-	}
-
-	if err := Validate(&file); err != nil {
-		return nil, err
 	}
 
 	return &file, nil
