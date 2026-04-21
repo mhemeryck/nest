@@ -82,15 +82,33 @@ func Load(path string) (*Root, error) {
 func Validate(f *Root) error {
 	var errs error
 
-	errs = errors.Join(errs, validateRequiredField("sysfs.root", f.Sysfs.Root))
+	knownInputIDs, inputErr := validateDigitalInputs(f.DigitalInputs)
 
 	if len(f.DigitalInputs) == 0 && len(f.Relays) == 0 {
 		errs = errors.Join(errs, fmt.Errorf("at least one digital_input or relay is required"))
 	}
 
-	inputIDs := make([]string, 0, len(f.DigitalInputs))
-	inputDevices := make([]string, 0, len(f.DigitalInputs))
-	for i, input := range f.DigitalInputs {
+	errs = errors.Join(
+		errs,
+		validateSysfs(f.Sysfs),
+		inputErr,
+		validatePushButtons(f.PushButtons, knownInputIDs),
+		validateRelays(f.Relays),
+	)
+
+	return errs
+}
+
+func validateSysfs(sysfs SysfsConfig) error {
+	return validateRequiredField("sysfs.root", sysfs.Root)
+}
+
+func validateDigitalInputs(inputs []DigitalInputConfig) (map[string]struct{}, error) {
+	var errs error
+
+	inputIDs := make([]string, 0, len(inputs))
+	inputDevices := make([]string, 0, len(inputs))
+	for i, input := range inputs {
 		prefix := fmt.Sprintf("digital_inputs[%d]", i)
 		errs = errors.Join(
 			errs,
@@ -100,6 +118,7 @@ func Validate(f *Root) error {
 		inputIDs = append(inputIDs, input.ID)
 		inputDevices = append(inputDevices, input.Device)
 	}
+
 	errs = errors.Join(
 		errs,
 		validateUniqueValues("digital_inputs", "id", "id", inputIDs),
@@ -111,26 +130,40 @@ func Validate(f *Root) error {
 		knownInputIDs[inputID] = struct{}{}
 	}
 
-	buttonIDs := make([]string, 0, len(f.PushButtons))
-	for i, button := range f.PushButtons {
+	return knownInputIDs, errs
+}
+
+func validatePushButtons(buttons []PushButtonConfig, knownInputIDs map[string]struct{}) error {
+	var errs error
+
+	buttonIDs := make([]string, 0, len(buttons))
+	for i, button := range buttons {
 		prefix := fmt.Sprintf("push_buttons[%d]", i)
+		var inputErr error
+		if err := validateRequiredField(prefix+".input", button.Input); err != nil {
+			inputErr = err
+		} else if _, ok := knownInputIDs[button.Input]; !ok {
+			inputErr = fmt.Errorf("%s.input: unknown digital input %q", prefix, button.Input)
+		}
+
 		errs = errors.Join(
 			errs,
 			validateID(prefix+".id", button.ID),
 			validateRequiredField(prefix+".name", button.Name),
+			inputErr,
 		)
-		if err := validateRequiredField(prefix+".input", button.Input); err != nil {
-			errs = errors.Join(errs, err)
-		} else if _, ok := knownInputIDs[button.Input]; !ok {
-			errs = errors.Join(errs, fmt.Errorf("%s.input: unknown digital input %q", prefix, button.Input))
-		}
 		buttonIDs = append(buttonIDs, button.ID)
 	}
-	errs = errors.Join(errs, validateUniqueValues("push_buttons", "id", "id", buttonIDs))
 
-	relayIDs := make([]string, 0, len(f.Relays))
-	relayDevices := make([]string, 0, len(f.Relays))
-	for i, relay := range f.Relays {
+	return errors.Join(errs, validateUniqueValues("push_buttons", "id", "id", buttonIDs))
+}
+
+func validateRelays(relays []RelayConfig) error {
+	var errs error
+
+	relayIDs := make([]string, 0, len(relays))
+	relayDevices := make([]string, 0, len(relays))
+	for i, relay := range relays {
 		prefix := fmt.Sprintf("relays[%d]", i)
 		errs = errors.Join(
 			errs,
@@ -141,13 +174,12 @@ func Validate(f *Root) error {
 		relayIDs = append(relayIDs, relay.ID)
 		relayDevices = append(relayDevices, relay.Device)
 	}
-	errs = errors.Join(
+
+	return errors.Join(
 		errs,
 		validateUniqueValues("relays", "id", "id", relayIDs),
 		validateUniqueValues("relays", "device", "relay device", relayDevices),
 	)
-
-	return errs
 }
 
 func DeviceIDs(f *Root) []string {
@@ -174,11 +206,7 @@ func validateDevice(field string, value string, pattern *regexp.Regexp, kind str
 		return err
 	}
 
-	if !pattern.MatchString(value) {
-		return fmt.Errorf("%s: invalid %s device %q", field, kind, value)
-	}
-
-	return nil
+	return validatePattern(field, value, pattern, fmt.Sprintf("invalid %s device", kind))
 }
 
 func validateNoOuterWhitespace(field string, value string) error {
@@ -203,6 +231,14 @@ func validateRequiredField(field string, value string) error {
 	}
 
 	return validateNoOuterWhitespace(field, value)
+}
+
+func validatePattern(field string, value string, pattern *regexp.Regexp, label string) error {
+	if !pattern.MatchString(value) {
+		return fmt.Errorf("%s: %s %q", field, label, value)
+	}
+
+	return nil
 }
 
 func validateUniqueValues(section string, field string, label string, values []string) error {
