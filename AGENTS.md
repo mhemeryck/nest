@@ -25,6 +25,9 @@ It should be a concise summary of the change.
 Leave a blank line after the first line.
 Body text should wrap at 72 characters.
 Use the body to explain the what and why rather than the how.
+When creating commit messages from the shell, do not embed literal `\n` escape sequences in `git commit -m` arguments.
+Prefer `git commit -F -` with a heredoc for multi-line messages.
+Using multiple `-m` flags is acceptable for short messages when the body does not need careful wrapping.
 
 Example:
 
@@ -43,6 +46,13 @@ Match the style of surrounding code.
 Use existing libraries and utilities before adding new dependencies.
 Prefer procedural programming over object-oriented programming.
 Use functions and modules over classes when possible.
+Do not introduce receiver functions on project types by default.
+Prefer plain package-level functions that take explicit arguments.
+Only use receiver functions when there is a clear external constraint, such as implementing a required library interface.
+Prefer `fmt.Errorf` for constructed errors in normal control flow.
+Reserve `errors.New` for sentinel error variables that are compared or reused.
+When accumulating multiple independent errors, prefer an `error` accumulator with `errors.Join` over building ad hoc string lists.
+When several independent validations happen in the same block, prefer a single grouped `errors.Join(...)` call over repetitive one-line joins.
 
 ## Testing
 

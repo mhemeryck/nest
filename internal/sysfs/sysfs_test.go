@@ -45,6 +45,12 @@ func TestWriteValueRejectsInvalidValue(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestPrintableValue(t *testing.T) {
+	assert.Equal(t, 0, PrintableValue(Off))
+	assert.Equal(t, 1, PrintableValue(On))
+	assert.Equal(t, int(Value('x')), PrintableValue(Value('x')))
+}
+
 func TestListDevices(t *testing.T) {
 	fixtures := filepath.Join("..", "..", "test", "fixtures")
 

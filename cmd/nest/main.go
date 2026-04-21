@@ -1,51 +1,91 @@
 package main
 
 import (
-	"fmt"
-	"log"
+	"flag"
+	"log/slog"
 	"os"
 	"os/signal"
+	"slices"
 	"syscall"
 
+	"github.com/mhemeryck/nest/internal/config"
+	"github.com/mhemeryck/nest/internal/controller"
+	"github.com/mhemeryck/nest/internal/entity"
+	"github.com/mhemeryck/nest/internal/registry"
 	"github.com/mhemeryck/nest/internal/sysfs"
 )
 
 func main() {
-	root := "/home/mhemeryck/Projects/nest/test/fixtures"
+	configPath := flag.String("config", "", "Path to config file")
+	validateOnly := flag.Bool("validate", false, "Validate config and exit")
+	flag.Parse()
 
-	fmt.Println("Crawling sysfs device tree...")
-	devices, err := sysfs.ListDevices(root)
+	configRoot, err := config.Load(*configPath)
 	if err != nil {
-		log.Printf("Crawl failed: %v", err)
-	} else {
-		fmt.Printf("Found %d devices\n", len(devices))
-		for _, d := range devices[:5] {
-			fmt.Printf("  %s (%s)\n", d.Identifier, d.Path)
-		}
+		slog.Error("load config failed", "error", err)
+		os.Exit(1)
 	}
 
-	configs := sysfs.BuildWorkerConfigs(devices)
+	if *validateOnly {
+		slog.Info("config is valid", "path", *configPath)
+		return
+	}
 
-	stopChs, events := sysfs.StartWorkers(configs)
+	root := entity.FromConfig(configRoot)
+	index := registry.Build(root)
 
-	go func() {
-		for event := range events {
-			fmt.Printf("%s (%s): %d -> %d (rising=%t)\n",
-				event.Device.Identifier,
-				event.Device.Path,
-				int(event.OldValue-'0'),
-				int(event.NewValue-'0'),
-				event.IsRising,
-			)
+	slog.Info("crawling sysfs device tree", "root", root.SysfsRoot)
+	devices, err := sysfs.ListDevices(root.SysfsRoot)
+	if err != nil {
+		slog.Error("crawl failed", "error", err)
+		os.Exit(1)
+	}
+
+	configuredDevices, missing := configuredDevices(devices, registry.DeviceIDs(index))
+	if len(missing) > 0 {
+		for _, deviceID := range missing {
+			slog.Error("configured device not found in sysfs", "device_id", deviceID)
 		}
-	}()
+		os.Exit(1)
+	}
 
-	fmt.Println("Polling devices... Press Ctrl+C to exit")
+	slog.Info("configured devices", "count", len(configuredDevices))
+	for _, device := range configuredDevices {
+		slog.Info("configured device", "identifier", device.Identifier, "path", device.Path)
+	}
+
+	configs := sysfs.BuildWorkerConfigs(configuredDevices)
+
+	stopChs, pollEvents := sysfs.StartWorkers(configs)
+
+	slog.Info("polling devices", "message", "press Ctrl+C to exit")
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	<-sigCh
+	controller.Run(index, pollEvents, sigCh)
 
-	fmt.Println("\nShutting down...")
+	slog.Info("shutting down")
 	sysfs.StopWorkers(stopChs)
+}
+
+func configuredDevices(devices []*sysfs.Device, wanted []entity.DeviceID) ([]*sysfs.Device, []entity.DeviceID) {
+	byIdentifier := make(map[string]*sysfs.Device, len(devices))
+	for _, device := range devices {
+		byIdentifier[device.Identifier] = device
+	}
+
+	configured := make([]*sysfs.Device, 0, len(wanted))
+	missing := make([]entity.DeviceID, 0)
+	for _, identifier := range wanted {
+		device, ok := byIdentifier[string(identifier)]
+		if !ok {
+			missing = append(missing, identifier)
+			continue
+		}
+		configured = append(configured, device)
+	}
+
+	slices.Sort(missing)
+
+	return configured, missing
 }
