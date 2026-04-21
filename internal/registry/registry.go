@@ -1,7 +1,7 @@
 package registry
 
 import (
-	"sort"
+	"slices"
 
 	"github.com/mhemeryck/nest/internal/entity"
 )
@@ -34,15 +34,16 @@ func Build(root *entity.Root) *Index {
 	return index
 }
 
-func DeviceIDs(index *Index) []string {
-	deviceIDs := make([]string, 0, len(index.DigitalInputsByDevice)+len(index.RelaysByDevice))
+func DeviceIDs(index *Index) []entity.DeviceID {
+	deviceIDs := make([]entity.DeviceID, 0, len(index.DigitalInputsByDevice)+len(index.RelaysByDevice))
 	for deviceID := range index.DigitalInputsByDevice {
-		deviceIDs = append(deviceIDs, string(deviceID))
+		deviceIDs = append(deviceIDs, deviceID)
 	}
 	for deviceID := range index.RelaysByDevice {
-		deviceIDs = append(deviceIDs, string(deviceID))
+		deviceIDs = append(deviceIDs, deviceID)
 	}
 
-	sort.Strings(deviceIDs)
+	slices.Sort(deviceIDs)
+
 	return deviceIDs
 }

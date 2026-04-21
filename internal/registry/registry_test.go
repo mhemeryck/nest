@@ -27,5 +27,5 @@ func TestBuild(t *testing.T) {
 	assert.Equal(t, root.DigitalInputs[0], index.DigitalInputsByDevice[entity.DeviceID("di_3_16")])
 	assert.Equal(t, root.PushButtons, index.PushButtonsByInputID[entity.DigitalInputID("office_button_input")])
 	assert.Equal(t, root.Relays[0], index.RelaysByDevice[entity.DeviceID("ro_3_14")])
-	assert.Equal(t, []string{"di_3_16", "ro_3_14"}, DeviceIDs(index))
+	assert.Equal(t, []entity.DeviceID{"di_3_16", "ro_3_14"}, DeviceIDs(index))
 }
