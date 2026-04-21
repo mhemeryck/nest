@@ -54,6 +54,25 @@ Reserve `errors.New` for sentinel error variables that are compared or reused.
 When accumulating multiple independent errors, prefer an `error` accumulator with `errors.Join` over building ad hoc string lists.
 When several independent validations happen in the same block, prefer a single grouped `errors.Join(...)` call over repetitive one-line joins.
 
+## Architecture Preferences
+
+Keep parsing models, domain entities, and hardware or integration types separate when their responsibilities differ.
+Do not reuse config structs as runtime or domain models.
+Translate parsed config into explicit entity types before building runtime indexes or controller logic.
+
+Prefer explicit typed IDs in the domain layer when different identifiers have different meanings.
+Preserve typed IDs through registries and controller logic.
+Only convert to plain strings at external boundaries such as sysfs, serialization, or logging.
+
+When runtime code needs repeated lookups by several keys, introduce a registry or index layer built from domain entities rather than passing raw config through the system.
+Keep registry types aligned with domain types instead of loose strings.
+
+Prefer a single central event dispatch loop for multi-stage event flow.
+Avoid designs where components consume from and publish back into the same shared bus.
+
+Keep `main` focused on wiring.
+Move long-running orchestration and event coordination into internal packages.
+
 ## Testing
 
 Run lint and typecheck before marking a task complete.
