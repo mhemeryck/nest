@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -21,7 +22,7 @@ func TestRunReturnsOnSignal(t *testing.T) {
 	done := make(chan struct{})
 
 	go func() {
-		Run(index, pollEvents, sigCh)
+		Run(index, nil, pollEvents, sigCh)
 		close(done)
 	}()
 
@@ -41,7 +42,7 @@ func TestRunReturnsWhenPollEventsClose(t *testing.T) {
 	done := make(chan struct{})
 
 	go func() {
-		Run(index, pollEvents, sigCh)
+		Run(index, nil, pollEvents, sigCh)
 		close(done)
 	}()
 
@@ -54,14 +55,23 @@ func TestRunReturnsWhenPollEventsClose(t *testing.T) {
 	}
 }
 
-func TestHandlePollEventLogsPushButtonEvent(t *testing.T) {
+func TestHandlePollEventTogglesLightRelay(t *testing.T) {
+	relayPath := filepath.Join(t.TempDir(), "ro_value")
+	require.NoError(t, os.WriteFile(relayPath, []byte("0\n"), 0o644))
+
 	index := registry.Build(&entity.Root{
 		DigitalInputs: []entity.DigitalInput{{ID: entity.DigitalInputID("office_button_input"), Device: entity.DeviceID("di_3_16")}},
 		PushButtons:   []entity.PushButton{{ID: entity.PushButtonID("office_button"), Name: "Office button", Input: entity.DigitalInputID("office_button_input")}},
+		Lights:        []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
+		Relays:        []entity.Relay{{ID: entity.RelayID("office_light_relay"), Name: "Office light relay", Device: entity.DeviceID("ro_3_14")}},
+		Bindings:      []entity.Binding{{Button: entity.PushButtonID("office_button"), Light: entity.LightID("office_light"), Action: entity.LightActionToggle}},
 	})
+	devicesByID := map[entity.DeviceID]*sysfs.Device{
+		"ro_3_14": {Identifier: "ro_3_14", Path: relayPath, Value: sysfs.Off},
+	}
 
 	logs := captureLogs(t, func() {
-		handlePollEvent(index, sysfs.PollEvent{
+		handlePollEvent(index, devicesByID, sysfs.PollEvent{
 			Device:   sysfs.Device{Identifier: "di_3_16", Path: "/sys/di_3_16/di_value"},
 			OldValue: sysfs.Off,
 			NewValue: sysfs.On,
@@ -71,14 +81,18 @@ func TestHandlePollEventLogsPushButtonEvent(t *testing.T) {
 
 	assert.Contains(t, logs, "digital input event")
 	assert.Contains(t, logs, "push button event")
-	assert.Contains(t, logs, "office_button")
+	assert.Contains(t, logs, "light toggled")
+
+	data, err := os.ReadFile(relayPath)
+	require.NoError(t, err)
+	assert.Equal(t, "1\n", string(data))
 }
 
 func TestHandlePollEventLogsRawPollEventForUnknownDevice(t *testing.T) {
 	index := registry.Build(&entity.Root{})
 
 	logs := captureLogs(t, func() {
-		handlePollEvent(index, sysfs.PollEvent{
+		handlePollEvent(index, nil, sysfs.PollEvent{
 			Device:   sysfs.Device{Identifier: "ro_3_14", Path: "/sys/ro_3_14/ro_value"},
 			OldValue: sysfs.Off,
 			NewValue: sysfs.On,

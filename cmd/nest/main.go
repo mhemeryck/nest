@@ -62,7 +62,7 @@ func main() {
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	controller.Run(index, pollEvents, sigCh)
+	controller.Run(index, configuredDevices, pollEvents, sigCh)
 
 	slog.Info("shutting down")
 	sysfs.StopWorkers(stopChs)

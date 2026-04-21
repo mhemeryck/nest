@@ -108,6 +108,34 @@ func writeValue(path string, value Value) error {
 	return os.WriteFile(path, []byte{byte(value), '\n'}, 0o644)
 }
 
+func SetDeviceValue(device *Device, value Value) error {
+	if err := writeValue(device.Path, value); err != nil {
+		return fmt.Errorf("write device %s: %w", device.Identifier, err)
+	}
+
+	device.Value = value
+
+	return nil
+}
+
+func ToggleDevice(device *Device) (Value, error) {
+	current, err := readValue(device.Path)
+	if err != nil {
+		return Off, fmt.Errorf("read device %s: %w", device.Identifier, err)
+	}
+
+	next := On
+	if current == On {
+		next = Off
+	}
+
+	if err := SetDeviceValue(device, next); err != nil {
+		return Off, err
+	}
+
+	return next, nil
+}
+
 func PrintableValue(value Value) int {
 	switch value {
 	case Off:

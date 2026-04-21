@@ -22,7 +22,9 @@ type Root struct {
 	Sysfs         SysfsConfig          `yaml:"sysfs"`
 	DigitalInputs []DigitalInputConfig `yaml:"digital_inputs"`
 	PushButtons   []PushButtonConfig   `yaml:"push_buttons"`
+	Lights        []LightConfig        `yaml:"lights"`
 	Relays        []RelayConfig        `yaml:"relays"`
+	Bindings      []BindingConfig      `yaml:"bindings"`
 }
 
 type SysfsConfig struct {
@@ -45,6 +47,20 @@ type RelayConfig struct {
 	Name   string `yaml:"name"`
 	Device string `yaml:"device"`
 }
+
+type LightConfig struct {
+	ID    string `yaml:"id"`
+	Name  string `yaml:"name"`
+	Relay string `yaml:"relay"`
+}
+
+type BindingConfig struct {
+	Button string `yaml:"button"`
+	Light  string `yaml:"light"`
+	Action string `yaml:"action"`
+}
+
+const BindingActionToggle = "toggle"
 
 func Load(path string) (*Root, error) {
 	if path == "" {
@@ -92,6 +108,9 @@ func Validate(f *Root) error {
 	var errs error
 
 	knownInputIDs, inputErr := validateDigitalInputs(f.DigitalInputs)
+	knownButtonIDs, buttonErr := validatePushButtons(f.PushButtons, knownInputIDs)
+	knownRelayIDs, relayErr := validateRelays(f.Relays)
+	knownLightIDs, lightErr := validateLights(f.Lights, knownRelayIDs)
 
 	if len(f.DigitalInputs) == 0 && len(f.Relays) == 0 {
 		errs = errors.Join(errs, fmt.Errorf("at least one digital_input or relay is required"))
@@ -101,8 +120,10 @@ func Validate(f *Root) error {
 		errs,
 		validateSysfs(f.Sysfs),
 		inputErr,
-		validatePushButtons(f.PushButtons, knownInputIDs),
-		validateRelays(f.Relays),
+		buttonErr,
+		relayErr,
+		lightErr,
+		validateBindings(f.Bindings, knownButtonIDs, knownLightIDs),
 	)
 
 	return errs
@@ -142,7 +163,7 @@ func validateDigitalInputs(inputs []DigitalInputConfig) (map[string]struct{}, er
 	return knownInputIDs, errs
 }
 
-func validatePushButtons(buttons []PushButtonConfig, knownInputIDs map[string]struct{}) error {
+func validatePushButtons(buttons []PushButtonConfig, knownInputIDs map[string]struct{}) (map[string]struct{}, error) {
 	var errs error
 
 	buttonIDs := make([]string, 0, len(buttons))
@@ -164,10 +185,16 @@ func validatePushButtons(buttons []PushButtonConfig, knownInputIDs map[string]st
 		buttonIDs = append(buttonIDs, button.ID)
 	}
 
-	return errors.Join(errs, validateUniqueValues("push_buttons", "id", "id", buttonIDs))
+	err := errors.Join(errs, validateUniqueValues("push_buttons", "id", "id", buttonIDs))
+	knownButtonIDs := make(map[string]struct{}, len(buttonIDs))
+	for _, buttonID := range buttonIDs {
+		knownButtonIDs[buttonID] = struct{}{}
+	}
+
+	return knownButtonIDs, err
 }
 
-func validateRelays(relays []RelayConfig) error {
+func validateRelays(relays []RelayConfig) (map[string]struct{}, error) {
 	var errs error
 
 	relayIDs := make([]string, 0, len(relays))
@@ -184,11 +211,78 @@ func validateRelays(relays []RelayConfig) error {
 		relayDevices = append(relayDevices, relay.Device)
 	}
 
-	return errors.Join(
+	err := errors.Join(
 		errs,
 		validateUniqueValues("relays", "id", "id", relayIDs),
 		validateUniqueValues("relays", "device", "relay device", relayDevices),
 	)
+	knownRelayIDs := make(map[string]struct{}, len(relayIDs))
+	for _, relayID := range relayIDs {
+		knownRelayIDs[relayID] = struct{}{}
+	}
+
+	return knownRelayIDs, err
+}
+
+func validateLights(lights []LightConfig, knownRelayIDs map[string]struct{}) (map[string]struct{}, error) {
+	var errs error
+
+	lightIDs := make([]string, 0, len(lights))
+	for i, light := range lights {
+		prefix := fmt.Sprintf("lights[%d]", i)
+		var relayErr error
+		if err := validateRequiredField(prefix+".relay", light.Relay); err != nil {
+			relayErr = err
+		} else if _, ok := knownRelayIDs[light.Relay]; !ok {
+			relayErr = fmt.Errorf("%s.relay: unknown relay %q", prefix, light.Relay)
+		}
+
+		errs = errors.Join(
+			errs,
+			validateID(prefix+".id", light.ID),
+			validateRequiredField(prefix+".name", light.Name),
+			relayErr,
+		)
+		lightIDs = append(lightIDs, light.ID)
+	}
+
+	err := errors.Join(errs, validateUniqueValues("lights", "id", "id", lightIDs))
+	knownLightIDs := make(map[string]struct{}, len(lightIDs))
+	for _, lightID := range lightIDs {
+		knownLightIDs[lightID] = struct{}{}
+	}
+
+	return knownLightIDs, err
+}
+
+func validateBindings(bindings []BindingConfig, knownButtonIDs map[string]struct{}, knownLightIDs map[string]struct{}) error {
+	var errs error
+
+	for i, binding := range bindings {
+		prefix := fmt.Sprintf("bindings[%d]", i)
+		var buttonErr error
+		if err := validateRequiredField(prefix+".button", binding.Button); err != nil {
+			buttonErr = err
+		} else if _, ok := knownButtonIDs[binding.Button]; !ok {
+			buttonErr = fmt.Errorf("%s.button: unknown push button %q", prefix, binding.Button)
+		}
+
+		var lightErr error
+		if err := validateRequiredField(prefix+".light", binding.Light); err != nil {
+			lightErr = err
+		} else if _, ok := knownLightIDs[binding.Light]; !ok {
+			lightErr = fmt.Errorf("%s.light: unknown light %q", prefix, binding.Light)
+		}
+
+		actionErr := validateRequiredField(prefix+".action", binding.Action)
+		if actionErr == nil && binding.Action != BindingActionToggle {
+			actionErr = fmt.Errorf("%s.action: unsupported action %q", prefix, binding.Action)
+		}
+
+		errs = errors.Join(errs, buttonErr, lightErr, actionErr)
+	}
+
+	return errs
 }
 
 func DeviceIDs(f *Root) []string {
