@@ -32,6 +32,16 @@ func TestLoadRejectsUnknownFields(t *testing.T) {
 	assert.Contains(t, err.Error(), "field unknown not found")
 }
 
+func TestLoadRejectsTrailingYAMLDocuments(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "config.yaml")
+	writeTestFile(t, path, "sysfs:\n  root: /tmp\ndigital_inputs:\n  - id: button_input\n    device: di_3_16\n---\nextra: true\n")
+
+	_, err := Load(path)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "multiple YAML documents are not supported")
+}
+
 func TestValidate(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -44,6 +54,21 @@ func TestValidate(t *testing.T) {
 			message: "sysfs.root: required",
 		},
 		{
+			name: "rejects configs with no devices",
+			file: Root{
+				Sysfs: SysfsConfig{Root: "/tmp"},
+			},
+			message: "at least one digital_input or relay is required",
+		},
+		{
+			name: "rejects whitespace padded sysfs root",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: " /tmp "},
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+			},
+			message: "sysfs.root: must not have leading or trailing whitespace",
+		},
+		{
 			name: "rejects duplicate digital input ids",
 			file: Root{
 				Sysfs: SysfsConfig{Root: "/tmp"},
@@ -53,6 +78,17 @@ func TestValidate(t *testing.T) {
 				},
 			},
 			message: `digital_inputs[1].id: duplicate id "button_input"`,
+		},
+		{
+			name: "rejects duplicate digital input devices",
+			file: Root{
+				Sysfs: SysfsConfig{Root: "/tmp"},
+				DigitalInputs: []DigitalInputConfig{
+					{ID: "button_input_1", Device: "di_3_16"},
+					{ID: "button_input_2", Device: "di_3_16"},
+				},
+			},
+			message: `digital_inputs[1].device: duplicate digital input device "di_3_16"`,
 		},
 		{
 			name: "rejects invalid digital input devices",
@@ -71,12 +107,49 @@ func TestValidate(t *testing.T) {
 			message: `push_buttons[0].input: unknown digital input "missing"`,
 		},
 		{
+			name: "rejects whitespace padded button ids",
+			file: Root{
+				Sysfs:         SysfsConfig{Root: "/tmp"},
+				DigitalInputs: []DigitalInputConfig{{ID: "button_input", Device: "di_3_16"}},
+				PushButtons:   []PushButtonConfig{{ID: " button ", Name: "Button", Input: "button_input"}},
+			},
+			message: "push_buttons[0].id: must not have leading or trailing whitespace",
+		},
+		{
+			name: "rejects whitespace padded button input references",
+			file: Root{
+				Sysfs:         SysfsConfig{Root: "/tmp"},
+				DigitalInputs: []DigitalInputConfig{{ID: "button_input", Device: "di_3_16"}},
+				PushButtons:   []PushButtonConfig{{ID: "button", Name: "Button", Input: " button_input "}},
+			},
+			message: "push_buttons[0].input: must not have leading or trailing whitespace",
+		},
+		{
 			name: "rejects invalid relay devices",
 			file: Root{
 				Sysfs:  SysfsConfig{Root: "/tmp"},
 				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "di_3_16"}},
 			},
 			message: `relays[0].device: invalid relay device "di_3_16"`,
+		},
+		{
+			name: "rejects duplicate relay devices",
+			file: Root{
+				Sysfs: SysfsConfig{Root: "/tmp"},
+				Relays: []RelayConfig{
+					{ID: "relay_1", Name: "Relay 1", Device: "ro_3_14"},
+					{ID: "relay_2", Name: "Relay 2", Device: "ro_3_14"},
+				},
+			},
+			message: `relays[1].device: duplicate relay device "ro_3_14"`,
+		},
+		{
+			name: "rejects whitespace padded relay devices",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: " ro_3_14 "}},
+			},
+			message: "relays[0].device: must not have leading or trailing whitespace",
 		},
 	}
 

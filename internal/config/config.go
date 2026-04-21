@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"strings"
@@ -62,6 +63,15 @@ func Load(path string) (*Root, error) {
 		return nil, fmt.Errorf("decode config %s: %w", path, err)
 	}
 
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		if err != nil {
+			return nil, fmt.Errorf("decode trailing config %s: %w", path, err)
+		}
+
+		return nil, fmt.Errorf("decode config %s: multiple YAML documents are not supported", path)
+	}
+
 	if err := Validate(&file); err != nil {
 		return nil, err
 	}
@@ -72,46 +82,70 @@ func Load(path string) (*Root, error) {
 func Validate(f *Root) error {
 	var errs error
 
-	if strings.TrimSpace(f.Sysfs.Root) == "" {
-		errs = errors.Join(errs, fmt.Errorf("sysfs.root: required"))
+	errs = errors.Join(errs, validateRequiredField("sysfs.root", f.Sysfs.Root))
+
+	if len(f.DigitalInputs) == 0 && len(f.Relays) == 0 {
+		errs = errors.Join(errs, fmt.Errorf("at least one digital_input or relay is required"))
 	}
 
-	inputIDs := make(map[string]struct{}, len(f.DigitalInputs))
+	inputIDs := make([]string, 0, len(f.DigitalInputs))
+	inputDevices := make([]string, 0, len(f.DigitalInputs))
 	for i, input := range f.DigitalInputs {
 		prefix := fmt.Sprintf("digital_inputs[%d]", i)
 		errs = errors.Join(
 			errs,
-			validateID(prefix+".id", input.ID, inputIDs),
+			validateID(prefix+".id", input.ID),
 			validateDevice(prefix+".device", input.Device, digitalInputPattern, "digital input"),
 		)
+		inputIDs = append(inputIDs, input.ID)
+		inputDevices = append(inputDevices, input.Device)
+	}
+	errs = errors.Join(
+		errs,
+		validateUniqueValues("digital_inputs", "id", "id", inputIDs),
+		validateUniqueValues("digital_inputs", "device", "digital input device", inputDevices),
+	)
+
+	knownInputIDs := make(map[string]struct{}, len(inputIDs))
+	for _, inputID := range inputIDs {
+		knownInputIDs[inputID] = struct{}{}
 	}
 
-	buttonIDs := make(map[string]struct{}, len(f.PushButtons))
+	buttonIDs := make([]string, 0, len(f.PushButtons))
 	for i, button := range f.PushButtons {
 		prefix := fmt.Sprintf("push_buttons[%d]", i)
-		errs = errors.Join(errs, validateID(prefix+".id", button.ID, buttonIDs))
-		if strings.TrimSpace(button.Name) == "" {
-			errs = errors.Join(errs, fmt.Errorf("%s.name: required", prefix))
-		}
-		if strings.TrimSpace(button.Input) == "" {
-			errs = errors.Join(errs, fmt.Errorf("%s.input: required", prefix))
-		} else if _, ok := inputIDs[button.Input]; !ok {
+		errs = errors.Join(
+			errs,
+			validateID(prefix+".id", button.ID),
+			validateRequiredField(prefix+".name", button.Name),
+		)
+		if err := validateRequiredField(prefix+".input", button.Input); err != nil {
+			errs = errors.Join(errs, err)
+		} else if _, ok := knownInputIDs[button.Input]; !ok {
 			errs = errors.Join(errs, fmt.Errorf("%s.input: unknown digital input %q", prefix, button.Input))
 		}
+		buttonIDs = append(buttonIDs, button.ID)
 	}
+	errs = errors.Join(errs, validateUniqueValues("push_buttons", "id", "id", buttonIDs))
 
-	relayIDs := make(map[string]struct{}, len(f.Relays))
+	relayIDs := make([]string, 0, len(f.Relays))
+	relayDevices := make([]string, 0, len(f.Relays))
 	for i, relay := range f.Relays {
 		prefix := fmt.Sprintf("relays[%d]", i)
 		errs = errors.Join(
 			errs,
-			validateID(prefix+".id", relay.ID, relayIDs),
+			validateID(prefix+".id", relay.ID),
 			validateDevice(prefix+".device", relay.Device, relayPattern, "relay"),
+			validateRequiredField(prefix+".name", relay.Name),
 		)
-		if strings.TrimSpace(relay.Name) == "" {
-			errs = errors.Join(errs, fmt.Errorf("%s.name: required", prefix))
-		}
+		relayIDs = append(relayIDs, relay.ID)
+		relayDevices = append(relayDevices, relay.Device)
 	}
+	errs = errors.Join(
+		errs,
+		validateUniqueValues("relays", "id", "id", relayIDs),
+		validateUniqueValues("relays", "device", "relay device", relayDevices),
+	)
 
 	return errs
 }
@@ -128,28 +162,61 @@ func DeviceIDs(f *Root) []string {
 	return deviceIDs
 }
 
-func validateID(field string, value string, seen map[string]struct{}) error {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return fmt.Errorf("%s: required", field)
+func validateID(field string, value string) error {
+	if err := validateRequiredField(field, value); err != nil {
+		return err
 	}
-
-	if _, ok := seen[value]; ok {
-		return fmt.Errorf("%s: duplicate id %q", field, value)
-	}
-
-	seen[value] = struct{}{}
 	return nil
 }
 
 func validateDevice(field string, value string, pattern *regexp.Regexp, kind string) error {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return fmt.Errorf("%s: required", field)
+	if err := validateRequiredField(field, value); err != nil {
+		return err
 	}
 
 	if !pattern.MatchString(value) {
 		return fmt.Errorf("%s: invalid %s device %q", field, kind, value)
+	}
+
+	return nil
+}
+
+func validateNoOuterWhitespace(field string, value string) error {
+	if strings.TrimSpace(value) != value {
+		return fmt.Errorf("%s: must not have leading or trailing whitespace", field)
+	}
+
+	return nil
+}
+
+func validateRequired(field string, value string) error {
+	if strings.TrimSpace(value) == "" {
+		return fmt.Errorf("%s: required", field)
+	}
+
+	return nil
+}
+
+func validateRequiredField(field string, value string) error {
+	if err := validateRequired(field, value); err != nil {
+		return err
+	}
+
+	return validateNoOuterWhitespace(field, value)
+}
+
+func validateUniqueValues(section string, field string, label string, values []string) error {
+	seen := make(map[string]int, len(values))
+	for i, value := range values {
+		if strings.TrimSpace(value) == "" {
+			continue
+		}
+
+		if _, ok := seen[value]; ok {
+			return fmt.Errorf("%s[%d].%s: duplicate %s %q", section, i, field, label, value)
+		}
+
+		seen[value] = i
 	}
 
 	return nil

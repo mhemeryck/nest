@@ -38,7 +38,7 @@ func main() {
 	devices, err := sysfs.ListDevices(root.SysfsRoot)
 	if err != nil {
 		slog.Error("crawl failed", "error", err)
-		return
+		os.Exit(1)
 	}
 
 	configuredDevices, missing := configuredDevices(devices, registry.DeviceIDs(index))
