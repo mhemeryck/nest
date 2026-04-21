@@ -108,6 +108,17 @@ func writeValue(path string, value Value) error {
 	return os.WriteFile(path, []byte{byte(value), '\n'}, 0o644)
 }
 
+func PrintableValue(value Value) int {
+	switch value {
+	case Off:
+		return 0
+	case On:
+		return 1
+	default:
+		return int(value)
+	}
+}
+
 func readDevice(device *Device) (Value, error) {
 	value, err := readValue(device.Path)
 	if err != nil {

@@ -101,9 +101,9 @@ func handlePollEvent(index *registry.Index, pollEvent sysfs.PollEvent) {
 		"path",
 		pollEvent.Device.Path,
 		"old_value",
-		int(pollEvent.OldValue-'0'),
+		sysfs.PrintableValue(pollEvent.OldValue),
 		"new_value",
-		int(pollEvent.NewValue-'0'),
+		sysfs.PrintableValue(pollEvent.NewValue),
 		"rising",
 		pollEvent.IsRising,
 	)
