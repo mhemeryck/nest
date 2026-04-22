@@ -38,21 +38,7 @@ func startWorkers(configs []WorkerConfig, commands <-chan Command, states chan<-
 	stopCh := make(chan struct{})
 	doneCh := make(chan struct{})
 
-	deviceRoutes := make(map[string]chan Command)
-	var wg sync.WaitGroup
-
-	for _, cfg := range configs {
-		commandCh := make(chan Command, 32)
-		for _, device := range cfg.Devices {
-			deviceRoutes[device.Identifier] = commandCh
-		}
-
-		wg.Add(1)
-		go func(cfg WorkerConfig, commandCh <-chan Command) {
-			defer wg.Done()
-			pollWorker(cfg, stopCh, commandCh, states)
-		}(cfg, commandCh)
-	}
+	deviceRoutes, wg := startConfiguredWorkers(configs, stopCh, states)
 
 	go routeCommands(stopCh, commands, deviceRoutes)
 
@@ -62,6 +48,34 @@ func startWorkers(configs []WorkerConfig, commands <-chan Command, states chan<-
 	}()
 
 	return stopCh, doneCh
+}
+
+func startConfiguredWorkers(
+	configs []WorkerConfig,
+	stopCh <-chan struct{},
+	states chan<- PollEvent,
+) (map[string]chan Command, *sync.WaitGroup) {
+	deviceRoutes := make(map[string]chan Command)
+	var wg sync.WaitGroup
+
+	for _, cfg := range configs {
+		commandCh := make(chan Command, 32)
+		registerWorkerDevices(deviceRoutes, cfg.Devices, commandCh)
+
+		wg.Add(1)
+		go func(cfg WorkerConfig, commandCh <-chan Command) {
+			defer wg.Done()
+			pollWorker(cfg, stopCh, commandCh, states)
+		}(cfg, commandCh)
+	}
+
+	return deviceRoutes, &wg
+}
+
+func registerWorkerDevices(deviceRoutes map[string]chan Command, devices []*Device, commandCh chan Command) {
+	for _, device := range devices {
+		deviceRoutes[device.Identifier] = commandCh
+	}
 }
 
 func Run(devices []*Device, commands <-chan Command, states chan<- PollEvent) func() {
