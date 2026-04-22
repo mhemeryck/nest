@@ -56,7 +56,7 @@ func TestSetDeviceValue(t *testing.T) {
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, "1\n", string(data))
-	assert.Equal(t, On, device.Value)
+	assert.Equal(t, Off, device.Value)
 }
 
 func TestToggleDevice(t *testing.T) {
@@ -68,7 +68,7 @@ func TestToggleDevice(t *testing.T) {
 	value, err := ToggleDevice(device)
 	require.NoError(t, err)
 	assert.Equal(t, On, value)
-	assert.Equal(t, On, device.Value)
+	assert.Equal(t, Off, device.Value)
 
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)

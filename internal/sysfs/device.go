@@ -113,8 +113,6 @@ func SetDeviceValue(device *Device, value Value) error {
 		return fmt.Errorf("write device %s: %w", device.Identifier, err)
 	}
 
-	device.Value = value
-
 	return nil
 }
 

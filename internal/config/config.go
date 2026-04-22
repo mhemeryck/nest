@@ -257,6 +257,7 @@ func validateLights(lights []LightConfig, knownRelayIDs map[string]struct{}) (ma
 
 func validateBindings(bindings []BindingConfig, knownButtonIDs map[string]struct{}, knownLightIDs map[string]struct{}) error {
 	var errs error
+	seen := make(map[string]int, len(bindings))
 
 	for i, binding := range bindings {
 		prefix := fmt.Sprintf("bindings[%d]", i)
@@ -277,6 +278,24 @@ func validateBindings(bindings []BindingConfig, knownButtonIDs map[string]struct
 		actionErr := validateRequiredField(prefix+".action", binding.Action)
 		if actionErr == nil && binding.Action != BindingActionToggle {
 			actionErr = fmt.Errorf("%s.action: unsupported action %q", prefix, binding.Action)
+		}
+
+		if buttonErr == nil && lightErr == nil && actionErr == nil {
+			key := binding.Button + "\x00" + binding.Light + "\x00" + binding.Action
+			if _, ok := seen[key]; ok {
+				errs = errors.Join(
+					errs,
+					fmt.Errorf(
+						"%s: duplicate binding button %q light %q action %q",
+						prefix,
+						binding.Button,
+						binding.Light,
+						binding.Action,
+					),
+				)
+			} else {
+				seen[key] = i
+			}
 		}
 
 		errs = errors.Join(errs, buttonErr, lightErr, actionErr)

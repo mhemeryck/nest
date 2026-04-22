@@ -193,6 +193,21 @@ func TestValidate(t *testing.T) {
 			},
 			message: `bindings[0].action: unsupported action "press"`,
 		},
+		{
+			name: "rejects duplicate bindings",
+			file: Root{
+				Sysfs:         SysfsConfig{Root: "/tmp"},
+				DigitalInputs: []DigitalInputConfig{{ID: "button_input", Device: "di_3_16"}},
+				PushButtons:   []PushButtonConfig{{ID: "button", Name: "Button", Input: "button_input"}},
+				Relays:        []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+				Lights:        []LightConfig{{ID: "light", Name: "Light", Relay: "relay"}},
+				Bindings: []BindingConfig{
+					{Button: "button", Light: "light", Action: BindingActionToggle},
+					{Button: "button", Light: "light", Action: BindingActionToggle},
+				},
+			},
+			message: `bindings[1]: duplicate binding button "button" light "light" action "toggle"`,
+		},
 	}
 
 	for _, tt := range tests {
