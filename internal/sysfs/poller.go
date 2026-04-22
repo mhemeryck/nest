@@ -34,9 +34,7 @@ type CommandResult struct {
 	Err      error
 }
 
-func StartWorkers(configs []WorkerConfig) (chan<- Command, <-chan PollEvent, chan<- struct{}, <-chan struct{}) {
-	commands := make(chan Command, 32)
-	events := make(chan PollEvent, 32)
+func startWorkers(configs []WorkerConfig, commands <-chan Command, states chan<- PollEvent) (chan<- struct{}, <-chan struct{}) {
 	stopCh := make(chan struct{})
 	doneCh := make(chan struct{})
 
@@ -52,7 +50,7 @@ func StartWorkers(configs []WorkerConfig) (chan<- Command, <-chan PollEvent, cha
 		wg.Add(1)
 		go func(cfg WorkerConfig, commandCh <-chan Command) {
 			defer wg.Done()
-			pollWorker(cfg, stopCh, commandCh, events)
+			pollWorker(cfg, stopCh, commandCh, states)
 		}(cfg, commandCh)
 	}
 
@@ -60,14 +58,24 @@ func StartWorkers(configs []WorkerConfig) (chan<- Command, <-chan PollEvent, cha
 
 	go func() {
 		wg.Wait()
-		close(events)
 		close(doneCh)
 	}()
 
-	return commands, events, stopCh, doneCh
+	return stopCh, doneCh
 }
 
-func StopWorkers(stopCh chan<- struct{}, doneCh <-chan struct{}) {
+func Run(devices []*Device, commands <-chan Command, states chan<- PollEvent) func() {
+	configs := buildWorkerConfigs(devices)
+	stopCh, doneCh := startWorkers(configs, commands, states)
+
+	shutdown := func() {
+		stopWorkers(stopCh, doneCh)
+	}
+
+	return shutdown
+}
+
+func stopWorkers(stopCh chan<- struct{}, doneCh <-chan struct{}) {
 	close(stopCh)
 	<-doneCh
 }
@@ -178,7 +186,7 @@ func respondCommand(cmd Command, result CommandResult) {
 	cmd.Result <- result
 }
 
-func BuildWorkerConfigs(devices []*Device) []WorkerConfig {
+func buildWorkerConfigs(devices []*Device) []WorkerConfig {
 	configs := make(map[DeviceType]WorkerConfig)
 
 	defaultIntervals := map[DeviceType]time.Duration{

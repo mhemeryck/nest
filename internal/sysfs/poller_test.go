@@ -11,16 +11,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestStartStopWorkers(t *testing.T) {
-	configs := []WorkerConfig{
-		{Interval: 10 * time.Millisecond, Devices: []*Device{{Path: "/tmp/test1", Identifier: "test1"}}},
-	}
+func TestRunStartsAndStopsWorkers(t *testing.T) {
+	commands := make(chan Command, 32)
+	states := make(chan PollEvent, 32)
+	shutdown := Run([]*Device{{Path: "/tmp/test1", Identifier: "test1"}}, commands, states)
 
-	commands, events, stopCh, doneCh := StartWorkers(configs)
-	require.NotNil(t, commands)
-	require.NotNil(t, events)
-
-	StopWorkers(stopCh, doneCh)
+	shutdown()
+	close(states)
 }
 
 func TestPollWorkerDetectsChange(t *testing.T) {
@@ -33,20 +30,17 @@ func TestPollWorkerDetectsChange(t *testing.T) {
 	err = writeValue(path2, Off)
 	require.NoError(t, err)
 
-	configs := []WorkerConfig{
-		{Interval: 20 * time.Millisecond, Devices: []*Device{{Path: path1, Identifier: "di_1_01"}, {Path: path2, Identifier: "di_1_02"}}},
-	}
-
 	var mu sync.Mutex
 	var events []PollEvent
 
-	commands, eventCh, stopCh, doneCh := StartWorkers(configs)
-	_ = commands
+	commands := make(chan Command, 32)
+	states := make(chan PollEvent, 32)
+	shutdown := Run([]*Device{{Path: path1, Identifier: "di_1_01"}, {Path: path2, Identifier: "di_1_02"}}, commands, states)
 
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		for event := range eventCh {
+		for event := range states {
 			mu.Lock()
 			events = append(events, event)
 			mu.Unlock()
@@ -60,7 +54,8 @@ func TestPollWorkerDetectsChange(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	StopWorkers(stopCh, doneCh)
+	shutdown()
+	close(states)
 	<-done
 
 	foundRising := false
@@ -80,11 +75,13 @@ func TestWorkerCommandTogglesRelay(t *testing.T) {
 	path := filepath.Join(tmp, "ro_value")
 	require.NoError(t, writeValue(path, Off))
 
-	commands, events, stopCh, doneCh := StartWorkers([]WorkerConfig{{
-		Interval: 100 * time.Millisecond,
-		Devices:  []*Device{{Path: path, Identifier: "ro_1_01", Type: RelayOutput, Value: Off}},
-	}})
-	defer StopWorkers(stopCh, doneCh)
+	commands := make(chan Command, 32)
+	states := make(chan PollEvent, 32)
+	shutdown := Run([]*Device{{Path: path, Identifier: "ro_1_01", Type: RelayOutput, Value: Off}}, commands, states)
+	defer func() {
+		shutdown()
+		close(states)
+	}()
 
 	resultCh := make(chan CommandResult, 1)
 	commands <- Command{Kind: ToggleCommand, DeviceID: "ro_1_01", Result: resultCh}
@@ -94,7 +91,7 @@ func TestWorkerCommandTogglesRelay(t *testing.T) {
 	assert.Equal(t, On, result.Value)
 
 	select {
-	case event := <-events:
+	case event := <-states:
 		assert.Equal(t, "ro_1_01", event.Device.Identifier)
 		assert.Equal(t, Off, event.OldValue)
 		assert.Equal(t, On, event.NewValue)
@@ -162,7 +159,7 @@ func TestBuildWorkerConfigs(t *testing.T) {
 		{Path: "/ro1", Type: RelayOutput, Identifier: "ro1"},
 	}
 
-	configs := BuildWorkerConfigs(devices)
+	configs := buildWorkerConfigs(devices)
 
 	assert.Len(t, configs, 3)
 
