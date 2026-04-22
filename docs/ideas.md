@@ -9,12 +9,14 @@ Keep items here short so they are easy to scan and revisit later.
 - Add richer push button semantics such as `released`, `long_press`, and repeated presses.
 - Support multiple push buttons bound to the same digital input when that turns out to be useful.
 - Add debounce handling as part of the input event pipeline rather than inside sysfs polling.
+- Use press duration as an input signal so a button can drive dimmer-style light control.
 
 ## Automation Model
 
 - Add bindings from push button events to relay, motor, or cover actions.
 - Add an automation handler that consumes semantic events from the shared event bus.
 - Define a small action model so event handlers produce explicit commands instead of directly mutating hardware state.
+- Add bindings that map short and long presses to different light actions such as toggle and dim.
 
 ## Actuator Model
 
