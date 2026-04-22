@@ -36,6 +36,18 @@ Input unit: "I control the office lights"
 Output unit: "I expose these relays"
 ```
 
+### Controller-Centric Integration Topology
+
+Runtime coordination should use a star topology around the central controller.
+Each integration should have a command input channel and an event output channel.
+The controller sends commands to integrations and consumes the resulting events.
+Integrations should not communicate with each other directly.
+The same channel should not be reused in both directions.
+
+This keeps ownership explicit.
+It also fits sysfs, MQTT, and Modbus well.
+Each integration can own its protocol or device state locally while the controller remains the only router between domains.
+
 ### Transport Options
 
 | Transport      | Use Case                 | Notes                             |

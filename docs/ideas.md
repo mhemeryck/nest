@@ -28,7 +28,7 @@ Keep items here short so they are easy to scan and revisit later.
 
 - Extend the tagged-union event model with actuator and automation events.
 - Add event tracing or structured logging to make event flows easier to debug.
-- Decide whether the event bus should stay as a single in-process channel or evolve into a dispatcher with subscriptions.
+- Keep integration communication as a star topology around the controller rather than a mesh of peer-to-peer channels.
 
 ## Transport And Integration
 
