@@ -57,6 +57,8 @@ func main() {
 	commands := make(chan sysfs.Command, 32)
 	states := make(chan sysfs.PollEvent, 32)
 	shutdownSysfs := sysfs.Run(configuredDevices, commands, states)
+	defer close(states)
+	defer shutdownSysfs()
 
 	slog.Info("polling devices", "message", "press Ctrl+C to exit")
 
@@ -65,8 +67,6 @@ func main() {
 	controller.Run(index, commands, states, sigCh)
 
 	slog.Info("shutting down")
-	shutdownSysfs()
-	close(states)
 }
 
 func configuredDevices(devices []*sysfs.Device, wanted []entity.DeviceID) ([]*sysfs.Device, []entity.DeviceID) {
