@@ -18,11 +18,12 @@ import (
 func TestRunReturnsOnSignal(t *testing.T) {
 	index := registry.Build(&entity.Root{})
 	pollEvents := make(chan sysfs.PollEvent)
+	commands := make(chan sysfs.Command)
 	sigCh := make(chan os.Signal, 1)
 	done := make(chan struct{})
 
 	go func() {
-		Run(index, nil, pollEvents, sigCh)
+		Run(index, commands, pollEvents, sigCh)
 		close(done)
 	}()
 
@@ -38,11 +39,12 @@ func TestRunReturnsOnSignal(t *testing.T) {
 func TestRunReturnsWhenPollEventsClose(t *testing.T) {
 	index := registry.Build(&entity.Root{})
 	pollEvents := make(chan sysfs.PollEvent)
+	commands := make(chan sysfs.Command)
 	sigCh := make(chan os.Signal)
 	done := make(chan struct{})
 
 	go func() {
-		Run(index, nil, pollEvents, sigCh)
+		Run(index, commands, pollEvents, sigCh)
 		close(done)
 	}()
 
@@ -66,12 +68,17 @@ func TestHandlePollEventTogglesLightRelay(t *testing.T) {
 		Relays:        []entity.Relay{{ID: entity.RelayID("office_light_relay"), Name: "Office light relay", Device: entity.DeviceID("ro_3_14")}},
 		Bindings:      []entity.Binding{{Button: entity.PushButtonID("office_button"), Light: entity.LightID("office_light"), Action: entity.LightActionToggle}},
 	})
-	devicesByID := map[entity.DeviceID]*sysfs.Device{
-		"ro_3_14": {Identifier: "ro_3_14", Path: relayPath, Value: sysfs.Off},
-	}
+	commands := make(chan sysfs.Command, 1)
+	go func() {
+		cmd := <-commands
+		require.Equal(t, sysfs.ToggleCommand, cmd.Kind)
+		require.Equal(t, "ro_3_14", cmd.DeviceID)
+		require.NoError(t, os.WriteFile(relayPath, []byte("1\n"), 0o644))
+		cmd.Result <- sysfs.CommandResult{DeviceID: cmd.DeviceID, Value: sysfs.On}
+	}()
 
 	logs := captureLogs(t, func() {
-		handlePollEvent(index, devicesByID, sysfs.PollEvent{
+		handlePollEvent(index, commands, sysfs.PollEvent{
 			Device:   sysfs.Device{Identifier: "di_3_16", Path: "/sys/di_3_16/di_value"},
 			OldValue: sysfs.Off,
 			NewValue: sysfs.On,

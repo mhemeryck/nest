@@ -56,16 +56,16 @@ func main() {
 
 	configs := sysfs.BuildWorkerConfigs(configuredDevices)
 
-	stopChs, pollEvents := sysfs.StartWorkers(configs)
+	commands, events, stopCh, doneCh := sysfs.StartWorkers(configs)
 
 	slog.Info("polling devices", "message", "press Ctrl+C to exit")
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	controller.Run(index, configuredDevices, pollEvents, sigCh)
+	controller.Run(index, commands, events, sigCh)
 
 	slog.Info("shutting down")
-	sysfs.StopWorkers(stopChs)
+	sysfs.StopWorkers(stopCh, doneCh)
 }
 
 func configuredDevices(devices []*sysfs.Device, wanted []entity.DeviceID) ([]*sysfs.Device, []entity.DeviceID) {

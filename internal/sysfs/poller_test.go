@@ -16,11 +16,11 @@ func TestStartStopWorkers(t *testing.T) {
 		{Interval: 10 * time.Millisecond, Devices: []*Device{{Path: "/tmp/test1", Identifier: "test1"}}},
 	}
 
-	stopChs, events := StartWorkers(configs)
-	require.Len(t, stopChs, 1)
+	commands, events, stopCh, doneCh := StartWorkers(configs)
+	require.NotNil(t, commands)
 	require.NotNil(t, events)
 
-	StopWorkers(stopChs)
+	StopWorkers(stopCh, doneCh)
 }
 
 func TestPollWorkerDetectsChange(t *testing.T) {
@@ -40,7 +40,8 @@ func TestPollWorkerDetectsChange(t *testing.T) {
 	var mu sync.Mutex
 	var events []PollEvent
 
-	stopChs, eventCh := StartWorkers(configs)
+	commands, eventCh, stopCh, doneCh := StartWorkers(configs)
+	_ = commands
 
 	done := make(chan struct{})
 	go func() {
@@ -59,7 +60,7 @@ func TestPollWorkerDetectsChange(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	StopWorkers(stopChs)
+	StopWorkers(stopCh, doneCh)
 	<-done
 
 	foundRising := false
@@ -72,6 +73,38 @@ func TestPollWorkerDetectsChange(t *testing.T) {
 	}
 	mu.Unlock()
 	assert.True(t, foundRising, "Should detect rising edge on path1")
+}
+
+func TestWorkerCommandTogglesRelay(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "ro_value")
+	require.NoError(t, writeValue(path, Off))
+
+	commands, events, stopCh, doneCh := StartWorkers([]WorkerConfig{{
+		Interval: 100 * time.Millisecond,
+		Devices:  []*Device{{Path: path, Identifier: "ro_1_01", Type: RelayOutput, Value: Off}},
+	}})
+	defer StopWorkers(stopCh, doneCh)
+
+	resultCh := make(chan CommandResult, 1)
+	commands <- Command{Kind: ToggleCommand, DeviceID: "ro_1_01", Result: resultCh}
+
+	result := <-resultCh
+	require.NoError(t, result.Err)
+	assert.Equal(t, On, result.Value)
+
+	select {
+	case event := <-events:
+		assert.Equal(t, "ro_1_01", event.Device.Identifier)
+		assert.Equal(t, Off, event.OldValue)
+		assert.Equal(t, On, event.NewValue)
+	case <-time.After(time.Second):
+		t.Fatal("expected relay toggle event")
+	}
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, "1\n", string(data))
 }
 
 func TestNewDevice(t *testing.T) {

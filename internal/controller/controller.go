@@ -12,12 +12,10 @@ import (
 
 func Run(
 	index *registry.Index,
-	devices []*sysfs.Device,
+	sysfsCommands chan<- sysfs.Command,
 	pollEvents <-chan sysfs.PollEvent,
 	sigCh <-chan os.Signal,
 ) {
-	devicesByID := buildDevicesByID(devices)
-
 	for {
 		select {
 		case <-sigCh:
@@ -27,15 +25,15 @@ func Run(
 				return
 			}
 
-			handlePollEvent(index, devicesByID, pollEvent)
+			handlePollEvent(index, sysfsCommands, pollEvent)
 		}
 	}
 }
 
-func handlePollEvent(index *registry.Index, devicesByID map[entity.DeviceID]*sysfs.Device, pollEvent sysfs.PollEvent) {
+func handlePollEvent(index *registry.Index, sysfsCommands chan<- sysfs.Command, pollEvent sysfs.PollEvent) {
 	digitalInputEvent, ok := event.PollEventToDigitalInputEvent(index, pollEvent)
 	if ok {
-		handleEvent(index, devicesByID, digitalInputEvent)
+		handleEvent(index, sysfsCommands, digitalInputEvent)
 		return
 	}
 
@@ -54,7 +52,7 @@ func handlePollEvent(index *registry.Index, devicesByID map[entity.DeviceID]*sys
 	)
 }
 
-func handleEvent(index *registry.Index, devicesByID map[entity.DeviceID]*sysfs.Device, busEvent event.Event) {
+func handleEvent(index *registry.Index, sysfsCommands chan<- sysfs.Command, busEvent event.Event) {
 	switch busEvent.Kind {
 	case event.DigitalInputKind:
 		slog.Info(
@@ -70,7 +68,7 @@ func handleEvent(index *registry.Index, devicesByID map[entity.DeviceID]*sysfs.D
 		)
 
 		for _, pushButtonEvent := range event.DigitalInputEventToPushButtonEvents(index, *busEvent.DigitalInput) {
-			handleEvent(index, devicesByID, pushButtonEvent)
+			handleEvent(index, sysfsCommands, pushButtonEvent)
 		}
 	case event.PushButtonKind:
 		slog.Info(
@@ -83,17 +81,17 @@ func handleEvent(index *registry.Index, devicesByID map[entity.DeviceID]*sysfs.D
 			busEvent.PushButton.Kind,
 		)
 
-		handlePushButtonEvent(index, devicesByID, *busEvent.PushButton)
+		handlePushButtonEvent(index, sysfsCommands, *busEvent.PushButton)
 	}
 }
 
-func handlePushButtonEvent(index *registry.Index, devicesByID map[entity.DeviceID]*sysfs.Device, pushButtonEvent event.PushButtonEvent) {
+func handlePushButtonEvent(index *registry.Index, sysfsCommands chan<- sysfs.Command, pushButtonEvent event.PushButtonEvent) {
 	for _, binding := range index.BindingsByButtonID[pushButtonEvent.ButtonID] {
-		handleBinding(index, devicesByID, binding)
+		handleBinding(index, sysfsCommands, binding)
 	}
 }
 
-func handleBinding(index *registry.Index, devicesByID map[entity.DeviceID]*sysfs.Device, binding entity.Binding) {
+func handleBinding(index *registry.Index, sysfsCommands chan<- sysfs.Command, binding entity.Binding) {
 	if binding.Action != entity.LightActionToggle {
 		slog.Error("unsupported light action", "action", binding.Action)
 		return
@@ -111,15 +109,16 @@ func handleBinding(index *registry.Index, devicesByID map[entity.DeviceID]*sysfs
 		return
 	}
 
-	device, ok := devicesByID[relay.Device]
-	if !ok {
-		slog.Error("relay device not available", "light_id", light.ID, "relay_id", relay.ID, "device_id", relay.Device)
-		return
+	resultCh := make(chan sysfs.CommandResult, 1)
+	sysfsCommands <- sysfs.Command{
+		Kind:     sysfs.ToggleCommand,
+		DeviceID: string(relay.Device),
+		Result:   resultCh,
 	}
 
-	newValue, err := sysfs.ToggleDevice(device)
-	if err != nil {
-		slog.Error("toggle light failed", "light_id", light.ID, "relay_id", relay.ID, "device_id", relay.Device, "error", err)
+	result := <-resultCh
+	if result.Err != nil {
+		slog.Error("toggle light failed", "light_id", light.ID, "relay_id", relay.ID, "device_id", relay.Device, "error", result.Err)
 		return
 	}
 
@@ -134,15 +133,6 @@ func handleBinding(index *registry.Index, devicesByID map[entity.DeviceID]*sysfs
 		"device_id",
 		relay.Device,
 		"value",
-		sysfs.PrintableValue(newValue),
+		sysfs.PrintableValue(result.Value),
 	)
-}
-
-func buildDevicesByID(devices []*sysfs.Device) map[entity.DeviceID]*sysfs.Device {
-	devicesByID := make(map[entity.DeviceID]*sysfs.Device, len(devices))
-	for _, device := range devices {
-		devicesByID[entity.DeviceID(device.Identifier)] = device
-	}
-
-	return devicesByID
 }

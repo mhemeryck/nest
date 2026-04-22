@@ -45,36 +45,6 @@ func TestWriteValueRejectsInvalidValue(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestSetDeviceValue(t *testing.T) {
-	tmp := t.TempDir()
-	path := filepath.Join(tmp, "ro_value")
-	device := &Device{Identifier: "ro_3_14", Path: path, Value: Off}
-
-	err := SetDeviceValue(device, On)
-	require.NoError(t, err)
-
-	data, err := os.ReadFile(path)
-	require.NoError(t, err)
-	assert.Equal(t, "1\n", string(data))
-	assert.Equal(t, Off, device.Value)
-}
-
-func TestToggleDevice(t *testing.T) {
-	tmp := t.TempDir()
-	path := filepath.Join(tmp, "ro_value")
-	require.NoError(t, os.WriteFile(path, []byte("0\n"), 0o644))
-	device := &Device{Identifier: "ro_3_14", Path: path, Value: Off}
-
-	value, err := ToggleDevice(device)
-	require.NoError(t, err)
-	assert.Equal(t, On, value)
-	assert.Equal(t, Off, device.Value)
-
-	data, err := os.ReadFile(path)
-	require.NoError(t, err)
-	assert.Equal(t, "1\n", string(data))
-}
-
 func TestPrintableValue(t *testing.T) {
 	assert.Equal(t, 0, PrintableValue(Off))
 	assert.Equal(t, 1, PrintableValue(On))
