@@ -1,9 +1,6 @@
 package sysfs
 
-import (
-	"fmt"
-	"time"
-)
+import "time"
 
 func pollWorker(
 	cfg WorkerConfig,
@@ -52,7 +49,6 @@ func pollDevices(devices []*Device, states chan<- PollEvent) {
 func handleCommand(devicesByID map[string]*Device, cmd Command, states chan<- PollEvent) {
 	device, ok := devicesByID[cmd.DeviceID]
 	if !ok {
-		respondCommand(cmd, CommandResult{DeviceID: cmd.DeviceID, Err: fmt.Errorf("unknown device %q", cmd.DeviceID)})
 		return
 	}
 
@@ -65,7 +61,6 @@ func handleCommand(devicesByID map[string]*Device, cmd Command, states chan<- Po
 		}
 
 		if err := writeValue(device.Path, newValue); err != nil {
-			respondCommand(cmd, CommandResult{DeviceID: cmd.DeviceID, Err: fmt.Errorf("write device %s: %w", device.Identifier, err)})
 			return
 		}
 
@@ -76,16 +71,7 @@ func handleCommand(devicesByID map[string]*Device, cmd Command, states chan<- Po
 			NewValue: newValue,
 			IsRising: oldValue == Off && newValue == On,
 		}
-		respondCommand(cmd, CommandResult{DeviceID: cmd.DeviceID, Value: newValue})
 	default:
-		respondCommand(cmd, CommandResult{DeviceID: cmd.DeviceID, Err: fmt.Errorf("unsupported command %q", cmd.Kind)})
-	}
-}
-
-func respondCommand(cmd Command, result CommandResult) {
-	if cmd.Result == nil {
 		return
 	}
-
-	cmd.Result <- result
 }

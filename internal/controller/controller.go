@@ -109,17 +109,9 @@ func handleBinding(index *registry.Index, sysfsCommands chan<- sysfs.Command, bi
 		return
 	}
 
-	resultCh := make(chan sysfs.CommandResult, 1)
 	sysfsCommands <- sysfs.Command{
 		Kind:     sysfs.ToggleCommand,
 		DeviceID: string(relay.Device),
-		Result:   resultCh,
-	}
-
-	result := <-resultCh
-	if result.Err != nil {
-		slog.Error("toggle light failed", "light_id", light.ID, "relay_id", relay.ID, "device_id", relay.Device, "error", result.Err)
-		return
 	}
 
 	slog.Info(
@@ -132,7 +124,5 @@ func handleBinding(index *registry.Index, sysfsCommands chan<- sysfs.Command, bi
 		relay.ID,
 		"device_id",
 		relay.Device,
-		"value",
-		sysfs.PrintableValue(result.Value),
 	)
 }

@@ -69,12 +69,13 @@ func TestHandlePollEventTogglesLightRelay(t *testing.T) {
 		Bindings:      []entity.Binding{{Button: entity.PushButtonID("office_button"), Light: entity.LightID("office_light"), Action: entity.LightActionToggle}},
 	})
 	commands := make(chan sysfs.Command, 1)
+	commandDone := make(chan struct{})
 	go func() {
+		defer close(commandDone)
 		cmd := <-commands
 		require.Equal(t, sysfs.ToggleCommand, cmd.Kind)
 		require.Equal(t, "ro_3_14", cmd.DeviceID)
 		require.NoError(t, os.WriteFile(relayPath, []byte("1\n"), 0o644))
-		cmd.Result <- sysfs.CommandResult{DeviceID: cmd.DeviceID, Value: sysfs.On}
 	}()
 
 	logs := captureLogs(t, func() {
@@ -89,6 +90,7 @@ func TestHandlePollEventTogglesLightRelay(t *testing.T) {
 	assert.Contains(t, logs, "digital input event")
 	assert.Contains(t, logs, "push button event")
 	assert.Contains(t, logs, "light toggled")
+	<-commandDone
 
 	data, err := os.ReadFile(relayPath)
 	require.NoError(t, err)

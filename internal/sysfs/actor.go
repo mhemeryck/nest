@@ -14,13 +14,6 @@ const ToggleCommand CommandKind = "toggle"
 type Command struct {
 	Kind     CommandKind
 	DeviceID string
-	Result   chan CommandResult
-}
-
-type CommandResult struct {
-	DeviceID string
-	Value    Value
-	Err      error
 }
 
 func Run(devices []*Device, commands <-chan Command, states chan<- PollEvent) func() {

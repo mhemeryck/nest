@@ -83,12 +83,7 @@ func TestWorkerCommandTogglesRelay(t *testing.T) {
 		close(states)
 	}()
 
-	resultCh := make(chan CommandResult, 1)
-	commands <- Command{Kind: ToggleCommand, DeviceID: "ro_1_01", Result: resultCh}
-
-	result := <-resultCh
-	require.NoError(t, result.Err)
-	assert.Equal(t, On, result.Value)
+	commands <- Command{Kind: ToggleCommand, DeviceID: "ro_1_01"}
 
 	select {
 	case event := <-states:

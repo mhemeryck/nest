@@ -1,9 +1,6 @@
 package sysfs
 
-import (
-	"fmt"
-	"sync"
-)
+import "sync"
 
 type workerSet struct {
 	routes map[string]chan Command
@@ -63,13 +60,11 @@ func routeCommands(stopCh <-chan struct{}, commands <-chan Command, routes map[s
 
 			commandCh, found := routes[cmd.DeviceID]
 			if !found {
-				respondCommand(cmd, CommandResult{DeviceID: cmd.DeviceID, Err: fmt.Errorf("unknown device %q", cmd.DeviceID)})
 				continue
 			}
 
 			select {
 			case <-stopCh:
-				respondCommand(cmd, CommandResult{DeviceID: cmd.DeviceID, Err: fmt.Errorf("sysfs workers stopped")})
 			case commandCh <- cmd:
 			}
 		}
