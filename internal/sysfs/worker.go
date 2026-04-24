@@ -1,6 +1,9 @@
 package sysfs
 
-import "time"
+import (
+	"log/slog"
+	"time"
+)
 
 func pollWorker(
 	cfg WorkerConfig,
@@ -21,14 +24,14 @@ func pollWorker(
 		case <-stopCh:
 			return
 		case cmd := <-commands:
-			handleCommand(devicesByID, cmd, states)
+			handleCommand(devicesByID, cmd, stopCh, states)
 		case <-ticker.C:
-			pollDevices(cfg.Devices, states)
+			pollDevices(cfg.Devices, stopCh, states)
 		}
 	}
 }
 
-func pollDevices(devices []*Device, states chan<- PollEvent) {
+func pollDevices(devices []*Device, stopCh <-chan struct{}, states chan<- PollEvent) {
 	for _, device := range devices {
 		oldValue := device.Value
 		newValue, err := readDevice(device)
@@ -36,17 +39,19 @@ func pollDevices(devices []*Device, states chan<- PollEvent) {
 			continue
 		}
 		if newValue != oldValue {
-			states <- PollEvent{
+			if !publishState(stopCh, states, PollEvent{
 				Device:   *device,
 				OldValue: oldValue,
 				NewValue: newValue,
 				IsRising: oldValue == Off && newValue == On,
+			}) {
+				return
 			}
 		}
 	}
 }
 
-func handleCommand(devicesByID map[string]*Device, cmd Command, states chan<- PollEvent) {
+func handleCommand(devicesByID map[string]*Device, cmd Command, stopCh <-chan struct{}, states chan<- PollEvent) {
 	device, ok := devicesByID[cmd.DeviceID]
 	if !ok {
 		return
@@ -61,17 +66,27 @@ func handleCommand(devicesByID map[string]*Device, cmd Command, states chan<- Po
 		}
 
 		if err := writeValue(device.Path, newValue); err != nil {
+			slog.Error("sysfs write failed", "device_id", device.Identifier, "path", device.Path, "error", err)
 			return
 		}
 
 		device.Value = newValue
-		states <- PollEvent{
+		publishState(stopCh, states, PollEvent{
 			Device:   *device,
 			OldValue: oldValue,
 			NewValue: newValue,
 			IsRising: oldValue == Off && newValue == On,
-		}
+		})
 	default:
 		return
+	}
+}
+
+func publishState(stopCh <-chan struct{}, states chan<- PollEvent, state PollEvent) bool {
+	select {
+	case <-stopCh:
+		return false
+	case states <- state:
+		return true
 	}
 }

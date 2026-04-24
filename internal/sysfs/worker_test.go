@@ -1,6 +1,8 @@
 package sysfs
 
 import (
+	"bytes"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -91,8 +93,9 @@ func TestWorkerCommandTogglesRelay(t *testing.T) {
 }
 
 func TestHandleCommandIgnoresUnknownDevice(t *testing.T) {
+	stopCh := make(chan struct{})
 	states := make(chan PollEvent, 1)
-	handleCommand(map[string]*Device{}, Command{Kind: ToggleCommand, DeviceID: "missing"}, states)
+	handleCommand(map[string]*Device{}, Command{Kind: ToggleCommand, DeviceID: "missing"}, stopCh, states)
 
 	select {
 	case event := <-states:
@@ -102,11 +105,12 @@ func TestHandleCommandIgnoresUnknownDevice(t *testing.T) {
 }
 
 func TestHandleCommandIgnoresUnsupportedCommand(t *testing.T) {
+	stopCh := make(chan struct{})
 	states := make(chan PollEvent, 1)
 	device := &Device{Identifier: "ro_1_01", Path: filepath.Join(t.TempDir(), "ro_value"), Value: Off}
 	require.NoError(t, writeValue(device.Path, Off))
 
-	handleCommand(map[string]*Device{"ro_1_01": device}, Command{Kind: CommandKind("invalid"), DeviceID: "ro_1_01"}, states)
+	handleCommand(map[string]*Device{"ro_1_01": device}, Command{Kind: CommandKind("invalid"), DeviceID: "ro_1_01"}, stopCh, states)
 
 	select {
 	case event := <-states:
@@ -118,8 +122,61 @@ func TestHandleCommandIgnoresUnsupportedCommand(t *testing.T) {
 
 func TestPollDevicesIgnoresReadErrors(t *testing.T) {
 	states := make(chan PollEvent, 1)
-	pollDevices([]*Device{{Identifier: "missing", Path: filepath.Join(t.TempDir(), "missing")}}, states)
+	stopCh := make(chan struct{})
+	pollDevices([]*Device{{Identifier: "missing", Path: filepath.Join(t.TempDir(), "missing")}}, stopCh, states)
 
+	select {
+	case event := <-states:
+		t.Fatalf("unexpected state event: %+v", event)
+	default:
+	}
+}
+
+func TestPublishStateReturnsFalseWhenStopping(t *testing.T) {
+	stopCh := make(chan struct{})
+	states := make(chan PollEvent)
+	close(stopCh)
+
+	published := publishState(stopCh, states, PollEvent{})
+	assert.False(t, published)
+}
+
+func TestHandleCommandReturnsDuringShutdownWhenStateChannelBlocks(t *testing.T) {
+	stopCh := make(chan struct{})
+	states := make(chan PollEvent)
+	device := &Device{Identifier: "ro_1_01", Path: filepath.Join(t.TempDir(), "ro_value"), Value: Off}
+	require.NoError(t, writeValue(device.Path, Off))
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handleCommand(map[string]*Device{"ro_1_01": device}, Command{Kind: ToggleCommand, DeviceID: "ro_1_01"}, stopCh, states)
+	}()
+
+	close(stopCh)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("handleCommand did not return after shutdown")
+	}
+}
+
+func TestHandleCommandLogsWriteFailure(t *testing.T) {
+	var buffer bytes.Buffer
+	previous := slog.Default()
+	logger := slog.New(slog.NewTextHandler(&buffer, &slog.HandlerOptions{Level: slog.LevelError}))
+	slog.SetDefault(logger)
+	t.Cleanup(func() {
+		slog.SetDefault(previous)
+	})
+
+	stopCh := make(chan struct{})
+	states := make(chan PollEvent, 1)
+	device := &Device{Identifier: "ro_1_01", Path: filepath.Join(t.TempDir(), "missing", "ro_value"), Value: Off}
+
+	handleCommand(map[string]*Device{"ro_1_01": device}, Command{Kind: ToggleCommand, DeviceID: "ro_1_01"}, stopCh, states)
+
+	assert.Contains(t, buffer.String(), "sysfs write failed")
 	select {
 	case event := <-states:
 		t.Fatalf("unexpected state event: %+v", event)
