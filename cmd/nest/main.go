@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log/slog"
 	"os"
@@ -56,15 +57,15 @@ func main() {
 
 	commands := make(chan sysfs.Command, 32)
 	states := make(chan sysfs.PollEvent, 32)
-	shutdownSysfs := sysfs.Run(configuredDevices, commands, states)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	shutdownSysfs := sysfs.Run(ctx, configuredDevices, commands, states)
 	defer close(states)
 	defer shutdownSysfs()
 
 	slog.Info("polling devices", "message", "press Ctrl+C to exit")
 
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	controller.Run(index, commands, states, sigCh)
+	controller.Run(ctx, index, commands, states)
 
 	slog.Info("shutting down")
 }

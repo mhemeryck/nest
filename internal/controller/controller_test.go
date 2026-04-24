@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"context"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -16,18 +17,18 @@ import (
 )
 
 func TestRunReturnsOnSignal(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
 	index := registry.Build(&entity.Root{})
 	pollEvents := make(chan sysfs.PollEvent)
 	commands := make(chan sysfs.Command)
-	sigCh := make(chan os.Signal, 1)
 	done := make(chan struct{})
 
 	go func() {
-		Run(index, commands, pollEvents, sigCh)
+		Run(ctx, index, commands, pollEvents)
 		close(done)
 	}()
 
-	sigCh <- os.Interrupt
+	cancel()
 
 	select {
 	case <-done:
@@ -37,14 +38,14 @@ func TestRunReturnsOnSignal(t *testing.T) {
 }
 
 func TestRunReturnsWhenPollEventsClose(t *testing.T) {
+	ctx := t.Context()
 	index := registry.Build(&entity.Root{})
 	pollEvents := make(chan sysfs.PollEvent)
 	commands := make(chan sysfs.Command)
-	sigCh := make(chan os.Signal)
 	done := make(chan struct{})
 
 	go func() {
-		Run(index, commands, pollEvents, sigCh)
+		Run(ctx, index, commands, pollEvents)
 		close(done)
 	}()
 

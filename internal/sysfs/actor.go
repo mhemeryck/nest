@@ -1,5 +1,7 @@
 package sysfs
 
+import "context"
+
 type PollEvent struct {
 	Device   Device
 	OldValue Value
@@ -16,16 +18,13 @@ type Command struct {
 	DeviceID string
 }
 
-func Run(devices []*Device, commands <-chan Command, states chan<- PollEvent) func() {
+func Run(parent context.Context, devices []*Device, commands <-chan Command, states chan<- PollEvent) func() {
+	ctx, cancel := context.WithCancel(parent)
 	configs := buildWorkerConfigs(devices)
-	stopCh, doneCh := startWorkers(configs, commands, states)
+	doneCh := startWorkers(ctx, configs, commands, states)
 
 	return func() {
-		stopWorkers(stopCh, doneCh)
+		cancel()
+		<-doneCh
 	}
-}
-
-func stopWorkers(stopCh chan<- struct{}, doneCh <-chan struct{}) {
-	close(stopCh)
-	<-doneCh
 }

@@ -1,8 +1,8 @@
 package controller
 
 import (
+	"context"
 	"log/slog"
-	"os"
 
 	"github.com/mhemeryck/nest/internal/entity"
 	"github.com/mhemeryck/nest/internal/event"
@@ -11,14 +11,14 @@ import (
 )
 
 func Run(
+	ctx context.Context,
 	index *registry.Index,
 	sysfsCommands chan<- sysfs.Command,
 	pollEvents <-chan sysfs.PollEvent,
-	sigCh <-chan os.Signal,
 ) {
 	for {
 		select {
-		case <-sigCh:
+		case <-ctx.Done():
 			return
 		case pollEvent, ok := <-pollEvents:
 			if !ok {

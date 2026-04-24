@@ -1,29 +1,31 @@
 package sysfs
 
-import "sync"
+import (
+	"context"
+	"sync"
+)
 
 type workerSet struct {
 	routes map[string]chan Command
 	wg     sync.WaitGroup
 }
 
-func startWorkers(configs []WorkerConfig, commands <-chan Command, states chan<- PollEvent) (chan<- struct{}, <-chan struct{}) {
-	stopCh := make(chan struct{})
+func startWorkers(ctx context.Context, configs []WorkerConfig, commands <-chan Command, states chan<- PollEvent) <-chan struct{} {
 	doneCh := make(chan struct{})
 
-	workers := startConfiguredWorkers(configs, stopCh, states)
+	workers := startConfiguredWorkers(ctx, configs, states)
 
-	go routeCommands(stopCh, commands, workers.routes)
+	go routeCommands(ctx, commands, workers.routes)
 
 	go func() {
 		workers.wg.Wait()
 		close(doneCh)
 	}()
 
-	return stopCh, doneCh
+	return doneCh
 }
 
-func startConfiguredWorkers(configs []WorkerConfig, stopCh <-chan struct{}, states chan<- PollEvent) *workerSet {
+func startConfiguredWorkers(ctx context.Context, configs []WorkerConfig, states chan<- PollEvent) *workerSet {
 	workers := &workerSet{
 		routes: make(map[string]chan Command),
 	}
@@ -35,7 +37,7 @@ func startConfiguredWorkers(configs []WorkerConfig, stopCh <-chan struct{}, stat
 		workers.wg.Add(1)
 		go func(cfg WorkerConfig, commandCh <-chan Command) {
 			defer workers.wg.Done()
-			pollWorker(cfg, stopCh, commandCh, states)
+			pollWorker(ctx, cfg, commandCh, states)
 		}(cfg, commandCh)
 	}
 
@@ -48,10 +50,10 @@ func registerWorkerDevices(routes map[string]chan Command, devices []*Device, co
 	}
 }
 
-func routeCommands(stopCh <-chan struct{}, commands <-chan Command, routes map[string]chan Command) {
+func routeCommands(ctx context.Context, commands <-chan Command, routes map[string]chan Command) {
 	for {
 		select {
-		case <-stopCh:
+		case <-ctx.Done():
 			return
 		case cmd, ok := <-commands:
 			if !ok {
@@ -64,7 +66,7 @@ func routeCommands(stopCh <-chan struct{}, commands <-chan Command, routes map[s
 			}
 
 			select {
-			case <-stopCh:
+			case <-ctx.Done():
 			case commandCh <- cmd:
 			}
 		}

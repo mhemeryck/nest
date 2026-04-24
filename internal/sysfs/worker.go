@@ -1,13 +1,14 @@
 package sysfs
 
 import (
+	"context"
 	"log/slog"
 	"time"
 )
 
 func pollWorker(
+	ctx context.Context,
 	cfg WorkerConfig,
-	stopCh <-chan struct{},
 	commands <-chan Command,
 	states chan<- PollEvent,
 ) {
@@ -21,17 +22,17 @@ func pollWorker(
 
 	for {
 		select {
-		case <-stopCh:
+		case <-ctx.Done():
 			return
 		case cmd := <-commands:
-			handleCommand(devicesByID, cmd, stopCh, states)
+			handleCommand(devicesByID, cmd, ctx, states)
 		case <-ticker.C:
-			pollDevices(cfg.Devices, stopCh, states)
+			pollDevices(cfg.Devices, ctx, states)
 		}
 	}
 }
 
-func pollDevices(devices []*Device, stopCh <-chan struct{}, states chan<- PollEvent) {
+func pollDevices(devices []*Device, ctx context.Context, states chan<- PollEvent) {
 	for _, device := range devices {
 		oldValue := device.Value
 		newValue, err := readDevice(device)
@@ -39,7 +40,7 @@ func pollDevices(devices []*Device, stopCh <-chan struct{}, states chan<- PollEv
 			continue
 		}
 		if newValue != oldValue {
-			if !publishState(stopCh, states, PollEvent{
+			if !publishState(ctx, states, PollEvent{
 				Device:   *device,
 				OldValue: oldValue,
 				NewValue: newValue,
@@ -51,7 +52,7 @@ func pollDevices(devices []*Device, stopCh <-chan struct{}, states chan<- PollEv
 	}
 }
 
-func handleCommand(devicesByID map[string]*Device, cmd Command, stopCh <-chan struct{}, states chan<- PollEvent) {
+func handleCommand(devicesByID map[string]*Device, cmd Command, ctx context.Context, states chan<- PollEvent) {
 	device, ok := devicesByID[cmd.DeviceID]
 	if !ok {
 		return
@@ -71,7 +72,7 @@ func handleCommand(devicesByID map[string]*Device, cmd Command, stopCh <-chan st
 		}
 
 		device.Value = newValue
-		publishState(stopCh, states, PollEvent{
+		publishState(ctx, states, PollEvent{
 			Device:   *device,
 			OldValue: oldValue,
 			NewValue: newValue,
@@ -82,9 +83,9 @@ func handleCommand(devicesByID map[string]*Device, cmd Command, stopCh <-chan st
 	}
 }
 
-func publishState(stopCh <-chan struct{}, states chan<- PollEvent, state PollEvent) bool {
+func publishState(ctx context.Context, states chan<- PollEvent, state PollEvent) bool {
 	select {
-	case <-stopCh:
+	case <-ctx.Done():
 		return false
 	case states <- state:
 		return true
