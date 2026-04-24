@@ -59,13 +59,18 @@ func main() {
 	states := make(chan sysfs.PollEvent, 32)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	shutdownSysfs := sysfs.Run(ctx, configuredDevices, commands, states)
-	defer close(states)
-	defer shutdownSysfs()
+	sysfsDone := make(chan struct{})
+	go sysfs.Run(ctx, configuredDevices, commands, states, sysfsDone)
+
+	controllerDone := make(chan struct{})
+	go controller.Run(ctx, index, commands, states, controllerDone)
 
 	slog.Info("polling devices", "message", "press Ctrl+C to exit")
 
-	controller.Run(ctx, index, commands, states)
+	<-controllerDone
+	stop()
+	<-sysfsDone
+	close(states)
 
 	slog.Info("shutting down")
 }

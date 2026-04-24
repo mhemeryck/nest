@@ -22,11 +22,7 @@ func TestRunReturnsOnSignal(t *testing.T) {
 	pollEvents := make(chan sysfs.PollEvent)
 	commands := make(chan sysfs.Command)
 	done := make(chan struct{})
-
-	go func() {
-		Run(ctx, index, commands, pollEvents)
-		close(done)
-	}()
+	go Run(ctx, index, commands, pollEvents, done)
 
 	cancel()
 
@@ -43,11 +39,7 @@ func TestRunReturnsWhenPollEventsClose(t *testing.T) {
 	pollEvents := make(chan sysfs.PollEvent)
 	commands := make(chan sysfs.Command)
 	done := make(chan struct{})
-
-	go func() {
-		Run(ctx, index, commands, pollEvents)
-		close(done)
-	}()
+	go Run(ctx, index, commands, pollEvents, done)
 
 	close(pollEvents)
 

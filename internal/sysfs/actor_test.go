@@ -1,12 +1,18 @@
 package sysfs
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestRunStartsAndStopsWorkers(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
 	commands := make(chan Command, 32)
 	states := make(chan PollEvent, 32)
-	shutdown := Run(t.Context(), []*Device{{Path: "/tmp/test1", Identifier: "test1"}}, commands, states)
+	done := make(chan struct{})
+	go Run(ctx, []*Device{{Path: "/tmp/test1", Identifier: "test1"}}, commands, states, done)
 
-	shutdown()
+	cancel()
+	<-done
 	close(states)
 }

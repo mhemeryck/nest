@@ -15,7 +15,10 @@ func Run(
 	index *registry.Index,
 	sysfsCommands chan<- sysfs.Command,
 	pollEvents <-chan sysfs.PollEvent,
+	done chan<- struct{},
 ) {
+	defer close(done)
+
 	for {
 		select {
 		case <-ctx.Done():

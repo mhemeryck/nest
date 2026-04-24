@@ -18,13 +18,10 @@ type Command struct {
 	DeviceID string
 }
 
-func Run(parent context.Context, devices []*Device, commands <-chan Command, states chan<- PollEvent) func() {
-	ctx, cancel := context.WithCancel(parent)
+func Run(ctx context.Context, devices []*Device, commands <-chan Command, states chan<- PollEvent, done chan<- struct{}) {
+	defer close(done)
+
 	configs := buildWorkerConfigs(devices)
 	doneCh := startWorkers(ctx, configs, commands, states)
-
-	return func() {
-		cancel()
-		<-doneCh
-	}
+	<-doneCh
 }

@@ -27,9 +27,11 @@ func TestPollWorkerDetectsChange(t *testing.T) {
 	var mu sync.Mutex
 	var events []PollEvent
 
+	ctx, cancel := context.WithCancel(t.Context())
 	commands := make(chan Command, 32)
 	states := make(chan PollEvent, 32)
-	shutdown := Run(t.Context(), []*Device{{Path: path1, Identifier: "di_1_01"}, {Path: path2, Identifier: "di_1_02"}}, commands, states)
+	doneSysfs := make(chan struct{})
+	go Run(ctx, []*Device{{Path: path1, Identifier: "di_1_01"}, {Path: path2, Identifier: "di_1_02"}}, commands, states, doneSysfs)
 
 	done := make(chan struct{})
 	go func() {
@@ -48,7 +50,8 @@ func TestPollWorkerDetectsChange(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	shutdown()
+	cancel()
+	<-doneSysfs
 	close(states)
 	<-done
 
@@ -69,11 +72,14 @@ func TestWorkerCommandTogglesRelay(t *testing.T) {
 	path := filepath.Join(tmp, "ro_value")
 	require.NoError(t, writeValue(path, Off))
 
+	ctx, cancel := context.WithCancel(t.Context())
 	commands := make(chan Command, 32)
 	states := make(chan PollEvent, 32)
-	shutdown := Run(t.Context(), []*Device{{Path: path, Identifier: "ro_1_01", Type: RelayOutput, Value: Off}}, commands, states)
+	doneSysfs := make(chan struct{})
+	go Run(ctx, []*Device{{Path: path, Identifier: "ro_1_01", Type: RelayOutput, Value: Off}}, commands, states, doneSysfs)
 	defer func() {
-		shutdown()
+		cancel()
+		<-doneSysfs
 		close(states)
 	}()
 
