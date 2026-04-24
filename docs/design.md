@@ -48,6 +48,59 @@ This keeps ownership explicit.
 It also fits sysfs, MQTT, and Modbus well.
 Each integration can own its protocol or device state locally while the controller remains the only router between domains.
 
+### Runtime Flow
+
+The controller is the central coordinator.
+It reads state changes from integrations, translates them into domain events, applies bindings, and sends commands back to integrations.
+
+For the current local sysfs flow, that looks like this.
+
+```text
+                states
+  +------------------------------+
+  |                              |
+  v                              |
++--------+    domain logic    +------------+    commands    +--------+
+| sysfs  | -----------------> | controller | -------------> | sysfs  |
+| actor  |                    |            |                | actor  |
++--------+ <----------------- +------------+ <------------- +--------+
+              owned state                           owned devices
+```
+
+The left and right `sysfs` boxes are the same actor viewed from two directions.
+The important part is the direction of flow.
+The controller reads `states` from the actor and writes `commands` back to it.
+
+The current local light path is:
+
+```text
+sysfs state
+  -> digital input event
+  -> push button event
+  -> binding lookup
+  -> light lookup
+  -> relay lookup
+  -> sysfs command
+```
+
+That same pattern should extend to future integrations.
+
+```text
+             states                         commands
+  +------+ ----------> +------------+ <---------- +------+
+  | sysfs|             | controller |             | mqtt |
+  +------+ <---------- +------------+ ----------> +------+
+             commands                      states
+
+  +--------+ ---------> +------------+ <--------- +-------+
+  | modbus |            | controller |            | dali  |
+  +--------+ <--------- +------------+ ---------> +-------+
+             commands                      states
+```
+
+This keeps the runtime wiring explicit.
+It also avoids a mesh where integrations talk directly to each other.
+
 ### Transport Options
 
 | Transport      | Use Case                 | Notes                             |
