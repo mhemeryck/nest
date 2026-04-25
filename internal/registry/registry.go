@@ -7,6 +7,7 @@ import (
 )
 
 type Index struct {
+	MQTT                  entity.MQTT
 	DigitalInputsByDevice map[entity.DeviceID]entity.DigitalInput
 	PushButtonsByID       map[entity.PushButtonID]entity.PushButton
 	PushButtonsByInputID  map[entity.DigitalInputID][]entity.PushButton
@@ -18,6 +19,7 @@ type Index struct {
 
 func Build(root *entity.Root) *Index {
 	index := &Index{
+		MQTT:                  root.MQTT,
 		DigitalInputsByDevice: make(map[entity.DeviceID]entity.DigitalInput, len(root.DigitalInputs)),
 		PushButtonsByID:       make(map[entity.PushButtonID]entity.PushButton, len(root.PushButtons)),
 		PushButtonsByInputID:  make(map[entity.DigitalInputID][]entity.PushButton),

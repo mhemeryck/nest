@@ -208,6 +208,24 @@ func TestValidate(t *testing.T) {
 			},
 			message: `bindings[1]: duplicate binding button "button" light "light" action "toggle"`,
 		},
+		{
+			name: "requires mqtt broker when enabled",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				MQTT:   MQTTConfig{Enabled: true, UnitID: "tesla", ClientID: "nest-tesla"},
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+			},
+			message: "mqtt.broker: required",
+		},
+		{
+			name: "requires mqtt unit id when enabled",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				MQTT:   MQTTConfig{Enabled: true, Broker: "tcp://emqx:1883", ClientID: "nest-tesla"},
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+			},
+			message: "mqtt.unit_id: required",
+		},
 	}
 
 	for _, tt := range tests {
@@ -222,6 +240,7 @@ func TestValidate(t *testing.T) {
 func TestValidateAcceptsValidFile(t *testing.T) {
 	file := Root{
 		Sysfs: SysfsConfig{Root: "/tmp"},
+		MQTT:  MQTTConfig{Enabled: true, Broker: "tcp://emqx:1883", UnitID: "tesla", ClientID: "nest-tesla"},
 		DigitalInputs: []DigitalInputConfig{
 			{ID: "office_button_input", Device: "di_3_16"},
 		},

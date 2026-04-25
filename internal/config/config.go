@@ -20,6 +20,7 @@ var (
 
 type Root struct {
 	Sysfs         SysfsConfig          `yaml:"sysfs"`
+	MQTT          MQTTConfig           `yaml:"mqtt"`
 	DigitalInputs []DigitalInputConfig `yaml:"digital_inputs"`
 	PushButtons   []PushButtonConfig   `yaml:"push_buttons"`
 	Lights        []LightConfig        `yaml:"lights"`
@@ -29,6 +30,16 @@ type Root struct {
 
 type SysfsConfig struct {
 	Root string `yaml:"root"`
+}
+
+type MQTTConfig struct {
+	Enabled         bool   `yaml:"enabled"`
+	Broker          string `yaml:"broker"`
+	UnitID          string `yaml:"unit_id"`
+	ClientID        string `yaml:"client_id"`
+	Username        string `yaml:"username"`
+	Password        string `yaml:"password"`
+	DiscoveryPrefix string `yaml:"discovery_prefix"`
 }
 
 type DigitalInputConfig struct {
@@ -119,6 +130,7 @@ func Validate(f *Root) error {
 	errs = errors.Join(
 		errs,
 		validateSysfs(f.Sysfs),
+		validateMQTT(f.MQTT),
 		inputErr,
 		buttonErr,
 		relayErr,
@@ -131,6 +143,31 @@ func Validate(f *Root) error {
 
 func validateSysfs(sysfs SysfsConfig) error {
 	return validateRequiredField("sysfs.root", sysfs.Root)
+}
+
+func validateMQTT(mqtt MQTTConfig) error {
+	var errs error
+	if !mqtt.Enabled {
+		return nil
+	}
+
+	errs = errors.Join(
+		errs,
+		validateRequiredField("mqtt.broker", mqtt.Broker),
+		validateRequiredField("mqtt.unit_id", mqtt.UnitID),
+		validateRequiredField("mqtt.client_id", mqtt.ClientID),
+	)
+	if mqtt.DiscoveryPrefix != "" {
+		errs = errors.Join(errs, validateNoOuterWhitespace("mqtt.discovery_prefix", mqtt.DiscoveryPrefix))
+	}
+	if mqtt.Username != "" {
+		errs = errors.Join(errs, validateNoOuterWhitespace("mqtt.username", mqtt.Username))
+	}
+	if mqtt.Password != "" {
+		errs = errors.Join(errs, validateNoOuterWhitespace("mqtt.password", mqtt.Password))
+	}
+
+	return errs
 }
 
 func validateDigitalInputs(inputs []DigitalInputConfig) (map[string]struct{}, error) {

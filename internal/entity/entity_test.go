@@ -11,6 +11,7 @@ import (
 func TestFromConfig(t *testing.T) {
 	root := FromConfig(&config.Root{
 		Sysfs: config.SysfsConfig{Root: "test/fixtures"},
+		MQTT:  config.MQTTConfig{Enabled: true, Broker: "tcp://emqx:1883", UnitID: "tesla", ClientID: "nest-tesla", DiscoveryPrefix: "homeassistant"},
 		DigitalInputs: []config.DigitalInputConfig{{
 			ID:     "office_button_input",
 			Device: "di_3_16",
@@ -39,6 +40,7 @@ func TestFromConfig(t *testing.T) {
 
 	require.NotNil(t, root)
 	assert.Equal(t, "test/fixtures", root.SysfsRoot)
+	assert.Equal(t, MQTT{Enabled: true, Broker: "tcp://emqx:1883", UnitID: "tesla", ClientID: "nest-tesla", DiscoveryPrefix: "homeassistant"}, root.MQTT)
 	assert.Equal(t, []DigitalInput{{ID: DigitalInputID("office_button_input"), Device: DeviceID("di_3_16")}}, root.DigitalInputs)
 	assert.Equal(t, []PushButton{{ID: PushButtonID("office_button"), Name: "Office button", Input: DigitalInputID("office_button_input")}}, root.PushButtons)
 	assert.Equal(t, []Light{{ID: LightID("office_light"), Name: "Office light", Relay: RelayID("office_light_relay")}}, root.Lights)
