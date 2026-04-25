@@ -72,7 +72,7 @@ func TestHandleStateChangeTogglesLightRelay(t *testing.T) {
 	}()
 
 	logs := captureLogs(t, func() {
-		handleStateChange(index, commands, sysfs.StateChange{
+		handleStateChange(t.Context(), index, commands, sysfs.StateChange{
 			Device:   sysfs.Device{Identifier: "di_3_16", Path: "/sys/di_3_16/di_value"},
 			OldValue: sysfs.Off,
 			NewValue: sysfs.On,
@@ -94,7 +94,7 @@ func TestHandleStateChangeLogsRawStateChangeForUnknownDevice(t *testing.T) {
 	index := registry.Build(&entity.Root{})
 
 	logs := captureLogs(t, func() {
-		handleStateChange(index, nil, sysfs.StateChange{
+		handleStateChange(t.Context(), index, nil, sysfs.StateChange{
 			Device:   sysfs.Device{Identifier: "ro_3_14", Path: "/sys/ro_3_14/ro_value"},
 			OldValue: sysfs.Off,
 			NewValue: sysfs.On,
@@ -105,6 +105,37 @@ func TestHandleStateChangeLogsRawStateChangeForUnknownDevice(t *testing.T) {
 	assert.Contains(t, logs, "state change")
 	assert.Contains(t, logs, "ro_3_14")
 	assert.NotContains(t, logs, "push button event")
+}
+
+func TestHandleStateChangeDoesNotBlockCommandSendAfterCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	index := registry.Build(&entity.Root{
+		DigitalInputs: []entity.DigitalInput{{ID: entity.DigitalInputID("office_button_input"), Device: entity.DeviceID("di_3_16")}},
+		PushButtons:   []entity.PushButton{{ID: entity.PushButtonID("office_button"), Name: "Office button", Input: entity.DigitalInputID("office_button_input")}},
+		Lights:        []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
+		Relays:        []entity.Relay{{ID: entity.RelayID("office_light_relay"), Name: "Office light relay", Device: entity.DeviceID("ro_3_14")}},
+		Bindings:      []entity.Binding{{Button: entity.PushButtonID("office_button"), Light: entity.LightID("office_light"), Action: entity.LightActionToggle}},
+	})
+	commands := make(chan sysfs.Command)
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		handleStateChange(ctx, index, commands, sysfs.StateChange{
+			Device:   sysfs.Device{Identifier: "di_3_16", Path: "/sys/di_3_16/di_value"},
+			OldValue: sysfs.Off,
+			NewValue: sysfs.On,
+			IsRising: true,
+		})
+	}()
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("handleStateChange did not return after cancellation")
+	}
 }
 
 func captureLogs(t *testing.T, fn func()) string {

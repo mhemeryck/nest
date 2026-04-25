@@ -28,15 +28,15 @@ func Run(
 				return
 			}
 
-			handleStateChange(index, sysfsCommands, stateChange)
+			handleStateChange(ctx, index, sysfsCommands, stateChange)
 		}
 	}
 }
 
-func handleStateChange(index *registry.Index, sysfsCommands chan<- sysfs.Command, stateChange sysfs.StateChange) {
+func handleStateChange(ctx context.Context, index *registry.Index, sysfsCommands chan<- sysfs.Command, stateChange sysfs.StateChange) {
 	digitalInputEvent, ok := event.StateChangeToDigitalInputEvent(index, stateChange)
 	if ok {
-		handleEvent(index, sysfsCommands, digitalInputEvent)
+		handleEvent(ctx, index, sysfsCommands, digitalInputEvent)
 		return
 	}
 
@@ -55,7 +55,7 @@ func handleStateChange(index *registry.Index, sysfsCommands chan<- sysfs.Command
 	)
 }
 
-func handleEvent(index *registry.Index, sysfsCommands chan<- sysfs.Command, busEvent event.Event) {
+func handleEvent(ctx context.Context, index *registry.Index, sysfsCommands chan<- sysfs.Command, busEvent event.Event) {
 	switch busEvent.Kind {
 	case event.DigitalInputKind:
 		slog.Info(
@@ -71,7 +71,7 @@ func handleEvent(index *registry.Index, sysfsCommands chan<- sysfs.Command, busE
 		)
 
 		for _, pushButtonEvent := range event.DigitalInputEventToPushButtonEvents(index, *busEvent.DigitalInput) {
-			handleEvent(index, sysfsCommands, pushButtonEvent)
+			handleEvent(ctx, index, sysfsCommands, pushButtonEvent)
 		}
 	case event.PushButtonKind:
 		slog.Info(
@@ -84,17 +84,17 @@ func handleEvent(index *registry.Index, sysfsCommands chan<- sysfs.Command, busE
 			busEvent.PushButton.Kind,
 		)
 
-		handlePushButtonEvent(index, sysfsCommands, *busEvent.PushButton)
+		handlePushButtonEvent(ctx, index, sysfsCommands, *busEvent.PushButton)
 	}
 }
 
-func handlePushButtonEvent(index *registry.Index, sysfsCommands chan<- sysfs.Command, pushButtonEvent event.PushButtonEvent) {
+func handlePushButtonEvent(ctx context.Context, index *registry.Index, sysfsCommands chan<- sysfs.Command, pushButtonEvent event.PushButtonEvent) {
 	for _, binding := range index.BindingsByButtonID[pushButtonEvent.ButtonID] {
-		handleBinding(index, sysfsCommands, binding)
+		handleBinding(ctx, index, sysfsCommands, binding)
 	}
 }
 
-func handleBinding(index *registry.Index, sysfsCommands chan<- sysfs.Command, binding entity.Binding) {
+func handleBinding(ctx context.Context, index *registry.Index, sysfsCommands chan<- sysfs.Command, binding entity.Binding) {
 	if binding.Action != entity.LightActionToggle {
 		slog.Error("unsupported light action", "action", binding.Action)
 		return
@@ -112,9 +112,13 @@ func handleBinding(index *registry.Index, sysfsCommands chan<- sysfs.Command, bi
 		return
 	}
 
-	sysfsCommands <- sysfs.Command{
+	select {
+	case <-ctx.Done():
+		return
+	case sysfsCommands <- sysfs.Command{
 		Kind:     sysfs.ToggleCommand,
 		DeviceID: string(relay.Device),
+	}:
 	}
 
 	slog.Info(
