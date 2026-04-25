@@ -91,7 +91,7 @@ func TestWorkerCommandTogglesRelay(t *testing.T) {
 		assert.Equal(t, Off, event.OldValue)
 		assert.Equal(t, On, event.NewValue)
 	case <-time.After(time.Second):
-		t.Fatal("expected relay toggle event")
+		require.Fail(t, "expected relay toggle event")
 	}
 
 	data, err := os.ReadFile(path)
@@ -122,7 +122,7 @@ func TestWorkerCommandTogglesRelayFromActualSysfsState(t *testing.T) {
 		assert.Equal(t, Off, event.NewValue)
 		assert.Equal(t, On, event.OldValue)
 	case <-time.After(time.Second):
-		t.Fatal("expected relay toggle event")
+		require.Fail(t, "expected relay toggle event")
 	}
 
 	data, err := os.ReadFile(path)
@@ -137,7 +137,7 @@ func TestHandleCommandIgnoresUnknownDevice(t *testing.T) {
 
 	select {
 	case event := <-states:
-		t.Fatalf("unexpected state event: %+v", event)
+		require.Failf(t, "unexpected state event", "%+v", event)
 	default:
 	}
 }
@@ -152,7 +152,7 @@ func TestHandleCommandIgnoresUnsupportedCommand(t *testing.T) {
 
 	select {
 	case event := <-states:
-		t.Fatalf("unexpected state event: %+v", event)
+		require.Failf(t, "unexpected state event", "%+v", event)
 	default:
 	}
 	assert.Equal(t, Off, device.Value)
@@ -165,7 +165,7 @@ func TestPollDevicesIgnoresReadErrors(t *testing.T) {
 
 	select {
 	case event := <-states:
-		t.Fatalf("unexpected state event: %+v", event)
+		require.Failf(t, "unexpected state event", "%+v", event)
 	default:
 	}
 }
@@ -195,7 +195,7 @@ func TestHandleCommandReturnsDuringShutdownWhenStateChannelBlocks(t *testing.T) 
 	select {
 	case <-done:
 	case <-time.After(time.Second):
-		t.Fatal("handleCommand did not return after shutdown")
+		require.Fail(t, "handleCommand did not return after shutdown")
 	}
 }
 
@@ -217,7 +217,7 @@ func TestHandleCommandLogsWriteFailure(t *testing.T) {
 	assert.Contains(t, buffer.String(), "sysfs read failed")
 	select {
 	case event := <-states:
-		t.Fatalf("unexpected state event: %+v", event)
+		require.Failf(t, "unexpected state event", "%+v", event)
 	default:
 	}
 }
@@ -243,7 +243,7 @@ func TestPollWorkerSkipsBufferedCommandAfterCancellation(t *testing.T) {
 	assert.Equal(t, "0\n", string(data))
 	select {
 	case event := <-states:
-		t.Fatalf("unexpected state event: %+v", event)
+		require.Failf(t, "unexpected state event", "%+v", event)
 	default:
 	}
 }

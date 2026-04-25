@@ -29,7 +29,7 @@ func TestRunReturnsOnSignal(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(time.Second):
-		t.Fatal("Run did not return after signal")
+		require.Fail(t, "Run did not return after signal")
 	}
 }
 
@@ -46,7 +46,7 @@ func TestRunReturnsWhenPollEventsClose(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(time.Second):
-		t.Fatal("Run did not return after poll event channel closed")
+		require.Fail(t, "Run did not return after poll event channel closed")
 	}
 }
 
@@ -134,7 +134,7 @@ func TestHandleStateChangeDoesNotBlockCommandSendAfterCancellation(t *testing.T)
 	select {
 	case <-done:
 	case <-time.After(time.Second):
-		t.Fatal("handleStateChange did not return after cancellation")
+		require.Fail(t, "handleStateChange did not return after cancellation")
 	}
 }
 

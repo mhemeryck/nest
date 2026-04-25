@@ -58,7 +58,7 @@ func TestRouteCommandsIgnoresUnknownDevice(t *testing.T) {
 
 	select {
 	case cmd := <-workerCommands:
-		t.Fatalf("unexpected forwarded command: %+v", cmd)
+		require.Failf(t, "unexpected forwarded command", "%+v", cmd)
 	default:
 	}
 }
