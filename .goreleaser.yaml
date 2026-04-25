@@ -1,0 +1,40 @@
+version: 2
+
+project_name: nest
+
+builds:
+  - id: nest
+    main: ./cmd/nest
+    binary: nest
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    goarm:
+      - "6"
+      - "7"
+
+archives:
+  - id: nest
+    ids:
+      - nest
+    formats:
+      - tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Os }}_
+      {{- .Arch }}
+      {{- with .Arm }}v{{ . }}{{ end }}
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  disable: true
