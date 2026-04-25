@@ -60,7 +60,14 @@ func main() {
 	states := make(chan sysfs.StateChange, 32)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	mqttStates, mqttDone := startMQTT(ctx, root, index)
+	var mqttStates chan nestmqtt.State
+	var mqttDone chan struct{}
+	if root.MQTT.Enabled {
+		mqttStates = make(chan nestmqtt.State, 64)
+		mqttCommands := make(chan nestmqtt.Command, 1)
+		mqttDone = make(chan struct{})
+		go nestmqtt.Run(ctx, root, index, mqttStates, mqttCommands, mqttDone)
+	}
 	sysfsDone := make(chan struct{})
 	go sysfs.Run(ctx, configuredDevices, commands, states, sysfsDone)
 
@@ -80,38 +87,6 @@ func main() {
 
 	slog.Info("shutting down")
 }
-
-func startMQTT(ctx context.Context, root *entity.Root, index *registry.Index) (chan nestmqtt.State, chan struct{}) {
-	if !root.MQTT.Enabled {
-		return nil, nil
-	}
-
-	cfg := mqttConfig(root.MQTT)
-	discoveryStates := nestmqtt.DiscoveryStates(cfg, root, index)
-	states := make(chan nestmqtt.State, len(discoveryStates)+64)
-	commands := make(chan nestmqtt.Command, 1)
-	done := make(chan struct{})
-	go nestmqtt.Run(ctx, cfg, states, commands, done)
-
-	for _, state := range discoveryStates {
-		states <- state
-	}
-
-	return states, done
-}
-
-func mqttConfig(cfg entity.MQTT) nestmqtt.Config {
-	return nestmqtt.Config{
-		Enabled:         cfg.Enabled,
-		Broker:          cfg.Broker,
-		UnitID:          cfg.UnitID,
-		ClientID:        cfg.ClientID,
-		Username:        cfg.Username,
-		Password:        cfg.Password,
-		DiscoveryPrefix: cfg.DiscoveryPrefix,
-	}
-}
-
 func configuredDevices(devices []*sysfs.Device, wanted []entity.DeviceID) ([]*sysfs.Device, []entity.DeviceID) {
 	byIdentifier := make(map[string]*sysfs.Device, len(devices))
 	for _, device := range devices {
