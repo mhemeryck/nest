@@ -29,6 +29,15 @@ When creating commit messages from the shell, do not embed literal `\n` escape s
 Prefer `git commit -F -` with a heredoc for multi-line messages.
 Using multiple `-m` flags is acceptable for short messages when the body does not need careful wrapping.
 
+## Pull Requests
+
+When creating a GitHub pull request, write the PR title and description as the intended squash commit message.
+The PR title should be the commit subject line and must follow the same 50-character guidance as commit messages.
+The PR description should be plain commit-message body text, not a template with `Summary` and `Verification` sections.
+Use the body to explain what changed and why, wrapping prose at 72 characters where practical.
+Do not include test checklists unless they are relevant to the final squash commit message.
+If verification details are useful during review, add them as a PR comment instead of putting them in the description.
+
 Example:
 
 ```
