@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    branches: [ "master" ]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version-file: go.mod
+        cache: true
+
+    - name: Create release tag
+      id: tag
+      run: |
+        existing_tag="$(git tag --points-at HEAD --list 'v[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]' | sort | tail -n 1)"
+        if [ -n "$existing_tag" ]; then
+          echo "reusing release tag: $existing_tag"
+          echo "tag=$existing_tag" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        tag="v$(date -u +'%Y.%m.%d-%H%M%S')"
+        git tag "$tag"
+        git push origin "$tag"
+        echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+    - name: Build and publish release
+      uses: goreleaser/goreleaser-action@v7
+      with:
+        distribution: goreleaser
+        version: latest
+        args: release --clean
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

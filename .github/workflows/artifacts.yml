@@ -1,0 +1,47 @@
+name: Artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag, or commit SHA to build. Defaults to the selected workflow ref.
+        required: false
+        type: string
+
+jobs:
+  artifacts:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+        ref: ${{ inputs.ref || github.ref }}
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version-file: go.mod
+        cache: true
+
+    - name: Check GoReleaser config
+      uses: goreleaser/goreleaser-action@v7
+      with:
+        distribution: goreleaser
+        version: latest
+        args: check
+
+    - name: Build snapshot artifacts
+      uses: goreleaser/goreleaser-action@v7
+      with:
+        distribution: goreleaser
+        version: latest
+        args: release --snapshot --clean --skip=publish
+
+    - name: Upload controller artifacts
+      uses: actions/upload-artifact@v7
+      with:
+        name: nest-controller-artifacts
+        path: |
+          dist/*.tar.gz
+          dist/checksums.txt
+        if-no-files-found: error
