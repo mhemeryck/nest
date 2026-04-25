@@ -10,12 +10,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPollEventToDigitalInputEvent(t *testing.T) {
+func TestStateChangeToDigitalInputEvent(t *testing.T) {
 	index := registry.Build(&entity.Root{
 		DigitalInputs: []entity.DigitalInput{{ID: entity.DigitalInputID("office_button_input"), Device: entity.DeviceID("di_3_16")}},
 	})
 
-	event, ok := PollEventToDigitalInputEvent(index, sysfs.PollEvent{
+	event, ok := StateChangeToDigitalInputEvent(index, sysfs.StateChange{
 		Device:   sysfs.Device{Identifier: "di_3_16"},
 		OldValue: sysfs.Off,
 		NewValue: sysfs.On,
@@ -31,10 +31,10 @@ func TestPollEventToDigitalInputEvent(t *testing.T) {
 	assert.False(t, event.DigitalInput.IsFalling)
 }
 
-func TestPollEventToDigitalInputEventIgnoresUnknownDevices(t *testing.T) {
+func TestStateChangeToDigitalInputEventIgnoresUnknownDevices(t *testing.T) {
 	index := registry.Build(&entity.Root{})
 
-	_, ok := PollEventToDigitalInputEvent(index, sysfs.PollEvent{
+	_, ok := StateChangeToDigitalInputEvent(index, sysfs.StateChange{
 		Device: sysfs.Device{Identifier: "ro_3_14"},
 	})
 	assert.False(t, ok)

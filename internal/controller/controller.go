@@ -1,56 +1,61 @@
 package controller
 
 import (
+	"context"
 	"log/slog"
-	"os"
 
+	"github.com/mhemeryck/nest/internal/entity"
 	"github.com/mhemeryck/nest/internal/event"
 	"github.com/mhemeryck/nest/internal/registry"
 	"github.com/mhemeryck/nest/internal/sysfs"
 )
 
 func Run(
+	ctx context.Context,
 	index *registry.Index,
-	pollEvents <-chan sysfs.PollEvent,
-	sigCh <-chan os.Signal,
+	sysfsCommands chan<- sysfs.Command,
+	stateChanges <-chan sysfs.StateChange,
+	done chan<- struct{},
 ) {
+	defer close(done)
+
 	for {
 		select {
-		case <-sigCh:
+		case <-ctx.Done():
 			return
-		case pollEvent, ok := <-pollEvents:
+		case stateChange, ok := <-stateChanges:
 			if !ok {
 				return
 			}
 
-			handlePollEvent(index, pollEvent)
+			handleStateChange(ctx, index, sysfsCommands, stateChange)
 		}
 	}
 }
 
-func handlePollEvent(index *registry.Index, pollEvent sysfs.PollEvent) {
-	digitalInputEvent, ok := event.PollEventToDigitalInputEvent(index, pollEvent)
+func handleStateChange(ctx context.Context, index *registry.Index, sysfsCommands chan<- sysfs.Command, stateChange sysfs.StateChange) {
+	digitalInputEvent, ok := event.StateChangeToDigitalInputEvent(index, stateChange)
 	if ok {
-		handleEvent(index, digitalInputEvent)
+		handleEvent(ctx, index, sysfsCommands, digitalInputEvent)
 		return
 	}
 
 	slog.Info(
-		"poll event",
+		"state change",
 		"identifier",
-		pollEvent.Device.Identifier,
+		stateChange.Device.Identifier,
 		"path",
-		pollEvent.Device.Path,
+		stateChange.Device.Path,
 		"old_value",
-		sysfs.PrintableValue(pollEvent.OldValue),
+		sysfs.PrintableValue(stateChange.OldValue),
 		"new_value",
-		sysfs.PrintableValue(pollEvent.NewValue),
+		sysfs.PrintableValue(stateChange.NewValue),
 		"rising",
-		pollEvent.IsRising,
+		stateChange.IsRising,
 	)
 }
 
-func handleEvent(index *registry.Index, busEvent event.Event) {
+func handleEvent(ctx context.Context, index *registry.Index, sysfsCommands chan<- sysfs.Command, busEvent event.Event) {
 	switch busEvent.Kind {
 	case event.DigitalInputKind:
 		slog.Info(
@@ -66,7 +71,7 @@ func handleEvent(index *registry.Index, busEvent event.Event) {
 		)
 
 		for _, pushButtonEvent := range event.DigitalInputEventToPushButtonEvents(index, *busEvent.DigitalInput) {
-			handleEvent(index, pushButtonEvent)
+			handleEvent(ctx, index, sysfsCommands, pushButtonEvent)
 		}
 	case event.PushButtonKind:
 		slog.Info(
@@ -78,5 +83,53 @@ func handleEvent(index *registry.Index, busEvent event.Event) {
 			"kind",
 			busEvent.PushButton.Kind,
 		)
+
+		handlePushButtonEvent(ctx, index, sysfsCommands, *busEvent.PushButton)
 	}
+}
+
+func handlePushButtonEvent(ctx context.Context, index *registry.Index, sysfsCommands chan<- sysfs.Command, pushButtonEvent event.PushButtonEvent) {
+	for _, binding := range index.BindingsByButtonID[pushButtonEvent.ButtonID] {
+		handleBinding(ctx, index, sysfsCommands, binding)
+	}
+}
+
+func handleBinding(ctx context.Context, index *registry.Index, sysfsCommands chan<- sysfs.Command, binding entity.Binding) {
+	if binding.Action != entity.LightActionToggle {
+		slog.Error("unsupported light action", "action", binding.Action)
+		return
+	}
+
+	light, ok := index.LightsByID[binding.Light]
+	if !ok {
+		slog.Error("binding references unknown light", "light_id", binding.Light)
+		return
+	}
+
+	relay, ok := index.RelaysByID[light.Relay]
+	if !ok {
+		slog.Error("light references unknown relay", "light_id", light.ID, "relay_id", light.Relay)
+		return
+	}
+
+	select {
+	case <-ctx.Done():
+		return
+	case sysfsCommands <- sysfs.Command{
+		Kind:     sysfs.ToggleCommand,
+		DeviceID: string(relay.Device),
+	}:
+	}
+
+	slog.Info(
+		"light toggled",
+		"light_id",
+		light.ID,
+		"name",
+		light.Name,
+		"relay_id",
+		relay.ID,
+		"device_id",
+		relay.Device,
+	)
 }

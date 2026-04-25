@@ -7,13 +7,20 @@ digital_inputs:
 
 push_buttons:
   - id: office_button
-    name: Office shade button
+    name: Office light button
     input: office_button_input
 
 relays:
-  - id: office_shade_up
-    name: Office shade up
+  - id: office_light_relay
+    name: Office light relay
     device: ro_3_14
-  - id: office_shade_down
-    name: Office shade down
-    device: ro_3_13
+
+lights:
+  - id: office_light
+    name: Office light
+    relay: office_light_relay
+
+bindings:
+  - button: office_button
+    light: office_light
+    action: toggle

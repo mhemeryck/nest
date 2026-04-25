@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log/slog"
 	"os"
@@ -54,18 +55,24 @@ func main() {
 		slog.Info("configured device", "identifier", device.Identifier, "path", device.Path)
 	}
 
-	configs := sysfs.BuildWorkerConfigs(configuredDevices)
+	commands := make(chan sysfs.Command, 32)
+	states := make(chan sysfs.StateChange, 32)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	sysfsDone := make(chan struct{})
+	go sysfs.Run(ctx, configuredDevices, commands, states, sysfsDone)
 
-	stopChs, pollEvents := sysfs.StartWorkers(configs)
+	controllerDone := make(chan struct{})
+	go controller.Run(ctx, index, commands, states, controllerDone)
 
 	slog.Info("polling devices", "message", "press Ctrl+C to exit")
 
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	controller.Run(index, pollEvents, sigCh)
+	<-controllerDone
+	stop()
+	<-sysfsDone
+	close(states)
 
 	slog.Info("shutting down")
-	sysfs.StopWorkers(stopChs)
 }
 
 func configuredDevices(devices []*sysfs.Device, wanted []entity.DeviceID) ([]*sysfs.Device, []entity.DeviceID) {

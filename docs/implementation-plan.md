@@ -30,13 +30,15 @@ complete, and gives better observability while refining controller behavior.
 
 **Deliverable**: Reliable low-level sysfs primitives for reading, writing, and polling devices.
 
-## Phase 2: Minimal Config Model
+## Phase 2: Minimal Local Model
 
-- [ ] Define a minimal config schema for local devices and mappings
-- [ ] Load config from file and validate required fields
-- [ ] Represent local lights and relay targets without transport concerns
+- [x] Define a minimal config schema for local devices and mappings
+- [x] Load config from file and validate required fields
+- [x] Represent local lights and relay targets without transport concerns
+- [x] Build startup indexes for local entities and bindings
+- [x] Support local `push_button -> light -> relay` execution without transport concerns
 
-**Deliverable**: `nest` can describe a single-unit setup from configuration.
+**Deliverable**: `nest` can describe and execute a single-unit local light setup from configuration.
 
 ## Phase 3: Local Cover Controller
 
@@ -61,6 +63,10 @@ complete, and gives better observability while refining controller behavior.
 - [ ] Edge handling and button event semantics
 - [ ] Multi-input triggers for the same light or relay
 
+Current status:
+Rising-edge to `pressed` push button events exists already.
+Debounce and richer button semantics still need to be added.
+
 **Deliverable**: Stable local input handling that can support real wall-switch behavior.
 
 ## Phase 6: Cover Refinement
@@ -80,7 +86,7 @@ complete, and gives better observability while refining controller behavior.
 
 - [ ] Define input-unit to output-unit light mappings
 - [ ] Support deterministic light toggle behavior across units
-- [ ] Reuse the config and event model proven by local cover control
+- [ ] Reuse the local light, binding, and event model over inter-unit transport
 
 **Deliverable**: Light control model is defined in a way that can be executed over inter-unit transport.
 
@@ -112,7 +118,7 @@ rather than local observability or testability.
 These should be decided before transport and entity complexity increase.
 
 - [ ] Testing strategy (mock sysfs vs real hardware)
-- [ ] Config file shape and CLI interface design
+- [x] Config file shape and CLI interface design
 - [ ] Local event model for buttons, toggles, and repeated presses
 
 ## Open Questions

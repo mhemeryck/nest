@@ -18,8 +18,10 @@ func TestLoad(t *testing.T) {
 	assert.Equal(t, "test/fixtures", file.Sysfs.Root)
 	assert.Len(t, file.DigitalInputs, 1)
 	assert.Len(t, file.PushButtons, 1)
-	assert.Len(t, file.Relays, 2)
-	assert.Equal(t, []string{"di_3_16", "ro_3_14", "ro_3_13"}, DeviceIDs(file))
+	assert.Len(t, file.Lights, 1)
+	assert.Len(t, file.Relays, 1)
+	assert.Len(t, file.Bindings, 1)
+	assert.Equal(t, []string{"di_3_16", "ro_3_14"}, DeviceIDs(file))
 }
 
 func TestLoadRejectsUnknownFields(t *testing.T) {
@@ -125,6 +127,14 @@ func TestValidate(t *testing.T) {
 			message: "push_buttons[0].input: must not have leading or trailing whitespace",
 		},
 		{
+			name: "requires lights to reference known relays",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				Lights: []LightConfig{{ID: "light", Name: "Light", Relay: "missing"}},
+			},
+			message: `lights[0].relay: unknown relay "missing"`,
+		},
+		{
 			name: "rejects invalid relay devices",
 			file: Root{
 				Sysfs:  SysfsConfig{Root: "/tmp"},
@@ -151,6 +161,53 @@ func TestValidate(t *testing.T) {
 			},
 			message: "relays[0].device: must not have leading or trailing whitespace",
 		},
+		{
+			name: "requires bindings to reference known push buttons",
+			file: Root{
+				Sysfs:    SysfsConfig{Root: "/tmp"},
+				Relays:   []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+				Lights:   []LightConfig{{ID: "light", Name: "Light", Relay: "relay"}},
+				Bindings: []BindingConfig{{Button: "missing", Light: "light", Action: BindingActionToggle}},
+			},
+			message: `bindings[0].button: unknown push button "missing"`,
+		},
+		{
+			name: "requires bindings to reference known lights",
+			file: Root{
+				Sysfs:         SysfsConfig{Root: "/tmp"},
+				DigitalInputs: []DigitalInputConfig{{ID: "button_input", Device: "di_3_16"}},
+				PushButtons:   []PushButtonConfig{{ID: "button", Name: "Button", Input: "button_input"}},
+				Bindings:      []BindingConfig{{Button: "button", Light: "missing", Action: BindingActionToggle}},
+			},
+			message: `bindings[0].light: unknown light "missing"`,
+		},
+		{
+			name: "rejects unsupported binding actions",
+			file: Root{
+				Sysfs:         SysfsConfig{Root: "/tmp"},
+				DigitalInputs: []DigitalInputConfig{{ID: "button_input", Device: "di_3_16"}},
+				PushButtons:   []PushButtonConfig{{ID: "button", Name: "Button", Input: "button_input"}},
+				Relays:        []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+				Lights:        []LightConfig{{ID: "light", Name: "Light", Relay: "relay"}},
+				Bindings:      []BindingConfig{{Button: "button", Light: "light", Action: "press"}},
+			},
+			message: `bindings[0].action: unsupported action "press"`,
+		},
+		{
+			name: "rejects duplicate bindings",
+			file: Root{
+				Sysfs:         SysfsConfig{Root: "/tmp"},
+				DigitalInputs: []DigitalInputConfig{{ID: "button_input", Device: "di_3_16"}},
+				PushButtons:   []PushButtonConfig{{ID: "button", Name: "Button", Input: "button_input"}},
+				Relays:        []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+				Lights:        []LightConfig{{ID: "light", Name: "Light", Relay: "relay"}},
+				Bindings: []BindingConfig{
+					{Button: "button", Light: "light", Action: BindingActionToggle},
+					{Button: "button", Light: "light", Action: BindingActionToggle},
+				},
+			},
+			message: `bindings[1]: duplicate binding button "button" light "light" action "toggle"`,
+		},
 	}
 
 	for _, tt := range tests {
@@ -172,8 +229,13 @@ func TestValidateAcceptsValidFile(t *testing.T) {
 			{ID: "office_button", Name: "Office button", Input: "office_button_input"},
 		},
 		Relays: []RelayConfig{
-			{ID: "office_shade_up", Name: "Office shade up", Device: "ro_3_14"},
-			{ID: "office_shade_down", Name: "Office shade down", Device: "ro_3_13"},
+			{ID: "office_light_relay", Name: "Office light relay", Device: "ro_3_14"},
+		},
+		Lights: []LightConfig{
+			{ID: "office_light", Name: "Office light", Relay: "office_light_relay"},
+		},
+		Bindings: []BindingConfig{
+			{Button: "office_button", Light: "office_light", Action: BindingActionToggle},
 		},
 	}
 

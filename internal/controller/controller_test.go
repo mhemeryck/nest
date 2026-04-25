@@ -2,8 +2,10 @@ package controller
 
 import (
 	"bytes"
+	"context"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -15,53 +17,62 @@ import (
 )
 
 func TestRunReturnsOnSignal(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
 	index := registry.Build(&entity.Root{})
-	pollEvents := make(chan sysfs.PollEvent)
-	sigCh := make(chan os.Signal, 1)
+	stateChanges := make(chan sysfs.StateChange)
+	commands := make(chan sysfs.Command)
 	done := make(chan struct{})
+	go Run(ctx, index, commands, stateChanges, done)
 
-	go func() {
-		Run(index, pollEvents, sigCh)
-		close(done)
-	}()
-
-	sigCh <- os.Interrupt
+	cancel()
 
 	select {
 	case <-done:
 	case <-time.After(time.Second):
-		t.Fatal("Run did not return after signal")
+		require.Fail(t, "Run did not return after signal")
 	}
 }
 
 func TestRunReturnsWhenPollEventsClose(t *testing.T) {
+	ctx := t.Context()
 	index := registry.Build(&entity.Root{})
-	pollEvents := make(chan sysfs.PollEvent)
-	sigCh := make(chan os.Signal)
+	stateChanges := make(chan sysfs.StateChange)
+	commands := make(chan sysfs.Command)
 	done := make(chan struct{})
+	go Run(ctx, index, commands, stateChanges, done)
 
-	go func() {
-		Run(index, pollEvents, sigCh)
-		close(done)
-	}()
-
-	close(pollEvents)
+	close(stateChanges)
 
 	select {
 	case <-done:
 	case <-time.After(time.Second):
-		t.Fatal("Run did not return after poll event channel closed")
+		require.Fail(t, "Run did not return after poll event channel closed")
 	}
 }
 
-func TestHandlePollEventLogsPushButtonEvent(t *testing.T) {
+func TestHandleStateChangeTogglesLightRelay(t *testing.T) {
+	relayPath := filepath.Join(t.TempDir(), "ro_value")
+	require.NoError(t, os.WriteFile(relayPath, []byte("0\n"), 0o644))
+
 	index := registry.Build(&entity.Root{
 		DigitalInputs: []entity.DigitalInput{{ID: entity.DigitalInputID("office_button_input"), Device: entity.DeviceID("di_3_16")}},
 		PushButtons:   []entity.PushButton{{ID: entity.PushButtonID("office_button"), Name: "Office button", Input: entity.DigitalInputID("office_button_input")}},
+		Lights:        []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
+		Relays:        []entity.Relay{{ID: entity.RelayID("office_light_relay"), Name: "Office light relay", Device: entity.DeviceID("ro_3_14")}},
+		Bindings:      []entity.Binding{{Button: entity.PushButtonID("office_button"), Light: entity.LightID("office_light"), Action: entity.LightActionToggle}},
 	})
+	commands := make(chan sysfs.Command, 1)
+	commandDone := make(chan struct{})
+	go func() {
+		defer close(commandDone)
+		cmd := <-commands
+		require.Equal(t, sysfs.ToggleCommand, cmd.Kind)
+		require.Equal(t, "ro_3_14", cmd.DeviceID)
+		require.NoError(t, os.WriteFile(relayPath, []byte("1\n"), 0o644))
+	}()
 
 	logs := captureLogs(t, func() {
-		handlePollEvent(index, sysfs.PollEvent{
+		handleStateChange(t.Context(), index, commands, sysfs.StateChange{
 			Device:   sysfs.Device{Identifier: "di_3_16", Path: "/sys/di_3_16/di_value"},
 			OldValue: sysfs.Off,
 			NewValue: sysfs.On,
@@ -71,14 +82,19 @@ func TestHandlePollEventLogsPushButtonEvent(t *testing.T) {
 
 	assert.Contains(t, logs, "digital input event")
 	assert.Contains(t, logs, "push button event")
-	assert.Contains(t, logs, "office_button")
+	assert.Contains(t, logs, "light toggled")
+	<-commandDone
+
+	data, err := os.ReadFile(relayPath)
+	require.NoError(t, err)
+	assert.Equal(t, "1\n", string(data))
 }
 
-func TestHandlePollEventLogsRawPollEventForUnknownDevice(t *testing.T) {
+func TestHandleStateChangeLogsRawStateChangeForUnknownDevice(t *testing.T) {
 	index := registry.Build(&entity.Root{})
 
 	logs := captureLogs(t, func() {
-		handlePollEvent(index, sysfs.PollEvent{
+		handleStateChange(t.Context(), index, nil, sysfs.StateChange{
 			Device:   sysfs.Device{Identifier: "ro_3_14", Path: "/sys/ro_3_14/ro_value"},
 			OldValue: sysfs.Off,
 			NewValue: sysfs.On,
@@ -86,9 +102,40 @@ func TestHandlePollEventLogsRawPollEventForUnknownDevice(t *testing.T) {
 		})
 	})
 
-	assert.Contains(t, logs, "poll event")
+	assert.Contains(t, logs, "state change")
 	assert.Contains(t, logs, "ro_3_14")
 	assert.NotContains(t, logs, "push button event")
+}
+
+func TestHandleStateChangeDoesNotBlockCommandSendAfterCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	index := registry.Build(&entity.Root{
+		DigitalInputs: []entity.DigitalInput{{ID: entity.DigitalInputID("office_button_input"), Device: entity.DeviceID("di_3_16")}},
+		PushButtons:   []entity.PushButton{{ID: entity.PushButtonID("office_button"), Name: "Office button", Input: entity.DigitalInputID("office_button_input")}},
+		Lights:        []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
+		Relays:        []entity.Relay{{ID: entity.RelayID("office_light_relay"), Name: "Office light relay", Device: entity.DeviceID("ro_3_14")}},
+		Bindings:      []entity.Binding{{Button: entity.PushButtonID("office_button"), Light: entity.LightID("office_light"), Action: entity.LightActionToggle}},
+	})
+	commands := make(chan sysfs.Command)
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		handleStateChange(ctx, index, commands, sysfs.StateChange{
+			Device:   sysfs.Device{Identifier: "di_3_16", Path: "/sys/di_3_16/di_value"},
+			OldValue: sysfs.Off,
+			NewValue: sysfs.On,
+			IsRising: true,
+		})
+	}()
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		require.Fail(t, "handleStateChange did not return after cancellation")
+	}
 }
 
 func captureLogs(t *testing.T, fn func()) string {
