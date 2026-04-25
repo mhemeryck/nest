@@ -221,3 +221,29 @@ func TestHandleCommandLogsWriteFailure(t *testing.T) {
 	default:
 	}
 }
+
+func TestPollWorkerSkipsBufferedCommandAfterCancellation(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "ro_value")
+	require.NoError(t, writeValue(path, Off))
+
+	ctx, cancel := context.WithCancel(t.Context())
+	commands := make(chan Command, 1)
+	states := make(chan StateChange, 1)
+	commands <- Command{Kind: ToggleCommand, DeviceID: "ro_1_01"}
+	cancel()
+
+	pollWorker(ctx, WorkerConfig{
+		Interval: time.Hour,
+		Devices:  []*Device{{Path: path, Identifier: "ro_1_01", Type: RelayOutput, Value: Off}},
+	}, commands, states)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, "0\n", string(data))
+	select {
+	case event := <-states:
+		t.Fatalf("unexpected state event: %+v", event)
+	default:
+	}
+}

@@ -25,6 +25,11 @@ func pollWorker(
 		case <-ctx.Done():
 			return
 		case cmd := <-commands:
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 			handleCommand(devicesByID, cmd, ctx, states)
 		case <-ticker.C:
 			pollDevices(cfg.Devices, ctx, states)
