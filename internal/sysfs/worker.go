@@ -25,10 +25,8 @@ func pollWorker(
 		case <-ctx.Done():
 			return
 		case cmd := <-commands:
-			select {
-			case <-ctx.Done():
+			if ctx.Err() != nil {
 				return
-			default:
 			}
 			handleCommand(devicesByID, cmd, ctx, states)
 		case <-ticker.C:
