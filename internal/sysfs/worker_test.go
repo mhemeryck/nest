@@ -99,6 +99,37 @@ func TestWorkerCommandTogglesRelay(t *testing.T) {
 	assert.Equal(t, "1\n", string(data))
 }
 
+func TestWorkerCommandTogglesRelayFromActualSysfsState(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "ro_value")
+	require.NoError(t, writeValue(path, On))
+
+	ctx, cancel := context.WithCancel(t.Context())
+	commands := make(chan Command, 32)
+	states := make(chan StateChange, 32)
+	doneSysfs := make(chan struct{})
+	go Run(ctx, []*Device{{Path: path, Identifier: "ro_1_01", Type: RelayOutput, Value: Off}}, commands, states, doneSysfs)
+	defer func() {
+		cancel()
+		<-doneSysfs
+		close(states)
+	}()
+
+	commands <- Command{Kind: ToggleCommand, DeviceID: "ro_1_01"}
+
+	select {
+	case event := <-states:
+		assert.Equal(t, Off, event.NewValue)
+		assert.Equal(t, On, event.OldValue)
+	case <-time.After(time.Second):
+		t.Fatal("expected relay toggle event")
+	}
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, "0\n", string(data))
+}
+
 func TestHandleCommandIgnoresUnknownDevice(t *testing.T) {
 	ctx := t.Context()
 	states := make(chan StateChange, 1)
@@ -183,7 +214,7 @@ func TestHandleCommandLogsWriteFailure(t *testing.T) {
 
 	handleCommand(map[string]*Device{"ro_1_01": device}, Command{Kind: ToggleCommand, DeviceID: "ro_1_01"}, ctx, states)
 
-	assert.Contains(t, buffer.String(), "sysfs write failed")
+	assert.Contains(t, buffer.String(), "sysfs read failed")
 	select {
 	case event := <-states:
 		t.Fatalf("unexpected state event: %+v", event)

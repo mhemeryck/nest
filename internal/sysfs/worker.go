@@ -60,7 +60,12 @@ func handleCommand(devicesByID map[string]*Device, cmd Command, ctx context.Cont
 
 	switch cmd.Kind {
 	case ToggleCommand:
-		oldValue := device.Value
+		oldValue, err := readValue(device.Path)
+		if err != nil {
+			slog.Error("sysfs read failed", "device_id", device.Identifier, "path", device.Path, "error", err)
+			return
+		}
+		device.Value = oldValue
 		newValue := On
 		if oldValue == On {
 			newValue = Off
