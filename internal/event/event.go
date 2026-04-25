@@ -34,8 +34,8 @@ type PushButtonEvent struct {
 	Kind     string
 }
 
-func PollEventToDigitalInputEvent(index *registry.Index, pollEvent sysfs.PollEvent) (Event, bool) {
-	input, ok := index.DigitalInputsByDevice[entity.DeviceID(pollEvent.Device.Identifier)]
+func StateChangeToDigitalInputEvent(index *registry.Index, stateChange sysfs.StateChange) (Event, bool) {
+	input, ok := index.DigitalInputsByDevice[entity.DeviceID(stateChange.Device.Identifier)]
 	if !ok {
 		return Event{}, false
 	}
@@ -44,9 +44,9 @@ func PollEventToDigitalInputEvent(index *registry.Index, pollEvent sysfs.PollEve
 		Kind: DigitalInputKind,
 		DigitalInput: &DigitalInputEvent{
 			InputID:   input.ID,
-			DeviceID:  entity.DeviceID(pollEvent.Device.Identifier),
-			IsRising:  pollEvent.IsRising,
-			IsFalling: pollEvent.OldValue == sysfs.On && pollEvent.NewValue == sysfs.Off,
+			DeviceID:  entity.DeviceID(stateChange.Device.Identifier),
+			IsRising:  stateChange.IsRising,
+			IsFalling: stateChange.OldValue == sysfs.On && stateChange.NewValue == sysfs.Off,
 		},
 	}, true
 }

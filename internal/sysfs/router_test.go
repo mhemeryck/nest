@@ -64,7 +64,7 @@ func TestRouteCommandsIgnoresUnknownDevice(t *testing.T) {
 }
 
 func TestStartConfiguredWorkersRegistersRoutes(t *testing.T) {
-	states := make(chan PollEvent, 1)
+	states := make(chan StateChange, 1)
 	ctx, cancel := context.WithCancel(t.Context())
 	workers := startConfiguredWorkers(ctx, []WorkerConfig{{
 		Interval: 10 * time.Millisecond,

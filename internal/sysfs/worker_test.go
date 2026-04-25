@@ -25,11 +25,11 @@ func TestPollWorkerDetectsChange(t *testing.T) {
 	require.NoError(t, err)
 
 	var mu sync.Mutex
-	var events []PollEvent
+	var events []StateChange
 
 	ctx, cancel := context.WithCancel(t.Context())
 	commands := make(chan Command, 32)
-	states := make(chan PollEvent, 32)
+	states := make(chan StateChange, 32)
 	doneSysfs := make(chan struct{})
 	go Run(ctx, []*Device{{Path: path1, Identifier: "di_1_01"}, {Path: path2, Identifier: "di_1_02"}}, commands, states, doneSysfs)
 
@@ -74,7 +74,7 @@ func TestWorkerCommandTogglesRelay(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	commands := make(chan Command, 32)
-	states := make(chan PollEvent, 32)
+	states := make(chan StateChange, 32)
 	doneSysfs := make(chan struct{})
 	go Run(ctx, []*Device{{Path: path, Identifier: "ro_1_01", Type: RelayOutput, Value: Off}}, commands, states, doneSysfs)
 	defer func() {
@@ -101,7 +101,7 @@ func TestWorkerCommandTogglesRelay(t *testing.T) {
 
 func TestHandleCommandIgnoresUnknownDevice(t *testing.T) {
 	ctx := t.Context()
-	states := make(chan PollEvent, 1)
+	states := make(chan StateChange, 1)
 	handleCommand(map[string]*Device{}, Command{Kind: ToggleCommand, DeviceID: "missing"}, ctx, states)
 
 	select {
@@ -113,7 +113,7 @@ func TestHandleCommandIgnoresUnknownDevice(t *testing.T) {
 
 func TestHandleCommandIgnoresUnsupportedCommand(t *testing.T) {
 	ctx := t.Context()
-	states := make(chan PollEvent, 1)
+	states := make(chan StateChange, 1)
 	device := &Device{Identifier: "ro_1_01", Path: filepath.Join(t.TempDir(), "ro_value"), Value: Off}
 	require.NoError(t, writeValue(device.Path, Off))
 
@@ -128,7 +128,7 @@ func TestHandleCommandIgnoresUnsupportedCommand(t *testing.T) {
 }
 
 func TestPollDevicesIgnoresReadErrors(t *testing.T) {
-	states := make(chan PollEvent, 1)
+	states := make(chan StateChange, 1)
 	ctx := t.Context()
 	pollDevices([]*Device{{Identifier: "missing", Path: filepath.Join(t.TempDir(), "missing")}}, ctx, states)
 
@@ -141,16 +141,16 @@ func TestPollDevicesIgnoresReadErrors(t *testing.T) {
 
 func TestPublishStateReturnsFalseWhenStopping(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
-	states := make(chan PollEvent)
+	states := make(chan StateChange)
 	cancel()
 
-	published := publishState(ctx, states, PollEvent{})
+	published := publishState(ctx, states, StateChange{})
 	assert.False(t, published)
 }
 
 func TestHandleCommandReturnsDuringShutdownWhenStateChannelBlocks(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
-	states := make(chan PollEvent)
+	states := make(chan StateChange)
 	device := &Device{Identifier: "ro_1_01", Path: filepath.Join(t.TempDir(), "ro_value"), Value: Off}
 	require.NoError(t, writeValue(device.Path, Off))
 
@@ -178,7 +178,7 @@ func TestHandleCommandLogsWriteFailure(t *testing.T) {
 	})
 
 	ctx := t.Context()
-	states := make(chan PollEvent, 1)
+	states := make(chan StateChange, 1)
 	device := &Device{Identifier: "ro_1_01", Path: filepath.Join(t.TempDir(), "missing", "ro_value"), Value: Off}
 
 	handleCommand(map[string]*Device{"ro_1_01": device}, Command{Kind: ToggleCommand, DeviceID: "ro_1_01"}, ctx, states)

@@ -19,10 +19,10 @@ import (
 func TestRunReturnsOnSignal(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	index := registry.Build(&entity.Root{})
-	pollEvents := make(chan sysfs.PollEvent)
+	stateChanges := make(chan sysfs.StateChange)
 	commands := make(chan sysfs.Command)
 	done := make(chan struct{})
-	go Run(ctx, index, commands, pollEvents, done)
+	go Run(ctx, index, commands, stateChanges, done)
 
 	cancel()
 
@@ -36,12 +36,12 @@ func TestRunReturnsOnSignal(t *testing.T) {
 func TestRunReturnsWhenPollEventsClose(t *testing.T) {
 	ctx := t.Context()
 	index := registry.Build(&entity.Root{})
-	pollEvents := make(chan sysfs.PollEvent)
+	stateChanges := make(chan sysfs.StateChange)
 	commands := make(chan sysfs.Command)
 	done := make(chan struct{})
-	go Run(ctx, index, commands, pollEvents, done)
+	go Run(ctx, index, commands, stateChanges, done)
 
-	close(pollEvents)
+	close(stateChanges)
 
 	select {
 	case <-done:
@@ -50,7 +50,7 @@ func TestRunReturnsWhenPollEventsClose(t *testing.T) {
 	}
 }
 
-func TestHandlePollEventTogglesLightRelay(t *testing.T) {
+func TestHandleStateChangeTogglesLightRelay(t *testing.T) {
 	relayPath := filepath.Join(t.TempDir(), "ro_value")
 	require.NoError(t, os.WriteFile(relayPath, []byte("0\n"), 0o644))
 
@@ -72,7 +72,7 @@ func TestHandlePollEventTogglesLightRelay(t *testing.T) {
 	}()
 
 	logs := captureLogs(t, func() {
-		handlePollEvent(index, commands, sysfs.PollEvent{
+		handleStateChange(index, commands, sysfs.StateChange{
 			Device:   sysfs.Device{Identifier: "di_3_16", Path: "/sys/di_3_16/di_value"},
 			OldValue: sysfs.Off,
 			NewValue: sysfs.On,
@@ -90,11 +90,11 @@ func TestHandlePollEventTogglesLightRelay(t *testing.T) {
 	assert.Equal(t, "1\n", string(data))
 }
 
-func TestHandlePollEventLogsRawPollEventForUnknownDevice(t *testing.T) {
+func TestHandleStateChangeLogsRawStateChangeForUnknownDevice(t *testing.T) {
 	index := registry.Build(&entity.Root{})
 
 	logs := captureLogs(t, func() {
-		handlePollEvent(index, nil, sysfs.PollEvent{
+		handleStateChange(index, nil, sysfs.StateChange{
 			Device:   sysfs.Device{Identifier: "ro_3_14", Path: "/sys/ro_3_14/ro_value"},
 			OldValue: sysfs.Off,
 			NewValue: sysfs.On,
@@ -102,7 +102,7 @@ func TestHandlePollEventLogsRawPollEventForUnknownDevice(t *testing.T) {
 		})
 	})
 
-	assert.Contains(t, logs, "poll event")
+	assert.Contains(t, logs, "state change")
 	assert.Contains(t, logs, "ro_3_14")
 	assert.NotContains(t, logs, "push button event")
 }

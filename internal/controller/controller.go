@@ -14,7 +14,7 @@ func Run(
 	ctx context.Context,
 	index *registry.Index,
 	sysfsCommands chan<- sysfs.Command,
-	pollEvents <-chan sysfs.PollEvent,
+	stateChanges <-chan sysfs.StateChange,
 	done chan<- struct{},
 ) {
 	defer close(done)
@@ -23,35 +23,35 @@ func Run(
 		select {
 		case <-ctx.Done():
 			return
-		case pollEvent, ok := <-pollEvents:
+		case stateChange, ok := <-stateChanges:
 			if !ok {
 				return
 			}
 
-			handlePollEvent(index, sysfsCommands, pollEvent)
+			handleStateChange(index, sysfsCommands, stateChange)
 		}
 	}
 }
 
-func handlePollEvent(index *registry.Index, sysfsCommands chan<- sysfs.Command, pollEvent sysfs.PollEvent) {
-	digitalInputEvent, ok := event.PollEventToDigitalInputEvent(index, pollEvent)
+func handleStateChange(index *registry.Index, sysfsCommands chan<- sysfs.Command, stateChange sysfs.StateChange) {
+	digitalInputEvent, ok := event.StateChangeToDigitalInputEvent(index, stateChange)
 	if ok {
 		handleEvent(index, sysfsCommands, digitalInputEvent)
 		return
 	}
 
 	slog.Info(
-		"poll event",
+		"state change",
 		"identifier",
-		pollEvent.Device.Identifier,
+		stateChange.Device.Identifier,
 		"path",
-		pollEvent.Device.Path,
+		stateChange.Device.Path,
 		"old_value",
-		sysfs.PrintableValue(pollEvent.OldValue),
+		sysfs.PrintableValue(stateChange.OldValue),
 		"new_value",
-		sysfs.PrintableValue(pollEvent.NewValue),
+		sysfs.PrintableValue(stateChange.NewValue),
 		"rising",
-		pollEvent.IsRising,
+		stateChange.IsRising,
 	)
 }
 

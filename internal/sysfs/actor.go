@@ -2,7 +2,7 @@ package sysfs
 
 import "context"
 
-type PollEvent struct {
+type StateChange struct {
 	Device   Device
 	OldValue Value
 	NewValue Value
@@ -18,7 +18,7 @@ type Command struct {
 	DeviceID string
 }
 
-func Run(ctx context.Context, devices []*Device, commands <-chan Command, states chan<- PollEvent, done chan<- struct{}) {
+func Run(ctx context.Context, devices []*Device, commands <-chan Command, states chan<- StateChange, done chan<- struct{}) {
 	defer close(done)
 
 	configs := buildWorkerConfigs(devices)

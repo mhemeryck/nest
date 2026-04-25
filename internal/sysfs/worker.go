@@ -10,7 +10,7 @@ func pollWorker(
 	ctx context.Context,
 	cfg WorkerConfig,
 	commands <-chan Command,
-	states chan<- PollEvent,
+	states chan<- StateChange,
 ) {
 	ticker := time.NewTicker(cfg.Interval)
 	defer ticker.Stop()
@@ -32,7 +32,7 @@ func pollWorker(
 	}
 }
 
-func pollDevices(devices []*Device, ctx context.Context, states chan<- PollEvent) {
+func pollDevices(devices []*Device, ctx context.Context, states chan<- StateChange) {
 	for _, device := range devices {
 		oldValue := device.Value
 		newValue, err := readDevice(device)
@@ -40,7 +40,7 @@ func pollDevices(devices []*Device, ctx context.Context, states chan<- PollEvent
 			continue
 		}
 		if newValue != oldValue {
-			if !publishState(ctx, states, PollEvent{
+			if !publishState(ctx, states, StateChange{
 				Device:   *device,
 				OldValue: oldValue,
 				NewValue: newValue,
@@ -52,7 +52,7 @@ func pollDevices(devices []*Device, ctx context.Context, states chan<- PollEvent
 	}
 }
 
-func handleCommand(devicesByID map[string]*Device, cmd Command, ctx context.Context, states chan<- PollEvent) {
+func handleCommand(devicesByID map[string]*Device, cmd Command, ctx context.Context, states chan<- StateChange) {
 	device, ok := devicesByID[cmd.DeviceID]
 	if !ok {
 		return
@@ -72,7 +72,7 @@ func handleCommand(devicesByID map[string]*Device, cmd Command, ctx context.Cont
 		}
 
 		device.Value = newValue
-		publishState(ctx, states, PollEvent{
+		publishState(ctx, states, StateChange{
 			Device:   *device,
 			OldValue: oldValue,
 			NewValue: newValue,
@@ -83,7 +83,7 @@ func handleCommand(devicesByID map[string]*Device, cmd Command, ctx context.Cont
 	}
 }
 
-func publishState(ctx context.Context, states chan<- PollEvent, state PollEvent) bool {
+func publishState(ctx context.Context, states chan<- StateChange, state StateChange) bool {
 	select {
 	case <-ctx.Done():
 		return false

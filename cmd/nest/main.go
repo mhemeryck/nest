@@ -56,7 +56,7 @@ func main() {
 	}
 
 	commands := make(chan sysfs.Command, 32)
-	states := make(chan sysfs.PollEvent, 32)
+	states := make(chan sysfs.StateChange, 32)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	sysfsDone := make(chan struct{})

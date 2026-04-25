@@ -10,7 +10,7 @@ type workerSet struct {
 	wg     sync.WaitGroup
 }
 
-func startWorkers(ctx context.Context, configs []WorkerConfig, commands <-chan Command, states chan<- PollEvent) <-chan struct{} {
+func startWorkers(ctx context.Context, configs []WorkerConfig, commands <-chan Command, states chan<- StateChange) <-chan struct{} {
 	doneCh := make(chan struct{})
 
 	workers := startConfiguredWorkers(ctx, configs, states)
@@ -25,7 +25,7 @@ func startWorkers(ctx context.Context, configs []WorkerConfig, commands <-chan C
 	return doneCh
 }
 
-func startConfiguredWorkers(ctx context.Context, configs []WorkerConfig, states chan<- PollEvent) *workerSet {
+func startConfiguredWorkers(ctx context.Context, configs []WorkerConfig, states chan<- StateChange) *workerSet {
 	workers := &workerSet{
 		routes: make(map[string]chan Command),
 	}
