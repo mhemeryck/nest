@@ -48,6 +48,23 @@ This keeps ownership explicit.
 It also fits sysfs, MQTT, and Modbus well.
 Each integration can own its protocol or device state locally while the controller remains the only router between domains.
 
+Actor packages should stay focused on their own protocol or device behavior.
+They should expose actor-specific observations and commands, such as `sysfs.StateChange`, `sysfs.Command`, `mqtt.State`, or future Modbus equivalents.
+They should not translate directly to other actors.
+
+The controller owns runtime translation between actor-specific observations and controller-level events.
+Current event normalization lives under `internal/controller/event` to make that ownership explicit while keeping translation code separate from the main control loop.
+As new actors are added, each actor should add one controller-side normalization path into controller events rather than direct actor-to-actor translations.
+
+The registry is the runtime lookup layer built from domain entities.
+It maps configured entity relationships and actor-facing identifiers back to typed entities, such as sysfs device IDs to inputs or relays.
+Future MQTT topic or Modbus coil lookup indexes can live in the registry when command handling needs them.
+The registry should not carry actor runtime configuration.
+
+The top-level `internal/nest` package owns application wiring.
+It loads config, builds domain entities, builds registries, discovers configured devices, maps domain config into actor-specific runtime config, starts actors, and coordinates shutdown.
+The `cmd/nest` package should remain a thin process entrypoint for CLI parsing, signal handling, and exit status.
+
 ### Runtime Flow
 
 The controller is the central coordinator.
