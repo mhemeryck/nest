@@ -3,8 +3,8 @@ package mqtt
 import (
 	"testing"
 
+	"github.com/mhemeryck/nest/internal/controller/event"
 	"github.com/mhemeryck/nest/internal/entity"
-	"github.com/mhemeryck/nest/internal/event"
 	"github.com/mhemeryck/nest/internal/sysfs"
 	"github.com/stretchr/testify/assert"
 )

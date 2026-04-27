@@ -3,8 +3,8 @@ package mqtt
 import (
 	"encoding/json"
 
+	"github.com/mhemeryck/nest/internal/controller/event"
 	"github.com/mhemeryck/nest/internal/entity"
-	"github.com/mhemeryck/nest/internal/event"
 	"github.com/mhemeryck/nest/internal/sysfs"
 )
 
