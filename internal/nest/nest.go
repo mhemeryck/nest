@@ -63,10 +63,12 @@ func Run(ctx context.Context, opts Options) error {
 	var mqttStates chan nestmqtt.State
 	var mqttDone chan struct{}
 	if root.MQTT.Enabled {
+		mqttConfig := mqttConfigFromEntity(root.MQTT)
+		discovery := nestmqtt.DiscoveryStates(mqttConfig, root, index)
 		mqttStates = make(chan nestmqtt.State, 64)
 		mqttCommands := make(chan nestmqtt.Command, 1)
 		mqttDone = make(chan struct{})
-		go nestmqtt.Run(ctx, root, index, mqttStates, mqttCommands, mqttDone)
+		go nestmqtt.Run(ctx, mqttConfig, discovery, mqttStates, mqttCommands, mqttDone)
 	}
 
 	sysfsDone := make(chan struct{})
@@ -88,6 +90,18 @@ func Run(ctx context.Context, opts Options) error {
 
 	slog.Info("shutting down")
 	return nil
+}
+
+func mqttConfigFromEntity(cfg entity.MQTT) nestmqtt.Config {
+	return nestmqtt.Config{
+		Enabled:         cfg.Enabled,
+		Broker:          cfg.Broker,
+		UnitID:          cfg.UnitID,
+		ClientID:        cfg.ClientID,
+		Username:        cfg.Username,
+		Password:        cfg.Password,
+		DiscoveryPrefix: cfg.DiscoveryPrefix,
+	}
 }
 
 func configuredDevices(devices []*sysfs.Device, wanted []entity.DeviceID) ([]*sysfs.Device, []entity.DeviceID) {
