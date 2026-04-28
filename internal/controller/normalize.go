@@ -8,7 +8,7 @@ import (
 )
 
 func pushButtonEventsFromStateChange(index *registry.Index, stateChange sysfs.StateChange) ([]event.Event, bool) {
-	input, ok := index.DigitalInputsByDevice[entity.DeviceID(stateChange.Device.Identifier)]
+	input, ok := index.DigitalInputsByDevice[entity.SysfsDeviceID(stateChange.Device.Identifier)]
 	if !ok {
 		return nil, false
 	}

@@ -7,14 +7,14 @@ import (
 	"github.com/mhemeryck/nest/internal/sysfs"
 )
 
-func configuredDevices(devices []*sysfs.Device, wanted []entity.DeviceID) ([]*sysfs.Device, []entity.DeviceID) {
+func configuredDevices(devices []*sysfs.Device, wanted []entity.SysfsDeviceID) ([]*sysfs.Device, []entity.SysfsDeviceID) {
 	byIdentifier := make(map[string]*sysfs.Device, len(devices))
 	for _, device := range devices {
 		byIdentifier[device.Identifier] = device
 	}
 
 	configured := make([]*sysfs.Device, 0, len(wanted))
-	missing := make([]entity.DeviceID, 0)
+	missing := make([]entity.SysfsDeviceID, 0)
 	for _, identifier := range wanted {
 		device, ok := byIdentifier[string(identifier)]
 		if !ok {

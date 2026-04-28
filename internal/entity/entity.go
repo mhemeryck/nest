@@ -3,7 +3,7 @@ package entity
 import "github.com/mhemeryck/nest/internal/config"
 
 type (
-	DeviceID       string
+	SysfsDeviceID  string
 	DigitalInputID string
 	PushButtonID   string
 	LightID        string
@@ -23,8 +23,8 @@ type Root struct {
 }
 
 type DigitalInput struct {
-	ID     DigitalInputID
-	Device DeviceID
+	ID          DigitalInputID
+	SysfsDevice SysfsDeviceID
 }
 
 type PushButton struct {
@@ -34,9 +34,9 @@ type PushButton struct {
 }
 
 type Relay struct {
-	ID     RelayID
-	Name   string
-	Device DeviceID
+	ID          RelayID
+	Name        string
+	SysfsDevice SysfsDeviceID
 }
 
 type Light struct {
@@ -67,8 +67,8 @@ func FromConfig(root *config.Root) *Root {
 
 	for _, input := range root.DigitalInputs {
 		entities.DigitalInputs = append(entities.DigitalInputs, DigitalInput{
-			ID:     DigitalInputID(input.ID),
-			Device: DeviceID(input.Device),
+			ID:          DigitalInputID(input.ID),
+			SysfsDevice: SysfsDeviceID(input.Device),
 		})
 	}
 
@@ -82,9 +82,9 @@ func FromConfig(root *config.Root) *Root {
 
 	for _, relay := range root.Relays {
 		entities.Relays = append(entities.Relays, Relay{
-			ID:     RelayID(relay.ID),
-			Name:   relay.Name,
-			Device: DeviceID(relay.Device),
+			ID:          RelayID(relay.ID),
+			Name:        relay.Name,
+			SysfsDevice: SysfsDeviceID(relay.Device),
 		})
 	}
 

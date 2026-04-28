@@ -64,8 +64,8 @@ It translates parsed config into typed IDs and configured domain concepts such a
 It should not become a runtime registry or actor implementation detail container.
 It may contain actor-facing addresses while those addresses are part of the configured model, but those addresses should be explicit.
 
-The current `entity.DeviceID` name is generic, but it effectively means a sysfs device identifier.
-As more actors are added, actor-facing address types should become explicit rather than sharing one generic device ID.
+`entity.SysfsDeviceID` is the explicit address type for sysfs-backed configured entities.
+As more actors are added, actor-facing address types should remain explicit rather than sharing one generic device ID.
 For example, sysfs devices, Modbus coils, and command topics should not all collapse into the same identifier type.
 
 ### `internal/controller`
@@ -177,7 +177,7 @@ Extract `cmd/nest` runtime wiring into `internal/nest`.
 Make `internal/event` data-only by moving registry-backed mapping functions into controller-owned normalization code.
 After `internal/event` is data-only, decide whether it should remain `internal/event` or move under `internal/controller/event`.
 Add minimal registry lookup helpers where they make normalization or policy code clearer.
-Consider renaming `entity.DeviceID` to a sysfs-specific address type before adding other actor address types.
+Keep actor-facing address types explicit before adding other actor address types.
 Group registry mappings by purpose, such as domain mappings, sysfs mappings, and later transport mappings.
 Keep actor packages focused on actor behavior and keep cross-actor translation in controller-owned code.
 
@@ -185,6 +185,5 @@ Keep actor packages focused on actor behavior and keep cross-actor translation i
 
 Should registry remain app-wide, or should it become `internal/controller/registry`?
 Should semantic event types remain in `internal/event`, or move under `internal/controller/event` after mapping functions are removed?
-Should `entity.DeviceID` be renamed now, or only when the next actor introduces a second address type?
 When command topics or transport addresses are added, should they be parsed by the actor or resolved through registry mappings?
 When additional actors are added, should actor grouping move all actors under `internal/actors` in the same refactor?

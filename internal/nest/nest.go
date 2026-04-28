@@ -41,7 +41,7 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("crawl sysfs: %w", err)
 	}
 
-	configuredDevices, missing := configuredDevices(devices, registry.DeviceIDs(index))
+	configuredDevices, missing := configuredDevices(devices, registry.SysfsDeviceIDs(index))
 	if len(missing) > 0 {
 		var errs error
 		for _, deviceID := range missing {

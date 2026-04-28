@@ -111,7 +111,7 @@ func handleLightEvent(ctx context.Context, index *registry.Index, sysfsCommands 
 		return
 	case sysfsCommands <- sysfs.Command{
 		Kind:     sysfs.ToggleCommand,
-		DeviceID: string(relay.Device),
+		DeviceID: string(relay.SysfsDevice),
 	}:
 	}
 
@@ -124,6 +124,6 @@ func handleLightEvent(ctx context.Context, index *registry.Index, sysfsCommands 
 		"relay_id",
 		relay.ID,
 		"device_id",
-		relay.Device,
+		relay.SysfsDevice,
 	)
 }

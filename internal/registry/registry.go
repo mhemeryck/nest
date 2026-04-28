@@ -7,28 +7,28 @@ import (
 )
 
 type Index struct {
-	DigitalInputsByDevice map[entity.DeviceID]entity.DigitalInput
+	DigitalInputsByDevice map[entity.SysfsDeviceID]entity.DigitalInput
 	PushButtonsByID       map[entity.PushButtonID]entity.PushButton
 	PushButtonsByInputID  map[entity.DigitalInputID][]entity.PushButton
 	LightsByID            map[entity.LightID]entity.Light
 	BindingsByButtonID    map[entity.PushButtonID][]entity.Binding
 	RelaysByID            map[entity.RelayID]entity.Relay
-	RelaysByDevice        map[entity.DeviceID]entity.Relay
+	RelaysByDevice        map[entity.SysfsDeviceID]entity.Relay
 }
 
 func Build(root *entity.Root) *Index {
 	index := &Index{
-		DigitalInputsByDevice: make(map[entity.DeviceID]entity.DigitalInput, len(root.DigitalInputs)),
+		DigitalInputsByDevice: make(map[entity.SysfsDeviceID]entity.DigitalInput, len(root.DigitalInputs)),
 		PushButtonsByID:       make(map[entity.PushButtonID]entity.PushButton, len(root.PushButtons)),
 		PushButtonsByInputID:  make(map[entity.DigitalInputID][]entity.PushButton),
 		LightsByID:            make(map[entity.LightID]entity.Light, len(root.Lights)),
 		BindingsByButtonID:    make(map[entity.PushButtonID][]entity.Binding),
 		RelaysByID:            make(map[entity.RelayID]entity.Relay, len(root.Relays)),
-		RelaysByDevice:        make(map[entity.DeviceID]entity.Relay, len(root.Relays)),
+		RelaysByDevice:        make(map[entity.SysfsDeviceID]entity.Relay, len(root.Relays)),
 	}
 
 	for _, input := range root.DigitalInputs {
-		index.DigitalInputsByDevice[input.Device] = input
+		index.DigitalInputsByDevice[input.SysfsDevice] = input
 	}
 
 	for _, button := range root.PushButtons {
@@ -42,7 +42,7 @@ func Build(root *entity.Root) *Index {
 
 	for _, relay := range root.Relays {
 		index.RelaysByID[relay.ID] = relay
-		index.RelaysByDevice[relay.Device] = relay
+		index.RelaysByDevice[relay.SysfsDevice] = relay
 	}
 
 	for _, binding := range root.Bindings {
@@ -52,8 +52,8 @@ func Build(root *entity.Root) *Index {
 	return index
 }
 
-func DeviceIDs(index *Index) []entity.DeviceID {
-	deviceIDs := make([]entity.DeviceID, 0, len(index.DigitalInputsByDevice)+len(index.RelaysByDevice))
+func SysfsDeviceIDs(index *Index) []entity.SysfsDeviceID {
+	deviceIDs := make([]entity.SysfsDeviceID, 0, len(index.DigitalInputsByDevice)+len(index.RelaysByDevice))
 	for deviceID := range index.DigitalInputsByDevice {
 		deviceIDs = append(deviceIDs, deviceID)
 	}

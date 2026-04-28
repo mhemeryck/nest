@@ -13,7 +13,7 @@ import (
 
 func TestPushButtonEventsFromStateChange(t *testing.T) {
 	index := registry.Build(&entity.Root{
-		DigitalInputs: []entity.DigitalInput{{ID: entity.DigitalInputID("office_button_input"), Device: entity.DeviceID("di_3_16")}},
+		DigitalInputs: []entity.DigitalInput{{ID: entity.DigitalInputID("office_button_input"), SysfsDevice: entity.SysfsDeviceID("di_3_16")}},
 		PushButtons: []entity.PushButton{
 			{ID: entity.PushButtonID("office_button"), Name: "Office button", Input: entity.DigitalInputID("office_button_input")},
 			{ID: entity.PushButtonID("office_button_secondary"), Name: "Office button secondary", Input: entity.DigitalInputID("office_button_input")},
@@ -48,7 +48,7 @@ func TestPushButtonEventsFromStateChangeIgnoresUnknownDevices(t *testing.T) {
 
 func TestPushButtonEventsFromStateChangeHandlesFallingEdgeWithoutEvents(t *testing.T) {
 	index := registry.Build(&entity.Root{
-		DigitalInputs: []entity.DigitalInput{{ID: entity.DigitalInputID("office_button_input"), Device: entity.DeviceID("di_3_16")}},
+		DigitalInputs: []entity.DigitalInput{{ID: entity.DigitalInputID("office_button_input"), SysfsDevice: entity.SysfsDeviceID("di_3_16")}},
 		PushButtons:   []entity.PushButton{{ID: entity.PushButtonID("office_button"), Name: "Office button", Input: entity.DigitalInputID("office_button_input")}},
 	})
 
