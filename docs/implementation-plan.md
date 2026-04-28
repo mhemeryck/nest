@@ -37,13 +37,18 @@ Covers come later because motor control adds safety requirements around up/down 
 
 ## Phase 3: Build and Deploy Pipeline
 
-- [ ] Add GoReleaser configuration
-- [ ] Build Linux ARM artifacts for the Raspberry Pi controller
-- [ ] Keep CI checks for vet, tests, and normal builds
-- [ ] Publish CI artifacts for controller deployment
-- [ ] Optionally publish release artifacts from tags
+- [x] Add GoReleaser configuration
+- [x] Build Linux ARM artifacts for the Raspberry Pi controller
+- [x] Keep CI checks for vet, tests, and normal builds
+- [x] Run validation on pull requests through a reusable workflow
+- [x] Support manual snapshot artifact builds for a selected ref
+- [x] Upload manual snapshot artifacts for controller deployment
+- [x] Create automatic GitHub releases on merges to `master`
+- [x] Use UTC CalVer release tags with date, hour, minute, and second
+- [x] Attach controller artifacts and checksums to GitHub releases
+- [x] Include generated changelogs in GitHub releases
 
-**Deliverable**: `nest` can produce a controller-ready binary artifact consistently.
+**Deliverable**: `nest` can produce controller-ready artifacts on demand and publish release artifacts automatically from `master`.
 
 ## Phase 4: Passive MQTT Observability and Discovery
 
