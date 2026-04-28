@@ -8,7 +8,7 @@ import (
 )
 
 func pushButtonEventsFromStateChange(index *registry.Index, stateChange sysfs.StateChange) ([]event.Event, bool) {
-	input, ok := index.DigitalInputsByDevice[entity.SysfsDeviceID(stateChange.Device.Identifier)]
+	input, ok := registry.DigitalInputBySysfsDevice(index, entity.SysfsDeviceID(stateChange.Device.Identifier))
 	if !ok {
 		return nil, false
 	}
@@ -17,7 +17,7 @@ func pushButtonEventsFromStateChange(index *registry.Index, stateChange sysfs.St
 		return nil, true
 	}
 
-	buttons := index.PushButtonsByInputID[input.ID]
+	buttons := registry.PushButtonsByInput(index, input.ID)
 	buttonEvents := make([]event.Event, 0, len(buttons))
 	for _, button := range buttons {
 		buttonEvents = append(buttonEvents, event.Event{
@@ -34,11 +34,11 @@ func pushButtonEventsFromStateChange(index *registry.Index, stateChange sysfs.St
 }
 
 func lightEventsFromPushButton(index *registry.Index, pushButton event.PushButton) []event.Event {
-	bindings := index.BindingsByButtonID[pushButton.ButtonID]
+	bindings := registry.BindingsByButton(index, pushButton.ButtonID)
 	lightEvents := make([]event.Event, 0, len(bindings))
 	for _, binding := range bindings {
 		name := ""
-		if light, ok := index.LightsByID[binding.Light]; ok {
+		if light, ok := registry.LightByID(index, binding.Light); ok {
 			name = light.Name
 		}
 

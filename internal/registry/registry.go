@@ -65,3 +65,26 @@ func SysfsDeviceIDs(index *Index) []entity.SysfsDeviceID {
 
 	return deviceIDs
 }
+
+func DigitalInputBySysfsDevice(index *Index, deviceID entity.SysfsDeviceID) (entity.DigitalInput, bool) {
+	input, ok := index.DigitalInputsByDevice[deviceID]
+	return input, ok
+}
+
+func PushButtonsByInput(index *Index, inputID entity.DigitalInputID) []entity.PushButton {
+	return index.PushButtonsByInputID[inputID]
+}
+
+func BindingsByButton(index *Index, buttonID entity.PushButtonID) []entity.Binding {
+	return index.BindingsByButtonID[buttonID]
+}
+
+func LightByID(index *Index, lightID entity.LightID) (entity.Light, bool) {
+	light, ok := index.LightsByID[lightID]
+	return light, ok
+}
+
+func RelayByID(index *Index, relayID entity.RelayID) (entity.Relay, bool) {
+	relay, ok := index.RelaysByID[relayID]
+	return relay, ok
+}

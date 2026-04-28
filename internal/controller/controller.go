@@ -89,41 +89,48 @@ func handleEvent(ctx context.Context, index *registry.Index, sysfsCommands chan<
 }
 
 func handleLightEvent(ctx context.Context, index *registry.Index, sysfsCommands chan<- sysfs.Command, lightEvent event.Light) {
-	if lightEvent.Action != entity.LightActionToggle {
-		slog.Error("unsupported light action", "action", lightEvent.Action)
-		return
-	}
-
-	light, ok := index.LightsByID[lightEvent.LightID]
+	cmd, ok := relayCommandFromLightEvent(index, lightEvent)
 	if !ok {
-		slog.Error("unknown light", "light_id", lightEvent.LightID)
-		return
-	}
-
-	relay, ok := index.RelaysByID[light.Relay]
-	if !ok {
-		slog.Error("light references unknown relay", "light_id", light.ID, "relay_id", light.Relay)
 		return
 	}
 
 	select {
 	case <-ctx.Done():
 		return
-	case sysfsCommands <- sysfs.Command{
-		Kind:     sysfs.ToggleCommand,
-		DeviceID: string(relay.SysfsDevice),
-	}:
+	case sysfsCommands <- cmd:
 	}
 
 	slog.Info(
 		"light toggled",
 		"light_id",
-		light.ID,
+		lightEvent.LightID,
 		"name",
-		light.Name,
-		"relay_id",
-		relay.ID,
+		lightEvent.Name,
 		"device_id",
-		relay.SysfsDevice,
+		cmd.DeviceID,
 	)
+}
+
+func relayCommandFromLightEvent(index *registry.Index, lightEvent event.Light) (sysfs.Command, bool) {
+	if lightEvent.Action != entity.LightActionToggle {
+		slog.Error("unsupported light action", "action", lightEvent.Action)
+		return sysfs.Command{}, false
+	}
+
+	light, ok := registry.LightByID(index, lightEvent.LightID)
+	if !ok {
+		slog.Error("unknown light", "light_id", lightEvent.LightID)
+		return sysfs.Command{}, false
+	}
+
+	relay, ok := registry.RelayByID(index, light.Relay)
+	if !ok {
+		slog.Error("light references unknown relay", "light_id", light.ID, "relay_id", light.Relay)
+		return sysfs.Command{}, false
+	}
+
+	return sysfs.Command{
+		Kind:     sysfs.ToggleCommand,
+		DeviceID: string(relay.SysfsDevice),
+	}, true
 }

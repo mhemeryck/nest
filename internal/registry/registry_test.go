@@ -39,3 +39,39 @@ func TestBuild(t *testing.T) {
 	assert.Equal(t, root.Relays[0], index.RelaysByDevice[entity.SysfsDeviceID("ro_3_14")])
 	assert.Equal(t, []entity.SysfsDeviceID{"di_3_16", "ro_3_14"}, SysfsDeviceIDs(index))
 }
+
+func TestLookupHelpers(t *testing.T) {
+	root := &entity.Root{
+		DigitalInputs: []entity.DigitalInput{
+			{ID: entity.DigitalInputID("office_button_input"), SysfsDevice: entity.SysfsDeviceID("di_3_16")},
+		},
+		PushButtons: []entity.PushButton{
+			{ID: entity.PushButtonID("office_button"), Name: "Office button", Input: entity.DigitalInputID("office_button_input")},
+		},
+		Lights: []entity.Light{
+			{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")},
+		},
+		Relays: []entity.Relay{
+			{ID: entity.RelayID("office_light_relay"), Name: "Office light relay", SysfsDevice: entity.SysfsDeviceID("ro_3_14")},
+		},
+		Bindings: []entity.Binding{
+			{Button: entity.PushButtonID("office_button"), Light: entity.LightID("office_light"), Action: entity.LightActionToggle},
+		},
+	}
+	index := Build(root)
+
+	input, ok := DigitalInputBySysfsDevice(index, entity.SysfsDeviceID("di_3_16"))
+	require.True(t, ok)
+	assert.Equal(t, root.DigitalInputs[0], input)
+
+	assert.Equal(t, root.PushButtons, PushButtonsByInput(index, entity.DigitalInputID("office_button_input")))
+	assert.Equal(t, root.Bindings, BindingsByButton(index, entity.PushButtonID("office_button")))
+
+	light, ok := LightByID(index, entity.LightID("office_light"))
+	require.True(t, ok)
+	assert.Equal(t, root.Lights[0], light)
+
+	relay, ok := RelayByID(index, entity.RelayID("office_light_relay"))
+	require.True(t, ok)
+	assert.Equal(t, root.Relays[0], relay)
+}
