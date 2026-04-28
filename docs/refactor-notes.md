@@ -86,26 +86,31 @@ Events are controller-owned normalized messages.
 They are not actors and are not a global app-wide abstraction unless later proven necessary.
 
 The event package should be data-only.
-It should define the controller's semantic event language, such as digital input events or push button events.
+It should define the controller's semantic event language, such as push button or light events.
 It should not perform registry lookups or actor-to-event mapping itself.
+Event type names do not all need an `Event` suffix.
+Use names that read well at call sites and avoid stutter, especially when the package name already provides context.
 
 Controller-owned normalization code should translate actor observations plus registry lookups into semantic events.
-For example, sysfs observations can normalize to digital input or push button events before controller policy is applied.
+For example, sysfs observations can normalize to push button events before controller policy is applied.
+Do not introduce intermediate semantic events unless they represent useful domain facts on their own.
+For the current local light path, a configured digital input change does not need to be a controller event if it only exists to produce a push button event.
 
 The current local light path shows the intended split:
 
 ```text
 sysfs.StateChange
   -> controller normalization + registry lookup
-  -> event.DigitalInputEvent
-  -> controller normalization + registry lookup
-  -> event.PushButtonEvent
+  -> event.PushButton
   -> controller policy + registry lookup
-  -> sysfs.Command
+  -> event.Light
+  -> controller policy + registry lookup
+  -> sysfs.RelayCommand
 ```
 
 This avoids an event package that is half data model and half mapping layer.
 It also keeps the controller as the explicit owner of the two runtime phases: normalize observations, then apply policy.
+The semantic light step is important because light behavior should remain a domain decision before it becomes a concrete relay command.
 
 ### Registry
 

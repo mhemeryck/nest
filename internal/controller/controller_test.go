@@ -80,8 +80,8 @@ func TestHandleStateChangeTogglesLightRelay(t *testing.T) {
 		})
 	})
 
-	assert.Contains(t, logs, "digital input event")
 	assert.Contains(t, logs, "push button event")
+	assert.Contains(t, logs, "light event")
 	assert.Contains(t, logs, "light toggled")
 	<-commandDone
 

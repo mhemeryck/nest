@@ -93,12 +93,9 @@ The current local light path is:
 
 ```text
 sysfs state
-  -> digital input event
   -> push button event
-  -> binding lookup
-  -> light lookup
-  -> relay lookup
-  -> sysfs command
+  -> light event
+  -> relay command
 ```
 
 That same pattern should extend to future integrations.
