@@ -41,6 +41,32 @@ Examples are `sysfs.StateChange`, `sysfs.Command`, and future actor equivalents.
 
 Actors should not translate directly to other actors.
 They should not know about controller policy or unrelated actor protocols.
+They also should not translate actor observations into semantic controller events.
+
+Actors may normalize protocol or device noise into actor-owned observations.
+For example, the sysfs actor may emit a `sysfs.StateChange` with old and new values, rising-edge metadata, and device type information.
+It should not decide that a sysfs device is a configured push button or that a button press controls a light.
+
+That keeps this boundary intact:
+
+```text
+actors know protocols and devices
+controller knows policy and semantic translation
+registry knows lookup tables
+entity knows configured domain concepts
+```
+
+### `internal/entity`
+
+`internal/entity` is the config-derived semantic model.
+It translates parsed config into typed IDs and configured domain concepts such as digital inputs, push buttons, relays, lights, and bindings.
+
+It should not become a runtime registry or actor implementation detail container.
+It may contain actor-facing addresses while those addresses are part of the configured model, but those addresses should be explicit.
+
+The current `entity.DeviceID` name is generic, but it effectively means a sysfs device identifier.
+As more actors are added, actor-facing address types should become explicit rather than sharing one generic device ID.
+For example, sysfs devices, Modbus coils, and command topics should not all collapse into the same identifier type.
 
 ### `internal/controller`
 
@@ -59,11 +85,27 @@ Do not introduce receiver methods for project types by default.
 Events are controller-owned normalized messages.
 They are not actors and are not a global app-wide abstraction unless later proven necessary.
 
-A reasonable package shape is `internal/controller/event`.
-That package can define controller event types and hold actor-to-event normalization helpers.
+The event package should be data-only.
+It should define the controller's semantic event language, such as digital input events or push button events.
+It should not perform registry lookups or actor-to-event mapping itself.
 
-This keeps translation code separate from the main controller loop while making ownership clear.
+Controller-owned normalization code should translate actor observations plus registry lookups into semantic events.
 For example, sysfs observations can normalize to digital input or push button events before controller policy is applied.
+
+The current local light path shows the intended split:
+
+```text
+sysfs.StateChange
+  -> controller normalization + registry lookup
+  -> event.DigitalInputEvent
+  -> controller normalization + registry lookup
+  -> event.PushButtonEvent
+  -> controller policy + registry lookup
+  -> sysfs.Command
+```
+
+This avoids an event package that is half data model and half mapping layer.
+It also keeps the controller as the explicit owner of the two runtime phases: normalize observations, then apply policy.
 
 ### Registry
 
@@ -80,6 +122,29 @@ It should not contain live actor runtime state such as clients, goroutines, chan
 
 It may be worth moving registry under the controller namespace later, for example `internal/controller/registry`.
 That should only happen after separating controller lookup needs from general setup or discovery needs.
+
+Registry callers should not need to understand every raw map if small lookup helpers make intent clearer.
+Helpers such as `PushButtonsByInput`, `BindingsByButton`, or `RelayByLight` can be added gradually when they simplify normalization or policy code.
+The registry should still remain a lookup/index layer, not a behavioral policy layer.
+
+### Controller Normalization and Policy
+
+The controller should own both sides of the semantic boundary.
+
+Observation normalization turns actor observations into semantic events:
+
+```text
+actor observation + registry -> semantic event
+```
+
+Policy turns semantic events into actor commands or actor state publications:
+
+```text
+semantic event + registry -> actor command
+```
+
+These phases can start as package-level functions in `internal/controller`.
+Only split them into subpackages when the code grows enough to justify the extra names.
 
 ## Possible Future Shape
 
@@ -104,12 +169,17 @@ Move actors under an `actors` folder when another actor makes the grouping usefu
 ## Immediate Refactor Candidates
 
 Extract `cmd/nest` runtime wiring into `internal/nest`.
-Move current `internal/event` under `internal/controller/event` or otherwise make it clearly controller-owned.
+Make `internal/event` data-only by moving registry-backed mapping functions into controller-owned normalization code.
+After `internal/event` is data-only, decide whether it should remain `internal/event` or move under `internal/controller/event`.
+Add minimal registry lookup helpers where they make normalization or policy code clearer.
+Consider renaming `entity.DeviceID` to a sysfs-specific address type before adding other actor address types.
 Group registry mappings by purpose, such as domain mappings, sysfs mappings, and later transport mappings.
 Keep actor packages focused on actor behavior and keep cross-actor translation in controller-owned code.
 
 ## Open Questions
 
 Should registry remain app-wide, or should it become `internal/controller/registry`?
+Should semantic event types remain in `internal/event`, or move under `internal/controller/event` after mapping functions are removed?
+Should `entity.DeviceID` be renamed now, or only when the next actor introduces a second address type?
 When command topics or transport addresses are added, should they be parsed by the actor or resolved through registry mappings?
 When additional actors are added, should actor grouping move all actors under `internal/actors` in the same refactor?
