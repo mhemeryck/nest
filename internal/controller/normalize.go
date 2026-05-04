@@ -1,8 +1,8 @@
 package controller
 
 import (
+	"github.com/mhemeryck/nest/internal/controller/event"
 	"github.com/mhemeryck/nest/internal/entity"
-	"github.com/mhemeryck/nest/internal/event"
 	"github.com/mhemeryck/nest/internal/registry"
 	"github.com/mhemeryck/nest/internal/sysfs"
 )

@@ -58,15 +58,19 @@ Covers come later because motor control adds safety requirements around up/down 
 - [x] Add test coverage for `internal/nest` runtime validation and configured sysfs device filtering
 - [x] Make controller events data-only semantic messages
 - [x] Move registry-backed event normalization into controller-owned code
-- [x] Represent local light control as `sysfs.StateChange -> push button event -> light event -> relay command`
+- [x] Represent local light control as `sysfs.StateChange -> push button event -> light event -> sysfs.Command`
 - [x] Remove the intermediate digital input controller event until it represents a useful domain fact on its own
 - [x] Make sysfs actor addresses explicit with `entity.SysfsDeviceID`
 - [x] Rename configured input and relay actor-address fields to `SysfsDevice`
-- [ ] Add small registry lookup helpers where they make normalization or policy code clearer
-- [ ] Decide whether semantic event types should remain in `internal/event` or move under `internal/controller/event`
-- [ ] Decide whether registry remains app-wide or moves under the controller namespace later
-- [ ] Keep actor packages domain-agnostic and avoid passing registry or semantic controller events into actors
-- [ ] Defer `internal/actors/...` package grouping until a second actor makes the grouping useful
+- [x] Add small registry lookup helpers where they make normalization or policy code clearer
+- [x] Add a synchronous controller event dispatch boundary without introducing an internal event queue yet
+- [x] Group controller helpers by phase so actor observation handling, dispatch, normalization, and light execution are separated by file
+- [x] Decide that semantic event types are controller-owned and should live under `internal/controller/event`
+- [x] Move semantic event types from `internal/event` to `internal/controller/event`
+- [x] Keep registry app-wide for now because both `internal/nest` setup and controller policy use it
+- [x] Defer revisiting registry ownership until a second actor adds non-sysfs lookup paths
+- [x] Keep actor packages domain-agnostic and avoid passing registry or semantic controller events into actors
+- [x] Defer `internal/actors/...` package grouping until a second actor makes the grouping useful
 
 **Deliverable**: Runtime package boundaries are clear before MQTT, Modbus, and richer input semantics add more actor and translation paths.
 
@@ -75,7 +79,7 @@ Covers come later because motor control adds safety requirements around up/down 
 - [ ] Add MQTT broker configuration
 - [ ] Publish unit availability
 - [ ] Publish observed raw sysfs state changes
-- [ ] Publish mapped digital input events and state
+- [ ] Publish mapped input observations and state
 - [ ] Publish mapped relay state changes
 - [ ] Publish a retained unit autodiscovery document on a dedicated discovery topic
 - [ ] Include state topics, command topics, entity IDs, capabilities, and command enablement in discovery

@@ -126,7 +126,8 @@ The registry may contain actor-facing mappings such as sysfs device IDs to entit
 It should not contain live actor runtime state such as clients, goroutines, channels, reconnect state, credentials, or mutable protocol state.
 
 It may be worth moving registry under the controller namespace later, for example `internal/controller/registry`.
-That should only happen after separating controller lookup needs from general setup or discovery needs.
+For now, registry should remain app-wide because both `internal/nest` setup and controller policy use it.
+That decision should be revisited once another actor adds non-sysfs lookup paths and the split between setup lookups and controller-only lookups is clearer.
 
 Registry callers should not need to understand every raw map if small lookup helpers make intent clearer.
 Helpers such as `PushButtonsByInput`, `BindingsByButton`, or `RelayByLight` can be added gradually when they simplify normalization or policy code.
@@ -174,8 +175,8 @@ Move actors under an `actors` folder when another actor makes the grouping usefu
 ## Immediate Refactor Candidates
 
 Extract `cmd/nest` runtime wiring into `internal/nest`.
-Make `internal/event` data-only by moving registry-backed mapping functions into controller-owned normalization code.
-After `internal/event` is data-only, decide whether it should remain `internal/event` or move under `internal/controller/event`.
+Make controller events data-only by moving registry-backed mapping functions into controller-owned normalization code.
+Move semantic event types under `internal/controller/event` because semantic events are controller-owned.
 Add minimal registry lookup helpers where they make normalization or policy code clearer.
 Keep actor-facing address types explicit before adding other actor address types.
 Group registry mappings by purpose, such as domain mappings, sysfs mappings, and later transport mappings.
@@ -183,7 +184,5 @@ Keep actor packages focused on actor behavior and keep cross-actor translation i
 
 ## Open Questions
 
-Should registry remain app-wide, or should it become `internal/controller/registry`?
-Should semantic event types remain in `internal/event`, or move under `internal/controller/event` after mapping functions are removed?
 When command topics or transport addresses are added, should they be parsed by the actor or resolved through registry mappings?
 When additional actors are added, should actor grouping move all actors under `internal/actors` in the same refactor?
