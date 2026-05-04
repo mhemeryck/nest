@@ -37,7 +37,7 @@ func handleStateChange(ctx context.Context, index *registry.Index, sysfsCommands
 	pushButtonEvents, handled := pushButtonEventsFromStateChange(index, stateChange)
 	if handled {
 		for _, pushButtonEvent := range pushButtonEvents {
-			handleEvent(ctx, index, sysfsCommands, pushButtonEvent)
+			dispatchEvent(ctx, index, sysfsCommands, pushButtonEvent)
 		}
 		return
 	}
@@ -57,38 +57,42 @@ func handleStateChange(ctx context.Context, index *registry.Index, sysfsCommands
 	)
 }
 
-func handleEvent(ctx context.Context, index *registry.Index, sysfsCommands chan<- sysfs.Command, busEvent event.Event) {
+func dispatchEvent(ctx context.Context, index *registry.Index, sysfsCommands chan<- sysfs.Command, busEvent event.Event) {
 	switch busEvent.Kind {
 	case event.PushButtonKind:
-		slog.Info(
-			"push button event",
-			"button_id",
-			busEvent.PushButton.ButtonID,
-			"name",
-			busEvent.PushButton.Name,
-			"kind",
-			busEvent.PushButton.Kind,
-		)
-
-		for _, lightEvent := range lightEventsFromPushButton(index, *busEvent.PushButton) {
-			handleEvent(ctx, index, sysfsCommands, lightEvent)
-		}
+		handlePushButtonEvent(ctx, index, sysfsCommands, *busEvent.PushButton)
 	case event.LightKind:
-		slog.Info(
-			"light event",
-			"light_id",
-			busEvent.Light.LightID,
-			"name",
-			busEvent.Light.Name,
-			"action",
-			busEvent.Light.Action,
-		)
-
-		handleLightEvent(ctx, index, sysfsCommands, *busEvent.Light)
+		dispatchLightEvent(ctx, index, sysfsCommands, *busEvent.Light)
 	}
 }
 
-func handleLightEvent(ctx context.Context, index *registry.Index, sysfsCommands chan<- sysfs.Command, lightEvent event.Light) {
+func handlePushButtonEvent(ctx context.Context, index *registry.Index, sysfsCommands chan<- sysfs.Command, pushButton event.PushButton) {
+	slog.Info(
+		"push button event",
+		"button_id",
+		pushButton.ButtonID,
+		"name",
+		pushButton.Name,
+		"kind",
+		pushButton.Kind,
+	)
+
+	for _, lightEvent := range lightEventsFromPushButton(index, pushButton) {
+		dispatchEvent(ctx, index, sysfsCommands, lightEvent)
+	}
+}
+
+func dispatchLightEvent(ctx context.Context, index *registry.Index, sysfsCommands chan<- sysfs.Command, lightEvent event.Light) {
+	slog.Info(
+		"light event",
+		"light_id",
+		lightEvent.LightID,
+		"name",
+		lightEvent.Name,
+		"action",
+		lightEvent.Action,
+	)
+
 	if lightEvent.Action != entity.LightActionToggle {
 		slog.Error("unsupported light action", "action", lightEvent.Action)
 		return
