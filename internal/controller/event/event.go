@@ -5,11 +5,9 @@ import "github.com/mhemeryck/nest/internal/entity"
 type Kind string
 
 const (
-	PushButtonKind Kind = "push_button"
-	LightKind      Kind = "light"
-
-	PushButtonPressed  = "pressed"
-	PushButtonReleased = "released"
+	PushButtonPressedKind  Kind = "push_button_pressed"
+	PushButtonReleasedKind Kind = "push_button_released"
+	LightKind              Kind = "light"
 )
 
 type Event struct {
@@ -21,7 +19,6 @@ type Event struct {
 type PushButton struct {
 	ButtonID entity.PushButtonID
 	Name     string
-	Kind     string
 }
 
 type Light struct {

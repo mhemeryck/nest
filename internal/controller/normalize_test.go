@@ -29,10 +29,9 @@ func TestPushButtonEventsFromStateChange(t *testing.T) {
 	require.True(t, handled)
 	require.Len(t, events, 2)
 
-	assert.Equal(t, event.PushButtonKind, events[0].Kind)
+	assert.Equal(t, event.PushButtonPressedKind, events[0].Kind)
 	assert.Equal(t, entity.PushButtonID("office_button"), events[0].PushButton.ButtonID)
 	assert.Equal(t, "Office button", events[0].PushButton.Name)
-	assert.Equal(t, event.PushButtonPressed, events[0].PushButton.Kind)
 	assert.Equal(t, entity.PushButtonID("office_button_secondary"), events[1].PushButton.ButtonID)
 }
 
@@ -61,9 +60,8 @@ func TestPushButtonEventsFromStateChangeMapsFallingEdgeToRelease(t *testing.T) {
 
 	require.True(t, handled)
 	require.Len(t, events, 1)
-	assert.Equal(t, event.PushButtonKind, events[0].Kind)
+	assert.Equal(t, event.PushButtonReleasedKind, events[0].Kind)
 	assert.Equal(t, entity.PushButtonID("office_button"), events[0].PushButton.ButtonID)
-	assert.Equal(t, event.PushButtonReleased, events[0].PushButton.Kind)
 }
 
 func TestLightEventsFromPushButton(t *testing.T) {
@@ -72,22 +70,11 @@ func TestLightEventsFromPushButton(t *testing.T) {
 		Bindings: []entity.Binding{{Button: entity.PushButtonID("office_button"), Light: entity.LightID("office_light"), Action: entity.LightActionToggle}},
 	})
 
-	events := lightEventsFromPushButton(index, event.PushButton{ButtonID: entity.PushButtonID("office_button"), Kind: event.PushButtonPressed})
+	events := lightEventsFromPushButton(index, event.PushButton{ButtonID: entity.PushButtonID("office_button")})
 	require.Len(t, events, 1)
 
 	assert.Equal(t, event.LightKind, events[0].Kind)
 	assert.Equal(t, entity.LightID("office_light"), events[0].Light.LightID)
 	assert.Equal(t, "Office light", events[0].Light.Name)
 	assert.Equal(t, entity.LightActionToggle, events[0].Light.Action)
-}
-
-func TestLightEventsFromPushButtonIgnoresRelease(t *testing.T) {
-	index := registry.Build(&entity.Root{
-		Lights:   []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
-		Bindings: []entity.Binding{{Button: entity.PushButtonID("office_button"), Light: entity.LightID("office_light"), Action: entity.LightActionToggle}},
-	})
-
-	events := lightEventsFromPushButton(index, event.PushButton{ButtonID: entity.PushButtonID("office_button"), Kind: event.PushButtonReleased})
-
-	assert.Empty(t, events)
 }

@@ -12,23 +12,27 @@ import (
 
 func dispatchEvent(ctx context.Context, index *registry.Index, sysfsCommands chan<- sysfs.Command, busEvent event.Event) {
 	switch busEvent.Kind {
-	case event.PushButtonKind:
-		handlePushButtonEvent(ctx, index, sysfsCommands, *busEvent.PushButton)
+	case event.PushButtonPressedKind, event.PushButtonReleasedKind:
+		handlePushButtonEvent(ctx, index, sysfsCommands, busEvent.Kind, *busEvent.PushButton)
 	case event.LightKind:
 		dispatchLightEvent(ctx, index, sysfsCommands, *busEvent.Light)
 	}
 }
 
-func handlePushButtonEvent(ctx context.Context, index *registry.Index, sysfsCommands chan<- sysfs.Command, pushButton event.PushButton) {
+func handlePushButtonEvent(ctx context.Context, index *registry.Index, sysfsCommands chan<- sysfs.Command, eventKind event.Kind, pushButton event.PushButton) {
 	slog.Info(
 		"push button event",
 		"button_id",
 		pushButton.ButtonID,
 		"name",
 		pushButton.Name,
-		"kind",
-		pushButton.Kind,
+		"event_kind",
+		eventKind,
 	)
+
+	if eventKind != event.PushButtonPressedKind {
+		return
+	}
 
 	for _, lightEvent := range lightEventsFromPushButton(index, pushButton) {
 		dispatchEvent(ctx, index, sysfsCommands, lightEvent)
