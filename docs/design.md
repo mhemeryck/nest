@@ -53,7 +53,8 @@ They should expose actor-specific observations and commands, such as `sysfs.Stat
 They should not translate directly to other actors.
 
 The controller owns runtime translation between actor-specific observations and controller-level events.
-Current event normalization should live under `internal/controller/event` to make that ownership explicit while keeping translation code separate from the main control loop.
+Event types should be data-only and describe the controller's semantic event language.
+Controller-owned normalization code should translate actor observations plus registry lookups into those semantic events.
 As new actors are added, each actor should add one controller-side normalization path into controller events rather than direct actor-to-actor translations.
 
 The registry is the runtime lookup layer built from domain entities.
@@ -92,12 +93,9 @@ The current local light path is:
 
 ```text
 sysfs state
-  -> digital input event
   -> push button event
-  -> binding lookup
-  -> light lookup
-  -> relay lookup
-  -> sysfs command
+  -> light event
+  -> relay command
 ```
 
 That same pattern should extend to future integrations.

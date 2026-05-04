@@ -14,15 +14,15 @@ func TestConfiguredDevices(t *testing.T) {
 		{Identifier: "ro_3_14", Path: "/sys/ro_3_14/ro_value"},
 		{Identifier: "di_3_15", Path: "/sys/di_3_15/di_value"},
 	}
-	wanted := []entity.DeviceID{
-		entity.DeviceID("ro_3_14"),
-		entity.DeviceID("missing_2"),
-		entity.DeviceID("di_3_16"),
-		entity.DeviceID("missing_1"),
+	wanted := []entity.SysfsDeviceID{
+		entity.SysfsDeviceID("ro_3_14"),
+		entity.SysfsDeviceID("missing_2"),
+		entity.SysfsDeviceID("di_3_16"),
+		entity.SysfsDeviceID("missing_1"),
 	}
 
 	configured, missing := configuredDevices(devices, wanted)
 
 	assert.Equal(t, []*sysfs.Device{devices[1], devices[0]}, configured)
-	assert.Equal(t, []entity.DeviceID{entity.DeviceID("missing_1"), entity.DeviceID("missing_2")}, missing)
+	assert.Equal(t, []entity.SysfsDeviceID{entity.SysfsDeviceID("missing_1"), entity.SysfsDeviceID("missing_2")}, missing)
 }

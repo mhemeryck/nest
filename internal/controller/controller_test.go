@@ -55,10 +55,10 @@ func TestHandleStateChangeTogglesLightRelay(t *testing.T) {
 	require.NoError(t, os.WriteFile(relayPath, []byte("0\n"), 0o644))
 
 	index := registry.Build(&entity.Root{
-		DigitalInputs: []entity.DigitalInput{{ID: entity.DigitalInputID("office_button_input"), Device: entity.DeviceID("di_3_16")}},
+		DigitalInputs: []entity.DigitalInput{{ID: entity.DigitalInputID("office_button_input"), SysfsDevice: entity.SysfsDeviceID("di_3_16")}},
 		PushButtons:   []entity.PushButton{{ID: entity.PushButtonID("office_button"), Name: "Office button", Input: entity.DigitalInputID("office_button_input")}},
 		Lights:        []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
-		Relays:        []entity.Relay{{ID: entity.RelayID("office_light_relay"), Name: "Office light relay", Device: entity.DeviceID("ro_3_14")}},
+		Relays:        []entity.Relay{{ID: entity.RelayID("office_light_relay"), Name: "Office light relay", SysfsDevice: entity.SysfsDeviceID("ro_3_14")}},
 		Bindings:      []entity.Binding{{Button: entity.PushButtonID("office_button"), Light: entity.LightID("office_light"), Action: entity.LightActionToggle}},
 	})
 	commands := make(chan sysfs.Command, 1)
@@ -72,7 +72,7 @@ func TestHandleStateChangeTogglesLightRelay(t *testing.T) {
 	}()
 
 	logs := captureLogs(t, func() {
-		handleStateChange(t.Context(), index, commands, sysfs.StateChange{
+		handleSysfsStateChange(t.Context(), index, commands, sysfs.StateChange{
 			Device:   sysfs.Device{Identifier: "di_3_16", Path: "/sys/di_3_16/di_value"},
 			OldValue: sysfs.Off,
 			NewValue: sysfs.On,
@@ -80,8 +80,8 @@ func TestHandleStateChangeTogglesLightRelay(t *testing.T) {
 		})
 	})
 
-	assert.Contains(t, logs, "digital input event")
 	assert.Contains(t, logs, "push button event")
+	assert.Contains(t, logs, "light event")
 	assert.Contains(t, logs, "light toggled")
 	<-commandDone
 
@@ -94,7 +94,7 @@ func TestHandleStateChangeLogsRawStateChangeForUnknownDevice(t *testing.T) {
 	index := registry.Build(&entity.Root{})
 
 	logs := captureLogs(t, func() {
-		handleStateChange(t.Context(), index, nil, sysfs.StateChange{
+		handleSysfsStateChange(t.Context(), index, nil, sysfs.StateChange{
 			Device:   sysfs.Device{Identifier: "ro_3_14", Path: "/sys/ro_3_14/ro_value"},
 			OldValue: sysfs.Off,
 			NewValue: sysfs.On,
@@ -107,13 +107,36 @@ func TestHandleStateChangeLogsRawStateChangeForUnknownDevice(t *testing.T) {
 	assert.NotContains(t, logs, "push button event")
 }
 
+func TestHandleStateChangeLogsPushButtonRelease(t *testing.T) {
+	index := registry.Build(&entity.Root{
+		DigitalInputs: []entity.DigitalInput{{ID: entity.DigitalInputID("office_button_input"), SysfsDevice: entity.SysfsDeviceID("di_3_16")}},
+		PushButtons:   []entity.PushButton{{ID: entity.PushButtonID("office_button"), Name: "Office button", Input: entity.DigitalInputID("office_button_input")}},
+		Lights:        []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
+		Bindings:      []entity.Binding{{Button: entity.PushButtonID("office_button"), Light: entity.LightID("office_light"), Action: entity.LightActionToggle}},
+	})
+
+	logs := captureLogs(t, func() {
+		handleSysfsStateChange(t.Context(), index, nil, sysfs.StateChange{
+			Device:   sysfs.Device{Identifier: "di_3_16", Path: "/sys/di_3_16/di_value"},
+			OldValue: sysfs.On,
+			NewValue: sysfs.Off,
+			IsRising: false,
+		})
+	})
+
+	assert.Contains(t, logs, "push button event")
+	assert.Contains(t, logs, "released")
+	assert.NotContains(t, logs, "light event")
+	assert.NotContains(t, logs, "light toggled")
+}
+
 func TestHandleStateChangeDoesNotBlockCommandSendAfterCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	index := registry.Build(&entity.Root{
-		DigitalInputs: []entity.DigitalInput{{ID: entity.DigitalInputID("office_button_input"), Device: entity.DeviceID("di_3_16")}},
+		DigitalInputs: []entity.DigitalInput{{ID: entity.DigitalInputID("office_button_input"), SysfsDevice: entity.SysfsDeviceID("di_3_16")}},
 		PushButtons:   []entity.PushButton{{ID: entity.PushButtonID("office_button"), Name: "Office button", Input: entity.DigitalInputID("office_button_input")}},
 		Lights:        []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
-		Relays:        []entity.Relay{{ID: entity.RelayID("office_light_relay"), Name: "Office light relay", Device: entity.DeviceID("ro_3_14")}},
+		Relays:        []entity.Relay{{ID: entity.RelayID("office_light_relay"), Name: "Office light relay", SysfsDevice: entity.SysfsDeviceID("ro_3_14")}},
 		Bindings:      []entity.Binding{{Button: entity.PushButtonID("office_button"), Light: entity.LightID("office_light"), Action: entity.LightActionToggle}},
 	})
 	commands := make(chan sysfs.Command)
@@ -121,7 +144,7 @@ func TestHandleStateChangeDoesNotBlockCommandSendAfterCancellation(t *testing.T)
 
 	go func() {
 		defer close(done)
-		handleStateChange(ctx, index, commands, sysfs.StateChange{
+		handleSysfsStateChange(ctx, index, commands, sysfs.StateChange{
 			Device:   sysfs.Device{Identifier: "di_3_16", Path: "/sys/di_3_16/di_value"},
 			OldValue: sysfs.Off,
 			NewValue: sysfs.On,

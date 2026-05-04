@@ -50,12 +50,36 @@ Covers come later because motor control adds safety requirements around up/down 
 
 **Deliverable**: `nest` can produce controller-ready artifacts on demand and publish release artifacts automatically from `master`.
 
-## Phase 4: Passive MQTT Observability and Discovery
+## Phase 4: Runtime Boundary Refactor
+
+- [x] Document runtime package boundaries and refactor direction
+- [x] Move top-level runtime wiring from `cmd/nest` into `internal/nest`
+- [x] Keep `cmd/nest` focused on CLI parsing, signal setup, fatal logging, and process exit status
+- [x] Add test coverage for `internal/nest` runtime validation and configured sysfs device filtering
+- [x] Make controller events data-only semantic messages
+- [x] Move registry-backed event normalization into controller-owned code
+- [x] Represent local light control as `sysfs.StateChange -> push button event -> light event -> sysfs.Command`
+- [x] Remove the intermediate digital input controller event until it represents a useful domain fact on its own
+- [x] Make sysfs actor addresses explicit with `entity.SysfsDeviceID`
+- [x] Rename configured input and relay actor-address fields to `SysfsDevice`
+- [x] Add small registry lookup helpers where they make normalization or policy code clearer
+- [x] Add a synchronous controller event dispatch boundary without introducing an internal event queue yet
+- [x] Group controller helpers by phase so actor observation handling, dispatch, normalization, and light execution are separated by file
+- [x] Decide that semantic event types are controller-owned and should live under `internal/controller/event`
+- [x] Move semantic event types from `internal/event` to `internal/controller/event`
+- [x] Keep registry app-wide for now because both `internal/nest` setup and controller policy use it
+- [x] Defer revisiting registry ownership until a second actor adds non-sysfs lookup paths
+- [x] Keep actor packages domain-agnostic and avoid passing registry or semantic controller events into actors
+- [x] Defer `internal/actors/...` package grouping until a second actor makes the grouping useful
+
+**Deliverable**: Runtime package boundaries are clear before MQTT, Modbus, and richer input semantics add more actor and translation paths.
+
+## Phase 5: Passive MQTT Observability and Discovery
 
 - [ ] Add MQTT broker configuration
 - [ ] Publish unit availability
 - [ ] Publish observed raw sysfs state changes
-- [ ] Publish mapped digital input events and state
+- [ ] Publish mapped input observations and state
 - [ ] Publish mapped relay state changes
 - [ ] Publish a retained unit autodiscovery document on a dedicated discovery topic
 - [ ] Include state topics, command topics, entity IDs, capabilities, and command enablement in discovery
@@ -64,7 +88,7 @@ Covers come later because motor control adds safety requirements around up/down 
 
 **Deliverable**: `nest` can run beside the current setup and expose what it observes without taking control.
 
-## Phase 5: MQTT Contract Hardening
+## Phase 6: MQTT Contract Hardening
 
 - [ ] Stabilize the MQTT topic structure
 - [ ] Stabilize the autodiscovery payload schema
@@ -76,7 +100,7 @@ Covers come later because motor control adds safety requirements around up/down 
 
 **Deliverable**: MQTT telemetry and discovery are reliable enough to guide migration decisions.
 
-## Phase 6: Input Semantics
+## Phase 7: Input Semantics
 
 - [ ] Debounce logic for inputs
 - [ ] Edge handling beyond rising-edge only
@@ -90,7 +114,7 @@ Debounce and richer button semantics still need to be added.
 
 **Deliverable**: Stable local input handling that can support real wall-switch behavior.
 
-## Phase 7: Distributed Light Control Model
+## Phase 8: Distributed Light Control Model
 
 - [ ] Define input-unit to output-unit light mappings
 - [ ] Represent light bindings that can target local or remote relays
@@ -101,7 +125,7 @@ Debounce and richer button semantics still need to be added.
 
 **Deliverable**: The existing multi-unit light topology can be represented in `nest` configuration and runtime indexes.
 
-## Phase 8: Modbus RTU Transport
+## Phase 9: Modbus RTU Transport
 
 - [ ] Serial port configuration
 - [ ] Modbus unit ID configuration
@@ -113,7 +137,7 @@ Debounce and richer button semantics still need to be added.
 
 **Deliverable**: `nest` can execute distributed light control across units via RS-485.
 
-## Phase 9: Light Control Migration
+## Phase 10: Light Control Migration
 
 - [ ] Start with one migrated light circuit
 - [ ] Enable relay writes only for selected migrated lights
@@ -123,7 +147,7 @@ Debounce and richer button semantics still need to be added.
 
 **Deliverable**: Existing distributed light control is migrated safely to `nest` before cover control begins.
 
-## Phase 10: Local Cover Controller
+## Phase 11: Local Cover Controller
 
 - [ ] Config-driven cover model
 - [ ] Covers composed from `up_relay` and `down_relay`
@@ -134,7 +158,7 @@ Debounce and richer button semantics still need to be added.
 
 **Deliverable**: Single-unit shade control works reliably on one hardware unit.
 
-## Phase 11: MQTT Commands
+## Phase 12: MQTT Commands
 
 - [ ] Subscribe to command topics already advertised in autodiscovery
 - [ ] Require explicit config before commands are enabled
@@ -145,7 +169,7 @@ Debounce and richer button semantics still need to be added.
 
 **Deliverable**: External systems can control migrated entities through MQTT.
 
-## Phase 12: Cover Refinement
+## Phase 13: Cover Refinement
 
 - [ ] Position tracking
 - [ ] Timing calibration and `max_time` handling
@@ -158,7 +182,7 @@ Debounce and richer button semantics still need to be added.
 
 **Deliverable**: Cover entities behave predictably under real-world timing and interruption scenarios.
 
-## Phase 13: MQTT and Home Assistant Expansion
+## Phase 14: MQTT and Home Assistant Expansion
 
 - [ ] Refine topic structure as needed for Home Assistant integration
 - [ ] Add Home Assistant auto-discovery if it still fits the design
@@ -173,7 +197,8 @@ These should be decided before transport and entity complexity increase.
 
 - [ ] Testing strategy (mock sysfs vs real hardware)
 - [x] Config file shape and CLI interface design
-- [ ] Local event model for buttons, toggles, and repeated presses
+- [x] Local event model boundary between actor observations, semantic events, and actor commands
+- [ ] Local event semantics for buttons, toggles, and repeated presses
 - [ ] MQTT topic and autodiscovery schema
 - [ ] Modbus topology and relay addressing model
 
@@ -184,3 +209,5 @@ These should be decided before transport and entity complexity increase.
 - [ ] Final topic structure and HA-facing MQTT contract
 - [ ] Whether command topics should be advertised for disabled entities
 - [ ] Whether Modbus output units execute semantic commands or expose coil-level relay control
+- [ ] Whether command topics or transport addresses should be parsed by the actor or resolved through registry mappings
+- [ ] Whether actor grouping should move integrations under `internal/actors` once a second actor makes the grouping useful
