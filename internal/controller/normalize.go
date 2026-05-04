@@ -13,8 +13,9 @@ func pushButtonEventsFromStateChange(index *registry.Index, stateChange sysfs.St
 		return nil, false
 	}
 
-	if !stateChange.IsRising {
-		return nil, true
+	pushButtonKind := event.PushButtonReleased
+	if stateChange.IsRising {
+		pushButtonKind = event.PushButtonPressed
 	}
 
 	buttons := registry.PushButtonsByInput(index, input.ID)
@@ -25,7 +26,7 @@ func pushButtonEventsFromStateChange(index *registry.Index, stateChange sysfs.St
 			PushButton: &event.PushButton{
 				ButtonID: button.ID,
 				Name:     button.Name,
-				Kind:     event.PushButtonPressed,
+				Kind:     pushButtonKind,
 			},
 		})
 	}
@@ -34,6 +35,10 @@ func pushButtonEventsFromStateChange(index *registry.Index, stateChange sysfs.St
 }
 
 func lightEventsFromPushButton(index *registry.Index, pushButton event.PushButton) []event.Event {
+	if pushButton.Kind != event.PushButtonPressed {
+		return nil
+	}
+
 	bindings := registry.BindingsByButton(index, pushButton.ButtonID)
 	lightEvents := make([]event.Event, 0, len(bindings))
 	for _, binding := range bindings {

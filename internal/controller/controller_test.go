@@ -107,6 +107,29 @@ func TestHandleStateChangeLogsRawStateChangeForUnknownDevice(t *testing.T) {
 	assert.NotContains(t, logs, "push button event")
 }
 
+func TestHandleStateChangeLogsPushButtonRelease(t *testing.T) {
+	index := registry.Build(&entity.Root{
+		DigitalInputs: []entity.DigitalInput{{ID: entity.DigitalInputID("office_button_input"), SysfsDevice: entity.SysfsDeviceID("di_3_16")}},
+		PushButtons:   []entity.PushButton{{ID: entity.PushButtonID("office_button"), Name: "Office button", Input: entity.DigitalInputID("office_button_input")}},
+		Lights:        []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
+		Bindings:      []entity.Binding{{Button: entity.PushButtonID("office_button"), Light: entity.LightID("office_light"), Action: entity.LightActionToggle}},
+	})
+
+	logs := captureLogs(t, func() {
+		handleSysfsStateChange(t.Context(), index, nil, sysfs.StateChange{
+			Device:   sysfs.Device{Identifier: "di_3_16", Path: "/sys/di_3_16/di_value"},
+			OldValue: sysfs.On,
+			NewValue: sysfs.Off,
+			IsRising: false,
+		})
+	})
+
+	assert.Contains(t, logs, "push button event")
+	assert.Contains(t, logs, "released")
+	assert.NotContains(t, logs, "light event")
+	assert.NotContains(t, logs, "light toggled")
+}
+
 func TestHandleStateChangeDoesNotBlockCommandSendAfterCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	index := registry.Build(&entity.Root{

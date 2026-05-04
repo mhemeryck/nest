@@ -8,7 +8,8 @@ const (
 	PushButtonKind Kind = "push_button"
 	LightKind      Kind = "light"
 
-	PushButtonPressed = "pressed"
+	PushButtonPressed  = "pressed"
+	PushButtonReleased = "released"
 )
 
 type Event struct {
