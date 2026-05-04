@@ -209,3 +209,5 @@ These should be decided before transport and entity complexity increase.
 - [ ] Final topic structure and HA-facing MQTT contract
 - [ ] Whether command topics should be advertised for disabled entities
 - [ ] Whether Modbus output units execute semantic commands or expose coil-level relay control
+- [ ] Whether command topics or transport addresses should be parsed by the actor or resolved through registry mappings
+- [ ] Whether actor grouping should move integrations under `internal/actors` once a second actor makes the grouping useful
