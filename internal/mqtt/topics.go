@@ -26,10 +26,6 @@ func DiscoveryTopic(topics Topics) string {
 	return joinTopic(topics, "units", topics.UnitID, "discovery")
 }
 
-func RawSysfsStateTopic(topics Topics, deviceID entity.SysfsDeviceID) string {
-	return joinTopic(topics, "units", topics.UnitID, "sysfs", string(deviceID), "state")
-}
-
 func DigitalInputStateTopic(topics Topics, inputID entity.DigitalInputID) string {
 	return joinTopic(topics, "units", topics.UnitID, "digital_inputs", string(inputID), "state")
 }

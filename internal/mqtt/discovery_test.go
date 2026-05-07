@@ -18,10 +18,6 @@ func TestBuildDiscovery(t *testing.T) {
 	assert.Equal(t, DiscoverySchemaVersion, doc.SchemaVersion)
 	assert.Equal(t, "controller_1", doc.UnitID)
 	assert.Equal(t, "nest/units/controller_1/availability", doc.Availability)
-	assert.Equal(t, []RawSysfsDiscovery{
-		{DeviceID: "di_3_16", StateTopic: "nest/units/controller_1/sysfs/di_3_16/state"},
-		{DeviceID: "ro_3_14", StateTopic: "nest/units/controller_1/sysfs/ro_3_14/state"},
-	}, doc.RawSysfs)
 	assert.Equal(t, []DigitalInputDiscovery{{
 		ID:          "office_button_input",
 		SysfsDevice: "di_3_16",

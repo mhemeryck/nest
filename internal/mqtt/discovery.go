@@ -9,19 +9,13 @@ import (
 const DiscoverySchemaVersion = 1
 
 type DiscoveryDocument struct {
-	SchemaVersion int                    `json:"schema_version"`
-	UnitID        string                 `json:"unit_id"`
-	Availability  string                 `json:"availability_topic"`
-	RawSysfs      []RawSysfsDiscovery    `json:"raw_sysfs"`
+	SchemaVersion int                     `json:"schema_version"`
+	UnitID        string                  `json:"unit_id"`
+	Availability  string                  `json:"availability_topic"`
 	DigitalInputs []DigitalInputDiscovery `json:"digital_inputs"`
 	PushButtons   []PushButtonDiscovery   `json:"push_buttons"`
 	Relays        []RelayDiscovery        `json:"relays"`
 	Lights        []LightDiscovery        `json:"lights"`
-}
-
-type RawSysfsDiscovery struct {
-	DeviceID   string `json:"device_id"`
-	StateTopic string `json:"state_topic"`
 }
 
 type DigitalInputDiscovery struct {
@@ -45,12 +39,12 @@ type RelayDiscovery struct {
 }
 
 type LightDiscovery struct {
-	ID             string   `json:"id"`
-	Name           string   `json:"name"`
-	Relay          string   `json:"relay"`
-	Capabilities   []string `json:"capabilities"`
-	StateTopic     string   `json:"state_topic"`
-	CommandTopic   string   `json:"command_topic"`
+	ID              string   `json:"id"`
+	Name            string   `json:"name"`
+	Relay           string   `json:"relay"`
+	Capabilities    []string `json:"capabilities"`
+	StateTopic      string   `json:"state_topic"`
+	CommandTopic    string   `json:"command_topic"`
 	CommandsEnabled bool     `json:"commands_enabled"`
 }
 
@@ -59,7 +53,6 @@ func BuildDiscovery(root *entity.Root, topics Topics) DiscoveryDocument {
 		SchemaVersion: DiscoverySchemaVersion,
 		UnitID:        topics.UnitID,
 		Availability:  AvailabilityTopic(topics),
-		RawSysfs:      make([]RawSysfsDiscovery, 0, len(root.DigitalInputs)+len(root.Relays)),
 		DigitalInputs: make([]DigitalInputDiscovery, 0, len(root.DigitalInputs)),
 		PushButtons:   make([]PushButtonDiscovery, 0, len(root.PushButtons)),
 		Relays:        make([]RelayDiscovery, 0, len(root.Relays)),
@@ -67,10 +60,6 @@ func BuildDiscovery(root *entity.Root, topics Topics) DiscoveryDocument {
 	}
 
 	for _, input := range root.DigitalInputs {
-		doc.RawSysfs = append(doc.RawSysfs, RawSysfsDiscovery{
-			DeviceID:   string(input.SysfsDevice),
-			StateTopic: RawSysfsStateTopic(topics, input.SysfsDevice),
-		})
 		doc.DigitalInputs = append(doc.DigitalInputs, DigitalInputDiscovery{
 			ID:          string(input.ID),
 			SysfsDevice: string(input.SysfsDevice),
@@ -88,10 +77,6 @@ func BuildDiscovery(root *entity.Root, topics Topics) DiscoveryDocument {
 	}
 
 	for _, relay := range root.Relays {
-		doc.RawSysfs = append(doc.RawSysfs, RawSysfsDiscovery{
-			DeviceID:   string(relay.SysfsDevice),
-			StateTopic: RawSysfsStateTopic(topics, relay.SysfsDevice),
-		})
 		doc.Relays = append(doc.Relays, RelayDiscovery{
 			ID:          string(relay.ID),
 			Name:        relay.Name,
@@ -102,12 +87,12 @@ func BuildDiscovery(root *entity.Root, topics Topics) DiscoveryDocument {
 
 	for _, light := range root.Lights {
 		doc.Lights = append(doc.Lights, LightDiscovery{
-			ID:             string(light.ID),
-			Name:           light.Name,
-			Relay:          string(light.Relay),
-			Capabilities:   []string{"toggle"},
-			StateTopic:     LightStateTopic(topics, light.ID),
-			CommandTopic:   LightCommandTopic(topics, light.ID),
+			ID:              string(light.ID),
+			Name:            light.Name,
+			Relay:           string(light.Relay),
+			Capabilities:    []string{"toggle"},
+			StateTopic:      LightStateTopic(topics, light.ID),
+			CommandTopic:    LightCommandTopic(topics, light.ID),
 			CommandsEnabled: false,
 		})
 	}

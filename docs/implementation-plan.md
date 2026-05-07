@@ -77,8 +77,8 @@ Covers come later because motor control adds safety requirements around up/down 
 ## Phase 5: Passive MQTT Observability and Discovery
 
 - [ ] Add MQTT broker configuration
+- [ ] Publish only semantic observations emitted by `nest` runtime or controller code
 - [ ] Publish unit availability
-- [ ] Publish observed raw sysfs state changes
 - [ ] Publish mapped input observations and state
 - [ ] Publish mapped relay state changes
 - [ ] Publish a retained unit autodiscovery document on a dedicated discovery topic
@@ -87,6 +87,13 @@ Covers come later because motor control adds safety requirements around up/down 
 - [ ] Do not let MQTT behavior write relay outputs yet
 
 **Deliverable**: `nest` can run beside the current setup and expose what it observes without taking control.
+
+Boundary note:
+
+- MQTT is a passive publisher for `nest` observations in this phase
+- MQTT must not consume from sysfs actor channels directly
+- MQTT should publish semantic observations only, not raw sysfs diagnostics
+- MQTT must not subscribe to command topics or produce actor commands
 
 ## Phase 6: MQTT Contract Hardening
 
