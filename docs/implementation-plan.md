@@ -90,6 +90,7 @@ Covers come later because motor control adds safety requirements around up/down 
 - [x] Do not let MQTT behavior write relay outputs yet
 - [x] Add local MQTT fixture for manual broker verification
 - [x] Document local Mosquitto and `mosquitto_sub` verification flow
+- [ ] Consider replacing repeated controller dispatch parameters with a data-only dispatch context
 
 **Deliverable**: `nest` can run beside the current setup and expose what it observes without taking control.
 
@@ -108,6 +109,8 @@ Current status:
 - MQTT config, actor wiring, startup availability, retained discovery, and semantic input, push button, and relay publishing are implemented
 - Manual local broker verification published availability, digital input, push button, and relay state messages under `nest/units/local/...`
 - Light state publishing still needs to be decided and implemented
+- Controller dispatch currently passes registry, sysfs command channel, MQTT command channel, and MQTT topics through several helpers
+- A follow-up refactor could introduce an unexported data-only dispatch context passed to package-level functions, without receiver methods
 - Reconnect republishing and offline availability are deferred to MQTT contract hardening unless needed earlier
 
 Manual verification sample:
