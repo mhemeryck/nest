@@ -76,16 +76,20 @@ Covers come later because motor control adds safety requirements around up/down 
 
 ## Phase 5: Passive MQTT Observability and Discovery
 
-- [ ] Add MQTT broker configuration
-- [ ] Treat MQTT as an actor with a command channel into MQTT and an event channel back to `nest`
-- [ ] Publish only semantic observations emitted by `nest` runtime or controller code
-- [ ] Publish unit availability
-- [ ] Publish mapped input observations and state
-- [ ] Publish mapped relay state changes
-- [ ] Publish a retained unit autodiscovery document on a dedicated discovery topic
-- [ ] Include state topics, command topics, entity IDs, capabilities, and command enablement in discovery
-- [ ] Do not subscribe to command topics yet
-- [ ] Do not let MQTT behavior write relay outputs yet
+- [x] Add MQTT broker configuration
+- [x] Treat MQTT as an actor with a command channel into MQTT and an event channel back to `nest`
+- [x] Publish only semantic observations emitted by `nest` runtime or controller code
+- [x] Publish unit availability
+- [x] Publish mapped input observations and state
+- [x] Publish mapped push button observations and state
+- [x] Publish mapped relay state changes
+- [ ] Publish mapped light state changes
+- [x] Publish a retained unit autodiscovery document on a dedicated discovery topic
+- [x] Include state topics, command topics, entity IDs, capabilities, and command enablement in discovery
+- [x] Do not subscribe to command topics yet
+- [x] Do not let MQTT behavior write relay outputs yet
+- [x] Add local MQTT fixture for manual broker verification
+- [x] Document local Mosquitto and `mosquitto_sub` verification flow
 
 **Deliverable**: `nest` can run beside the current setup and expose what it observes without taking control.
 
@@ -98,6 +102,25 @@ Boundary note:
 - MQTT must not consume from sysfs actor channels directly
 - MQTT should publish semantic observations only, not raw sysfs diagnostics
 - MQTT must not subscribe to command topics or produce actor commands
+
+Current status:
+
+- MQTT config, actor wiring, startup availability, retained discovery, and semantic input, push button, and relay publishing are implemented
+- Manual local broker verification published availability, digital input, push button, and relay state messages under `nest/units/local/...`
+- Light state publishing still needs to be decided and implemented
+- Reconnect republishing and offline availability are deferred to MQTT contract hardening unless needed earlier
+
+Manual verification sample:
+
+```text
+nest/units/local/availability online
+nest/units/local/digital_inputs/office_button_input/state {"input_id":"office_button_input","sysfs_device":"di_3_16","value":1}
+nest/units/local/push_buttons/office_button/state {"button_id":"office_button","name":"Office light button","state":"pressed"}
+nest/units/local/relays/office_light_relay/state {"relay_id":"office_light_relay","name":"Office light relay","sysfs_device":"ro_3_14","value":1}
+nest/units/local/digital_inputs/office_button_input/state {"input_id":"office_button_input","sysfs_device":"di_3_16","value":0}
+nest/units/local/push_buttons/office_button/state {"button_id":"office_button","name":"Office light button","state":"released"}
+nest/units/local/relays/office_light_relay/state {"relay_id":"office_light_relay","name":"Office light relay","sysfs_device":"ro_3_14","value":0}
+```
 
 ## Phase 6: MQTT Contract Hardening
 
