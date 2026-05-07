@@ -21,6 +21,14 @@ func mqttChannels(root *entity.Root) (chan mqtt.Command, chan mqtt.Event, chan s
 	return commands, events, done
 }
 
+func mqttTopics(root *entity.Root) mqtt.Topics {
+	if !root.MQTT.Enabled {
+		return mqtt.Topics{}
+	}
+
+	return mqtt.NewTopics(root.MQTT.TopicPrefix, root.MQTT.UnitID)
+}
+
 func publishMQTTStartup(ctx context.Context, root *entity.Root, commands chan<- mqtt.Command) error {
 	startupCommands, err := mqtt.StartupCommands(root)
 	if err != nil {

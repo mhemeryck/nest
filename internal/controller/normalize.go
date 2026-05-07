@@ -33,6 +33,39 @@ func pushButtonEventsFromStateChange(index *registry.Index, stateChange sysfs.St
 	return buttonEvents, true
 }
 
+func semanticEventsFromStateChange(index *registry.Index, stateChange sysfs.StateChange) ([]event.Event, bool) {
+	deviceID := entity.SysfsDeviceID(stateChange.Device.Identifier)
+	if input, ok := registry.DigitalInputBySysfsDevice(index, deviceID); ok {
+		events := []event.Event{{
+			Kind: event.DigitalInputStateKind,
+			DigitalInput: &event.DigitalInput{
+				InputID:     input.ID,
+				SysfsDevice: input.SysfsDevice,
+				Value:       sysfs.PrintableValue(stateChange.NewValue),
+			},
+		}}
+
+		pushButtonEvents, _ := pushButtonEventsFromStateChange(index, stateChange)
+		events = append(events, pushButtonEvents...)
+
+		return events, true
+	}
+
+	if relay, ok := registry.RelayBySysfsDevice(index, deviceID); ok {
+		return []event.Event{{
+			Kind: event.RelayStateKind,
+			Relay: &event.Relay{
+				RelayID:     relay.ID,
+				Name:        relay.Name,
+				SysfsDevice: relay.SysfsDevice,
+				Value:       sysfs.PrintableValue(stateChange.NewValue),
+			},
+		}}, true
+	}
+
+	return nil, false
+}
+
 func lightEventsFromPushButton(index *registry.Index, pushButton event.PushButton) []event.Event {
 	bindings := registry.BindingsByButton(index, pushButton.ButtonID)
 	lightEvents := make([]event.Event, 0, len(bindings))

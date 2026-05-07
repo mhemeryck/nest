@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/mhemeryck/nest/internal/controller/event"
+	"github.com/mhemeryck/nest/internal/mqtt"
 	"github.com/mhemeryck/nest/internal/registry"
 	"github.com/mhemeryck/nest/internal/sysfs"
 )
@@ -12,11 +14,29 @@ func Run(
 	ctx context.Context,
 	index *registry.Index,
 	sysfsCommands chan<- sysfs.Command,
+	mqttCommands chan<- mqtt.Command,
+	mqttTopics mqtt.Topics,
 	stateChanges <-chan sysfs.StateChange,
 	done chan<- struct{},
 ) {
 	defer close(done)
+	semanticEvents := make(chan event.Event, 32)
+	normalizerDone := make(chan struct{})
+	go normalizeStateChanges(ctx, index, stateChanges, semanticEvents, normalizerDone)
 
+	dispatchEvents(ctx, index, sysfsCommands, mqttCommands, mqttTopics, semanticEvents)
+	<-normalizerDone
+}
+
+func normalizeStateChanges(
+	ctx context.Context,
+	index *registry.Index,
+	stateChanges <-chan sysfs.StateChange,
+	semanticEvents chan<- event.Event,
+	done chan<- struct{},
+) {
+	defer close(done)
+	defer close(semanticEvents)
 	for {
 		select {
 		case <-ctx.Done():
@@ -26,16 +46,40 @@ func Run(
 				return
 			}
 
-			handleSysfsStateChange(ctx, index, sysfsCommands, stateChange)
+			handleSysfsStateChange(ctx, index, semanticEvents, stateChange)
 		}
 	}
 }
 
-func handleSysfsStateChange(ctx context.Context, index *registry.Index, sysfsCommands chan<- sysfs.Command, stateChange sysfs.StateChange) {
-	pushButtonEvents, handled := pushButtonEventsFromStateChange(index, stateChange)
+func dispatchEvents(
+	ctx context.Context,
+	index *registry.Index,
+	sysfsCommands chan<- sysfs.Command,
+	mqttCommands chan<- mqtt.Command,
+	mqttTopics mqtt.Topics,
+	semanticEvents <-chan event.Event,
+) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case semanticEvent, ok := <-semanticEvents:
+			if !ok {
+				return
+			}
+
+			dispatchEvent(ctx, index, sysfsCommands, mqttCommands, mqttTopics, semanticEvent)
+		}
+	}
+}
+
+func handleSysfsStateChange(ctx context.Context, index *registry.Index, semanticEvents chan<- event.Event, stateChange sysfs.StateChange) {
+	events, handled := semanticEventsFromStateChange(index, stateChange)
 	if handled {
-		for _, pushButtonEvent := range pushButtonEvents {
-			dispatchEvent(ctx, index, sysfsCommands, pushButtonEvent)
+		for _, semanticEvent := range events {
+			if !publishSemanticEvent(ctx, semanticEvents, semanticEvent) {
+				return
+			}
 		}
 		return
 	}
@@ -53,4 +97,13 @@ func handleSysfsStateChange(ctx context.Context, index *registry.Index, sysfsCom
 		"rising",
 		stateChange.IsRising,
 	)
+}
+
+func publishSemanticEvent(ctx context.Context, semanticEvents chan<- event.Event, semanticEvent event.Event) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case semanticEvents <- semanticEvent:
+		return true
+	}
 }

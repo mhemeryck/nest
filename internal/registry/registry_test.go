@@ -74,4 +74,8 @@ func TestLookupHelpers(t *testing.T) {
 	relay, ok := RelayByID(index, entity.RelayID("office_light_relay"))
 	require.True(t, ok)
 	assert.Equal(t, root.Relays[0], relay)
+
+	relay, ok = RelayBySysfsDevice(index, entity.SysfsDeviceID("ro_3_14"))
+	require.True(t, ok)
+	assert.Equal(t, root.Relays[0], relay)
 }

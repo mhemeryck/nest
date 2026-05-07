@@ -77,7 +77,7 @@ func Run(ctx context.Context, opts Options) error {
 	go sysfs.Run(ctx, configuredDevices, sysfsCommands, states, sysfsDone)
 
 	controllerDone := make(chan struct{})
-	go controller.Run(ctx, index, sysfsCommands, states, controllerDone)
+	go controller.Run(ctx, index, sysfsCommands, mqttCommands, mqttTopics(root), states, controllerDone)
 
 	slog.Info("polling devices", "message", "press Ctrl+C to exit")
 

@@ -88,3 +88,8 @@ func RelayByID(index *Index, relayID entity.RelayID) (entity.Relay, bool) {
 	relay, ok := index.RelaysByID[relayID]
 	return relay, ok
 }
+
+func RelayBySysfsDevice(index *Index, deviceID entity.SysfsDeviceID) (entity.Relay, bool) {
+	relay, ok := index.RelaysByDevice[deviceID]
+	return relay, ok
+}
