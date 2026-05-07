@@ -23,6 +23,7 @@ func Run(ctx context.Context, opts Options) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	// Load and validate external configuration before building runtime state.
 	configRoot, err := config.Load(opts.ConfigPath)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
@@ -33,9 +34,11 @@ func Run(ctx context.Context, opts Options) error {
 		return nil
 	}
 
+	// Translate config into domain entities and indexes used by controllers.
 	root := entity.FromConfig(configRoot)
 	index := registry.Build(root)
 
+	// Resolve configured sysfs devices against the hardware tree before actors start.
 	slog.Info("crawling sysfs device tree", "root", root.SysfsRoot)
 	devices, err := sysfs.ListDevices(root.SysfsRoot)
 	if err != nil {
@@ -57,6 +60,7 @@ func Run(ctx context.Context, opts Options) error {
 		slog.Info("configured device", "identifier", device.Identifier, "path", device.Path)
 	}
 
+	// Start optional transport actors before local control so startup state is published early.
 	mqttCommands, mqttEvents, mqttDone := mqttChannels(root)
 	if mqttCommands != nil {
 		go mqtt.Run(ctx, root.MQTT, mqttCommands, mqttEvents, mqttDone)
@@ -68,6 +72,7 @@ func Run(ctx context.Context, opts Options) error {
 		}
 	}
 
+	// Start hardware and controller actors with unidirectional command and observation channels.
 	sysfsCommands, states, sysfsDone := sysfsChannels()
 	go sysfs.Run(ctx, configuredDevices, sysfsCommands, states, sysfsDone)
 
@@ -76,6 +81,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	slog.Info("polling devices", "message", "press Ctrl+C to exit")
 
+	// Controller shutdown drives process shutdown and then actors are drained in order.
 	<-controllerDone
 	cancel()
 	<-sysfsDone
