@@ -9,6 +9,7 @@ import (
 	"github.com/mhemeryck/nest/internal/config"
 	"github.com/mhemeryck/nest/internal/controller"
 	"github.com/mhemeryck/nest/internal/entity"
+	"github.com/mhemeryck/nest/internal/mqtt"
 	"github.com/mhemeryck/nest/internal/registry"
 	"github.com/mhemeryck/nest/internal/sysfs"
 )
@@ -56,13 +57,22 @@ func Run(ctx context.Context, opts Options) error {
 		slog.Info("configured device", "identifier", device.Identifier, "path", device.Path)
 	}
 
-	commands := make(chan sysfs.Command, 32)
-	states := make(chan sysfs.StateChange, 32)
-	sysfsDone := make(chan struct{})
-	go sysfs.Run(ctx, configuredDevices, commands, states, sysfsDone)
+	mqttCommands, mqttEvents, mqttDone := mqttChannels(root)
+	if mqttCommands != nil {
+		go mqtt.Run(ctx, root.MQTT, mqttCommands, mqttEvents, mqttDone)
+		go logMQTTEvents(ctx, mqttEvents)
+		if err := publishMQTTStartup(ctx, root, mqttCommands); err != nil {
+			cancel()
+			<-mqttDone
+			return err
+		}
+	}
+
+	sysfsCommands, states, sysfsDone := sysfsChannels()
+	go sysfs.Run(ctx, configuredDevices, sysfsCommands, states, sysfsDone)
 
 	controllerDone := make(chan struct{})
-	go controller.Run(ctx, index, commands, states, controllerDone)
+	go controller.Run(ctx, index, sysfsCommands, states, controllerDone)
 
 	slog.Info("polling devices", "message", "press Ctrl+C to exit")
 
@@ -70,6 +80,12 @@ func Run(ctx context.Context, opts Options) error {
 	cancel()
 	<-sysfsDone
 	close(states)
+	if mqttDone != nil {
+		<-mqttDone
+	}
+	if mqttEvents != nil {
+		close(mqttEvents)
+	}
 
 	slog.Info("shutting down")
 	return nil

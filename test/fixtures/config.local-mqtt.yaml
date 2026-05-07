@@ -1,0 +1,34 @@
+sysfs:
+  root: test/fixtures
+
+mqtt:
+  enabled: true
+  host: localhost
+  port: 1883
+  client_id: nest-local
+  topic_prefix: nest
+  unit_id: local
+
+digital_inputs:
+  - id: office_button_input
+    device: di_3_16
+
+push_buttons:
+  - id: office_button
+    name: Office light button
+    input: office_button_input
+
+relays:
+  - id: office_light_relay
+    name: Office light relay
+    device: ro_3_14
+
+lights:
+  - id: office_light
+    name: Office light
+    relay: office_light_relay
+
+bindings:
+  - button: office_button
+    light: office_light
+    action: toggle
