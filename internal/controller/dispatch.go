@@ -23,7 +23,9 @@ func dispatchEvent(
 	case event.DigitalInputStateKind:
 		publishDigitalInputState(ctx, mqttCommands, mqttTopics, *busEvent.DigitalInput)
 	case event.PushButtonPressedKind, event.PushButtonReleasedKind:
-		handlePushButtonEvent(ctx, index, sysfsCommands, mqttCommands, mqttTopics, busEvent.Kind, *busEvent.PushButton)
+		logPushButtonEvent(busEvent.Kind, *busEvent.PushButton)
+		publishPushButtonState(ctx, mqttCommands, mqttTopics, busEvent.Kind, *busEvent.PushButton)
+		dispatchLightEventsFromPushButton(ctx, index, sysfsCommands, mqttCommands, mqttTopics, busEvent.Kind, *busEvent.PushButton)
 	case event.RelayStateKind:
 		publishRelayState(ctx, mqttCommands, mqttTopics, *busEvent.Relay)
 	case event.LightKind:
@@ -31,15 +33,7 @@ func dispatchEvent(
 	}
 }
 
-func handlePushButtonEvent(
-	ctx context.Context,
-	index *registry.Index,
-	sysfsCommands chan<- sysfs.Command,
-	mqttCommands chan<- mqtt.Command,
-	mqttTopics mqtt.Topics,
-	eventKind event.Kind,
-	pushButton event.PushButton,
-) {
+func logPushButtonEvent(eventKind event.Kind, pushButton event.PushButton) {
 	slog.Info(
 		"push button event",
 		"button_id",
@@ -49,8 +43,17 @@ func handlePushButtonEvent(
 		"event_kind",
 		eventKind,
 	)
-	publishPushButtonState(ctx, mqttCommands, mqttTopics, eventKind, pushButton)
+}
 
+func dispatchLightEventsFromPushButton(
+	ctx context.Context,
+	index *registry.Index,
+	sysfsCommands chan<- sysfs.Command,
+	mqttCommands chan<- mqtt.Command,
+	mqttTopics mqtt.Topics,
+	eventKind event.Kind,
+	pushButton event.PushButton,
+) {
 	if eventKind != event.PushButtonPressedKind {
 		return
 	}
