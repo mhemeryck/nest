@@ -20,6 +20,7 @@ var (
 
 type Root struct {
 	Sysfs         SysfsConfig          `yaml:"sysfs"`
+	MQTT          MQTTConfig           `yaml:"mqtt"`
 	DigitalInputs []DigitalInputConfig `yaml:"digital_inputs"`
 	PushButtons   []PushButtonConfig   `yaml:"push_buttons"`
 	Lights        []LightConfig        `yaml:"lights"`
@@ -29,6 +30,17 @@ type Root struct {
 
 type SysfsConfig struct {
 	Root string `yaml:"root"`
+}
+
+type MQTTConfig struct {
+	Enabled     bool   `yaml:"enabled"`
+	Host        string `yaml:"host"`
+	Port        int    `yaml:"port"`
+	ClientID    string `yaml:"client_id"`
+	Username    string `yaml:"username"`
+	Password    string `yaml:"password"`
+	TopicPrefix string `yaml:"topic_prefix"`
+	UnitID      string `yaml:"unit_id"`
 }
 
 type DigitalInputConfig struct {
@@ -119,6 +131,7 @@ func Validate(f *Root) error {
 	errs = errors.Join(
 		errs,
 		validateSysfs(f.Sysfs),
+		validateMQTT(f.MQTT),
 		inputErr,
 		buttonErr,
 		relayErr,
@@ -131,6 +144,26 @@ func Validate(f *Root) error {
 
 func validateSysfs(sysfs SysfsConfig) error {
 	return validateRequiredField("sysfs.root", sysfs.Root)
+}
+
+func validateMQTT(mqtt MQTTConfig) error {
+	if !mqtt.Enabled {
+		return nil
+	}
+
+	var portErr error
+	if mqtt.Port < 1 || mqtt.Port > 65535 {
+		portErr = fmt.Errorf("mqtt.port: must be between 1 and 65535")
+	}
+
+	return errors.Join(
+		validateRequiredField("mqtt.host", mqtt.Host),
+		portErr,
+		validateRequiredField("mqtt.client_id", mqtt.ClientID),
+		validateOptionalField("mqtt.username", mqtt.Username),
+		validateTopicPrefix("mqtt.topic_prefix", mqtt.TopicPrefix),
+		validateID("mqtt.unit_id", mqtt.UnitID),
+	)
 }
 
 func validateDigitalInputs(inputs []DigitalInputConfig) (map[string]struct{}, error) {
@@ -353,6 +386,26 @@ func validateRequiredField(field string, value string) error {
 	}
 
 	return validateNoOuterWhitespace(field, value)
+}
+
+func validateOptionalField(field string, value string) error {
+	if value == "" {
+		return nil
+	}
+
+	return validateNoOuterWhitespace(field, value)
+}
+
+func validateTopicPrefix(field string, value string) error {
+	if err := validateRequiredField(field, value); err != nil {
+		return err
+	}
+
+	if strings.Contains(value, "//") || strings.HasPrefix(value, "/") || strings.HasSuffix(value, "/") {
+		return fmt.Errorf("%s: must be a relative MQTT topic prefix without empty segments", field)
+	}
+
+	return nil
 }
 
 func validatePattern(field string, value string, pattern *regexp.Regexp, label string) error {
