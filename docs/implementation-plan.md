@@ -77,6 +77,7 @@ Covers come later because motor control adds safety requirements around up/down 
 ## Phase 5: Passive MQTT Observability and Discovery
 
 - [ ] Add MQTT broker configuration
+- [ ] Treat MQTT as an actor with a command channel into MQTT and an event channel back to `nest`
 - [ ] Publish only semantic observations emitted by `nest` runtime or controller code
 - [ ] Publish unit availability
 - [ ] Publish mapped input observations and state
@@ -91,6 +92,9 @@ Covers come later because motor control adds safety requirements around up/down 
 Boundary note:
 
 - MQTT is a passive publisher for `nest` observations in this phase
+- MQTT communication with the rest of the runtime uses two unidirectional channels
+- `nest` sends publish commands to the MQTT actor
+- the MQTT actor sends connection and publish status events back to `nest`
 - MQTT must not consume from sysfs actor channels directly
 - MQTT should publish semantic observations only, not raw sysfs diagnostics
 - MQTT must not subscribe to command topics or produce actor commands
