@@ -132,8 +132,17 @@ nest/units/local/relays/office_light_relay/state {"relay_id":"office_light_relay
 - [ ] Add schema versioning for discovery documents
 - [ ] Decide retained vs non-retained behavior per topic class
 - [ ] Handle reconnects and republish availability and discovery
+- [ ] Add MQTT Last Will and graceful offline availability publishing
 - [ ] Add logging for publish failures and dropped messages
+- [ ] Decide whether dropped publish warnings need rate limiting or counters
 - [ ] Add tests for generated topics and discovery payloads
+
+Notes from the earlier passive MQTT prototype:
+
+- MQTT Last Will and offline availability are useful, but should be part of contract hardening rather than the first passive publishing slice
+- Reconnect handling should republish retained discovery and availability so subscribers recover after broker interruptions
+- Dropped MQTT publish logging is useful for visibility, but may need rate limiting if frequent input changes happen while the broker is unavailable
+- Home Assistant discovery should remain separate from the unit-level `nest` discovery contract until the MQTT topic and payload schema are stable
 
 **Deliverable**: MQTT telemetry and discovery are reliable enough to guide migration decisions.
 
