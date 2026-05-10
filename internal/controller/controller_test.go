@@ -158,6 +158,16 @@ func TestHandleStateChangePublishesMappedRelayAndLightState(t *testing.T) {
 	assert.True(t, lightCommand.Publish.Retain)
 }
 
+func TestPublishMQTTDoesNotBlockWhenCommandChannelIsFull(t *testing.T) {
+	commands := make(chan mqtt.Command, 1)
+	commands <- mqtt.PublishCommand(mqtt.PublishMessage{Topic: "nest/full"})
+
+	published := publishMQTT(t.Context(), commands, mqtt.PublishMessage{Topic: "nest/dropped"})
+
+	assert.False(t, published)
+	assert.Len(t, commands, 1)
+}
+
 func TestHandleStateChangeLogsRawStateChangeForUnknownDevice(t *testing.T) {
 	index := registry.Build(&entity.Root{})
 	semanticEvents := make(chan event.Event, 1)

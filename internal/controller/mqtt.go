@@ -82,6 +82,9 @@ func publishMQTT(ctx context.Context, commands chan<- mqtt.Command, message mqtt
 		return false
 	case commands <- mqtt.PublishCommand(message):
 		return true
+	default:
+		slog.Warn("mqtt publish command dropped", "topic", message.Topic)
+		return false
 	}
 }
 
