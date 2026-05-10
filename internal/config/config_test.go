@@ -71,6 +71,51 @@ func TestValidate(t *testing.T) {
 			message: "sysfs.root: must not have leading or trailing whitespace",
 		},
 		{
+			name: "requires enabled MQTT host",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				MQTT:   validMQTTConfigWithHost(""),
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+			},
+			message: "mqtt.host: required",
+		},
+		{
+			name: "rejects enabled MQTT port below range",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				MQTT:   validMQTTConfigWithPort(0),
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+			},
+			message: "mqtt.port: must be between 1 and 65535",
+		},
+		{
+			name: "rejects enabled MQTT port above range",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				MQTT:   validMQTTConfigWithPort(65536),
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+			},
+			message: "mqtt.port: must be between 1 and 65535",
+		},
+		{
+			name: "rejects enabled MQTT topic prefix with empty segments",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				MQTT:   validMQTTConfigWithTopicPrefix("nest//controller"),
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+			},
+			message: "mqtt.topic_prefix: must be a relative MQTT topic prefix without empty segments",
+		},
+		{
+			name: "rejects whitespace padded MQTT username",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				MQTT:   validMQTTConfigWithUsername(" user "),
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+			},
+			message: "mqtt.username: must not have leading or trailing whitespace",
+		},
+		{
 			name: "rejects duplicate digital input ids",
 			file: Root{
 				Sysfs: SysfsConfig{Root: "/tmp"},
@@ -222,6 +267,7 @@ func TestValidate(t *testing.T) {
 func TestValidateAcceptsValidFile(t *testing.T) {
 	file := Root{
 		Sysfs: SysfsConfig{Root: "/tmp"},
+		MQTT:  validMQTTConfig(),
 		DigitalInputs: []DigitalInputConfig{
 			{ID: "office_button_input", Device: "di_3_16"},
 		},
@@ -240,6 +286,39 @@ func TestValidateAcceptsValidFile(t *testing.T) {
 	}
 
 	require.NoError(t, Validate(&file))
+}
+
+func validMQTTConfig() MQTTConfig {
+	return validMQTTConfigWithPort(1883)
+}
+
+func validMQTTConfigWithPort(port int) MQTTConfig {
+	return MQTTConfig{
+		Enabled:     true,
+		Host:        "localhost",
+		Port:        port,
+		ClientID:    "nest-controller-1",
+		TopicPrefix: "nest",
+		UnitID:      "controller_1",
+	}
+}
+
+func validMQTTConfigWithTopicPrefix(topicPrefix string) MQTTConfig {
+	mqtt := validMQTTConfig()
+	mqtt.TopicPrefix = topicPrefix
+	return mqtt
+}
+
+func validMQTTConfigWithHost(host string) MQTTConfig {
+	mqtt := validMQTTConfig()
+	mqtt.Host = host
+	return mqtt
+}
+
+func validMQTTConfigWithUsername(username string) MQTTConfig {
+	mqtt := validMQTTConfig()
+	mqtt.Username = username
+	return mqtt
 }
 
 func writeTestFile(t *testing.T, path string, content string) {

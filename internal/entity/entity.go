@@ -15,11 +15,23 @@ const LightActionToggle LightAction = "toggle"
 
 type Root struct {
 	SysfsRoot     string
+	MQTT          MQTT
 	DigitalInputs []DigitalInput
 	PushButtons   []PushButton
 	Lights        []Light
 	Relays        []Relay
 	Bindings      []Binding
+}
+
+type MQTT struct {
+	Enabled     bool
+	Host        string
+	Port        int
+	ClientID    string
+	Username    string
+	Password    string
+	TopicPrefix string
+	UnitID      string
 }
 
 type DigitalInput struct {
@@ -58,6 +70,7 @@ func FromConfig(root *config.Root) *Root {
 
 	entities := &Root{
 		SysfsRoot:     root.Sysfs.Root,
+		MQTT:          mqttFromConfig(root.MQTT),
 		DigitalInputs: make([]DigitalInput, 0, len(root.DigitalInputs)),
 		PushButtons:   make([]PushButton, 0, len(root.PushButtons)),
 		Lights:        make([]Light, 0, len(root.Lights)),
@@ -105,4 +118,17 @@ func FromConfig(root *config.Root) *Root {
 	}
 
 	return entities
+}
+
+func mqttFromConfig(mqtt config.MQTTConfig) MQTT {
+	return MQTT{
+		Enabled:     mqtt.Enabled,
+		Host:        mqtt.Host,
+		Port:        mqtt.Port,
+		ClientID:    mqtt.ClientID,
+		Username:    mqtt.Username,
+		Password:    mqtt.Password,
+		TopicPrefix: mqtt.TopicPrefix,
+		UnitID:      mqtt.UnitID,
+	}
 }

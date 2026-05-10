@@ -76,17 +76,54 @@ Covers come later because motor control adds safety requirements around up/down 
 
 ## Phase 5: Passive MQTT Observability and Discovery
 
-- [ ] Add MQTT broker configuration
-- [ ] Publish unit availability
-- [ ] Publish observed raw sysfs state changes
-- [ ] Publish mapped input observations and state
-- [ ] Publish mapped relay state changes
-- [ ] Publish a retained unit autodiscovery document on a dedicated discovery topic
-- [ ] Include state topics, command topics, entity IDs, capabilities, and command enablement in discovery
-- [ ] Do not subscribe to command topics yet
-- [ ] Do not let MQTT behavior write relay outputs yet
+- [x] Add MQTT broker configuration
+- [x] Treat MQTT as an actor with a command channel into MQTT and an event channel back to `nest`
+- [x] Publish only semantic observations emitted by `nest` runtime or controller code
+- [x] Publish unit availability
+- [x] Publish mapped input observations and state
+- [x] Publish mapped push button observations and state
+- [x] Publish mapped relay state changes
+- [x] Publish mapped light state changes
+- [x] Publish a retained unit autodiscovery document on a dedicated discovery topic
+- [x] Include state topics, command topics, entity IDs, capabilities, and command enablement in discovery
+- [x] Do not subscribe to command topics yet
+- [x] Do not let MQTT behavior write relay outputs yet
+- [x] Add local MQTT fixture for manual broker verification
+- [x] Document local Mosquitto and `mosquitto_sub` verification flow
+- [x] ~~Consider replacing repeated controller dispatch parameters with a data-only dispatch context~~
 
 **Deliverable**: `nest` can run beside the current setup and expose what it observes without taking control.
+
+Boundary note:
+
+- MQTT is a passive publisher for `nest` observations in this phase
+- MQTT communication with the rest of the runtime uses two unidirectional channels
+- `nest` sends publish commands to the MQTT actor
+- the MQTT actor sends connection and publish status events back to `nest`
+- MQTT must not consume from sysfs actor channels directly
+- MQTT should publish semantic observations only, not raw sysfs diagnostics
+- MQTT must not subscribe to command topics or produce actor commands
+
+Current status:
+
+- MQTT config, actor wiring, startup availability, retained discovery, and semantic input, push button, and relay publishing are implemented
+- Manual local broker verification published availability, digital input, push button, and relay state messages under `nest/units/local/...`
+- Light state publishing is derived from relay state for relay-backed local lights
+- ~~Controller dispatch currently passes registry, sysfs command channel, MQTT command channel, and MQTT topics through several helpers~~
+- Superseded by splitting semantic event dispatch into actor-specific command dispatchers instead of adding a context bag
+- Reconnect republishing and offline availability are deferred to MQTT contract hardening unless needed earlier
+
+Manual verification sample:
+
+```text
+nest/units/local/availability online
+nest/units/local/digital_inputs/office_button_input/state {"input_id":"office_button_input","sysfs_device":"di_3_16","value":1}
+nest/units/local/push_buttons/office_button/state {"button_id":"office_button","name":"Office light button","state":"pressed"}
+nest/units/local/relays/office_light_relay/state {"relay_id":"office_light_relay","name":"Office light relay","sysfs_device":"ro_3_14","value":1}
+nest/units/local/digital_inputs/office_button_input/state {"input_id":"office_button_input","sysfs_device":"di_3_16","value":0}
+nest/units/local/push_buttons/office_button/state {"button_id":"office_button","name":"Office light button","state":"released"}
+nest/units/local/relays/office_light_relay/state {"relay_id":"office_light_relay","name":"Office light relay","sysfs_device":"ro_3_14","value":0}
+```
 
 ## Phase 6: MQTT Contract Hardening
 
@@ -95,8 +132,17 @@ Covers come later because motor control adds safety requirements around up/down 
 - [ ] Add schema versioning for discovery documents
 - [ ] Decide retained vs non-retained behavior per topic class
 - [ ] Handle reconnects and republish availability and discovery
+- [ ] Add MQTT Last Will and graceful offline availability publishing
 - [ ] Add logging for publish failures and dropped messages
+- [ ] Decide whether dropped publish warnings need rate limiting or counters
 - [ ] Add tests for generated topics and discovery payloads
+
+Notes from the earlier passive MQTT prototype:
+
+- MQTT Last Will and offline availability are useful, but should be part of contract hardening rather than the first passive publishing slice
+- Reconnect handling should republish retained discovery and availability so subscribers recover after broker interruptions
+- Dropped MQTT publish logging is useful for visibility, but may need rate limiting if frequent input changes happen while the broker is unavailable
+- Home Assistant discovery should remain separate from the unit-level `nest` discovery contract until the MQTT topic and payload schema are stable
 
 **Deliverable**: MQTT telemetry and discovery are reliable enough to guide migration decisions.
 
@@ -211,3 +257,31 @@ These should be decided before transport and entity complexity increase.
 - [ ] Whether Modbus output units execute semantic commands or expose coil-level relay control
 - [ ] Whether command topics or transport addresses should be parsed by the actor or resolved through registry mappings
 - [ ] Whether actor grouping should move integrations under `internal/actors` once a second actor makes the grouping useful
+
+## Future Config Distribution Direction
+
+Out of scope for the current MQTT observability phase, but useful for guiding registry and topic-index decisions.
+
+Eventually, configuration may come from a central/global source that describes all controller units and their relationships.
+
+That global configuration could be distributed to each unit, possibly over MQTT or another control plane.
+Each unit would project the global configuration into the subset it needs locally, then build its local runtime state from that projection.
+
+The intended layering should stay roughly:
+
+```text
+global config
+  -> unit-local config projection
+  -> parsed config structs
+  -> domain entities
+  -> runtime registries/indexes
+  -> actor-specific addressing
+```
+
+Implications:
+
+- The domain registry should stay focused on semantic/domain lookup for the local unit
+- MQTT topic names and other transport addresses should not be stored directly in the domain registry by default
+- MQTT topics should remain actor-specific addressing, owned by the MQTT package or a future MQTT topic index
+- If topic generation spreads or the contract hardens, introduce a dedicated MQTT topic index built from domain entities and MQTT configuration
+- Global config projection should decide what each unit knows about, while actor-specific indexes decide how that local knowledge maps to transports
