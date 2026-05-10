@@ -19,17 +19,49 @@ func dispatchEvent(
 	mqttTopics mqtt.Topics,
 	busEvent event.Event,
 ) {
+	logSemanticEvent(busEvent)
+	dispatchSysfsCommand(ctx, index, sysfsCommands, busEvent)
+	dispatchMQTTCommand(ctx, mqttCommands, mqttTopics, busEvent)
+}
+
+func dispatchSysfsCommand(ctx context.Context, index *registry.Index, commands chan<- sysfs.Command, busEvent event.Event) {
+	switch busEvent.Kind {
+	case event.PushButtonPressedKind:
+		dispatchLightEventsFromPushButton(ctx, index, commands, *busEvent.PushButton)
+	case event.LightKind:
+		dispatchLightEvent(ctx, index, commands, *busEvent.Light)
+	}
+}
+
+func dispatchMQTTCommand(ctx context.Context, commands chan<- mqtt.Command, topics mqtt.Topics, busEvent event.Event) {
 	switch busEvent.Kind {
 	case event.DigitalInputStateKind:
-		publishDigitalInputState(ctx, mqttCommands, mqttTopics, *busEvent.DigitalInput)
+		publishDigitalInputState(ctx, commands, topics, *busEvent.DigitalInput)
+	case event.PushButtonPressedKind, event.PushButtonReleasedKind:
+		publishPushButtonState(ctx, commands, topics, busEvent.Kind, *busEvent.PushButton)
+	case event.RelayStateKind:
+		publishRelayState(ctx, commands, topics, *busEvent.Relay)
+	}
+}
+
+func dispatchLightEventsFromPushButton(
+	ctx context.Context,
+	index *registry.Index,
+	sysfsCommands chan<- sysfs.Command,
+	pushButton event.PushButton,
+) {
+	for _, lightEvent := range lightEventsFromPushButton(index, pushButton) {
+		logSemanticEvent(lightEvent)
+		dispatchSysfsCommand(ctx, index, sysfsCommands, lightEvent)
+	}
+}
+
+func logSemanticEvent(busEvent event.Event) {
+	switch busEvent.Kind {
 	case event.PushButtonPressedKind, event.PushButtonReleasedKind:
 		logPushButtonEvent(busEvent.Kind, *busEvent.PushButton)
-		publishPushButtonState(ctx, mqttCommands, mqttTopics, busEvent.Kind, *busEvent.PushButton)
-		dispatchLightEventsFromPushButton(ctx, index, sysfsCommands, mqttCommands, mqttTopics, busEvent.Kind, *busEvent.PushButton)
-	case event.RelayStateKind:
-		publishRelayState(ctx, mqttCommands, mqttTopics, *busEvent.Relay)
 	case event.LightKind:
-		dispatchLightEvent(ctx, index, sysfsCommands, *busEvent.Light)
+		logLightEvent(*busEvent.Light)
 	}
 }
 
@@ -45,25 +77,16 @@ func logPushButtonEvent(eventKind event.Kind, pushButton event.PushButton) {
 	)
 }
 
-func dispatchLightEventsFromPushButton(
-	ctx context.Context,
-	index *registry.Index,
-	sysfsCommands chan<- sysfs.Command,
-	mqttCommands chan<- mqtt.Command,
-	mqttTopics mqtt.Topics,
-	eventKind event.Kind,
-	pushButton event.PushButton,
-) {
-	if eventKind != event.PushButtonPressedKind {
+func dispatchLightEvent(ctx context.Context, index *registry.Index, sysfsCommands chan<- sysfs.Command, lightEvent event.Light) {
+	if lightEvent.Action != entity.LightActionToggle {
+		slog.Error("unsupported light action", "action", lightEvent.Action)
 		return
 	}
 
-	for _, lightEvent := range lightEventsFromPushButton(index, pushButton) {
-		dispatchEvent(ctx, index, sysfsCommands, mqttCommands, mqttTopics, lightEvent)
-	}
+	handleLightToggle(ctx, index, sysfsCommands, lightEvent)
 }
 
-func dispatchLightEvent(ctx context.Context, index *registry.Index, sysfsCommands chan<- sysfs.Command, lightEvent event.Light) {
+func logLightEvent(lightEvent event.Light) {
 	slog.Info(
 		"light event",
 		"light_id",
@@ -73,11 +96,4 @@ func dispatchLightEvent(ctx context.Context, index *registry.Index, sysfsCommand
 		"action",
 		lightEvent.Action,
 	)
-
-	if lightEvent.Action != entity.LightActionToggle {
-		slog.Error("unsupported light action", "action", lightEvent.Action)
-		return
-	}
-
-	handleLightToggle(ctx, index, sysfsCommands, lightEvent)
 }
