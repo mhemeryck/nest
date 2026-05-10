@@ -101,7 +101,7 @@ func TestHandleStateChangePublishesMappedInputAndButtonState(t *testing.T) {
 	topics := mqtt.NewTopics("nest", "controller_1")
 	semanticEvents := make(chan event.Event, 2)
 
-	handleSysfsStateChange(t.Context(), index, semanticEvents, sysfs.StateChange{
+	normalizeStateChange(t.Context(), index, semanticEvents, sysfs.StateChange{
 		Device:   sysfs.Device{Identifier: "di_3_16", Path: "/sys/di_3_16/di_value"},
 		OldValue: sysfs.Off,
 		NewValue: sysfs.On,
@@ -135,7 +135,7 @@ func TestHandleStateChangePublishesMappedRelayState(t *testing.T) {
 	topics := mqtt.NewTopics("nest", "controller_1")
 	semanticEvents := make(chan event.Event, 1)
 
-	handleSysfsStateChange(t.Context(), index, semanticEvents, sysfs.StateChange{
+	normalizeStateChange(t.Context(), index, semanticEvents, sysfs.StateChange{
 		Device:   sysfs.Device{Identifier: "ro_3_14", Path: "/sys/ro_3_14/ro_value"},
 		OldValue: sysfs.Off,
 		NewValue: sysfs.On,
@@ -155,7 +155,7 @@ func TestHandleStateChangeLogsRawStateChangeForUnknownDevice(t *testing.T) {
 	semanticEvents := make(chan event.Event, 1)
 
 	logs := captureLogs(t, func() {
-		handleSysfsStateChange(t.Context(), index, semanticEvents, sysfs.StateChange{
+		normalizeStateChange(t.Context(), index, semanticEvents, sysfs.StateChange{
 			Device:   sysfs.Device{Identifier: "ro_3_14", Path: "/sys/ro_3_14/ro_value"},
 			OldValue: sysfs.Off,
 			NewValue: sysfs.On,
@@ -178,7 +178,7 @@ func TestHandleStateChangeLogsPushButtonRelease(t *testing.T) {
 	semanticEvents := make(chan event.Event, 2)
 
 	logs := captureLogs(t, func() {
-		handleSysfsStateChange(t.Context(), index, semanticEvents, sysfs.StateChange{
+		normalizeStateChange(t.Context(), index, semanticEvents, sysfs.StateChange{
 			Device:   sysfs.Device{Identifier: "di_3_16", Path: "/sys/di_3_16/di_value"},
 			OldValue: sysfs.On,
 			NewValue: sysfs.Off,
@@ -208,7 +208,7 @@ func TestHandleStateChangeDoesNotBlockCommandSendAfterCancellation(t *testing.T)
 
 	go func() {
 		defer close(done)
-		handleSysfsStateChange(ctx, index, semanticEvents, sysfs.StateChange{
+		normalizeStateChange(ctx, index, semanticEvents, sysfs.StateChange{
 			Device:   sysfs.Device{Identifier: "di_3_16", Path: "/sys/di_3_16/di_value"},
 			OldValue: sysfs.Off,
 			NewValue: sysfs.On,

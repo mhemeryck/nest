@@ -46,7 +46,7 @@ func normalizeStateChanges(
 				return
 			}
 
-			handleSysfsStateChange(ctx, index, semanticEvents, stateChange)
+			normalizeStateChange(ctx, index, semanticEvents, stateChange)
 		}
 	}
 }
@@ -73,7 +73,7 @@ func dispatchEvents(
 	}
 }
 
-func handleSysfsStateChange(ctx context.Context, index *registry.Index, semanticEvents chan<- event.Event, stateChange sysfs.StateChange) {
+func normalizeStateChange(ctx context.Context, index *registry.Index, semanticEvents chan<- event.Event, stateChange sysfs.StateChange) {
 	events, handled := semanticEventsFromStateChange(index, stateChange)
 	if handled {
 		for _, semanticEvent := range events {
@@ -84,6 +84,10 @@ func handleSysfsStateChange(ctx context.Context, index *registry.Index, semantic
 		return
 	}
 
+	logUnmappedStateChange(stateChange)
+}
+
+func logUnmappedStateChange(stateChange sysfs.StateChange) {
 	slog.Info(
 		"state change",
 		"identifier",
