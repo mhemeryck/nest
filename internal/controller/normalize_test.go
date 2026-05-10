@@ -78,3 +78,27 @@ func TestLightEventsFromPushButton(t *testing.T) {
 	assert.Equal(t, "Office light", events[0].Light.Name)
 	assert.Equal(t, entity.LightActionToggle, events[0].Light.Action)
 }
+
+func TestSemanticEventsFromRelayStateChangeIncludesLightState(t *testing.T) {
+	index := registry.Build(&entity.Root{
+		Relays: []entity.Relay{{ID: entity.RelayID("office_light_relay"), Name: "Office light relay", SysfsDevice: entity.SysfsDeviceID("ro_3_14")}},
+		Lights: []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
+	})
+
+	events, handled := semanticEventsFromStateChange(index, sysfs.StateChange{
+		Device:   sysfs.Device{Identifier: "ro_3_14"},
+		OldValue: sysfs.Off,
+		NewValue: sysfs.On,
+		IsRising: true,
+	})
+
+	require.True(t, handled)
+	require.Len(t, events, 2)
+	assert.Equal(t, event.RelayStateKind, events[0].Kind)
+	assert.Equal(t, entity.RelayID("office_light_relay"), events[0].Relay.RelayID)
+	assert.Equal(t, 1, events[0].Relay.Value)
+	assert.Equal(t, event.LightStateKind, events[1].Kind)
+	assert.Equal(t, entity.LightID("office_light"), events[1].LightState.LightID)
+	assert.Equal(t, entity.RelayID("office_light_relay"), events[1].LightState.RelayID)
+	assert.Equal(t, 1, events[1].LightState.Value)
+}

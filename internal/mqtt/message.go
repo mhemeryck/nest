@@ -39,6 +39,13 @@ type RelayObservation struct {
 	Value       int                  `json:"value"`
 }
 
+type LightObservation struct {
+	LightID entity.LightID `json:"light_id"`
+	Name    string         `json:"name"`
+	RelayID entity.RelayID `json:"relay_id"`
+	Value   int            `json:"value"`
+}
+
 func AvailabilityMessage(topics Topics, status AvailabilityStatus) PublishMessage {
 	return PublishMessage{
 		Topic:   AvailabilityTopic(topics),
@@ -98,6 +105,20 @@ func RelayStateMessage(topics Topics, observation RelayObservation) (PublishMess
 
 	return PublishMessage{
 		Topic:   RelayStateTopic(topics, observation.RelayID),
+		Payload: payload,
+		Retain:  true,
+		QoS:     0,
+	}, nil
+}
+
+func LightStateMessage(topics Topics, observation LightObservation) (PublishMessage, error) {
+	payload, err := json.Marshal(observation)
+	if err != nil {
+		return PublishMessage{}, err
+	}
+
+	return PublishMessage{
+		Topic:   LightStateTopic(topics, observation.LightID),
 		Payload: payload,
 		Retain:  true,
 		QoS:     0,

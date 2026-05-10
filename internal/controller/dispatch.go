@@ -41,6 +41,8 @@ func dispatchMQTTCommand(ctx context.Context, commands chan<- mqtt.Command, topi
 		publishPushButtonState(ctx, commands, topics, busEvent.Kind, *busEvent.PushButton)
 	case event.RelayStateKind:
 		publishRelayState(ctx, commands, topics, *busEvent.Relay)
+	case event.LightStateKind:
+		publishLightState(ctx, commands, topics, *busEvent.LightState)
 	}
 }
 

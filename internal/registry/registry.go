@@ -11,6 +11,7 @@ type Index struct {
 	PushButtonsByID       map[entity.PushButtonID]entity.PushButton
 	PushButtonsByInputID  map[entity.DigitalInputID][]entity.PushButton
 	LightsByID            map[entity.LightID]entity.Light
+	LightsByRelayID       map[entity.RelayID][]entity.Light
 	BindingsByButtonID    map[entity.PushButtonID][]entity.Binding
 	RelaysByID            map[entity.RelayID]entity.Relay
 	RelaysByDevice        map[entity.SysfsDeviceID]entity.Relay
@@ -22,6 +23,7 @@ func Build(root *entity.Root) *Index {
 		PushButtonsByID:       make(map[entity.PushButtonID]entity.PushButton, len(root.PushButtons)),
 		PushButtonsByInputID:  make(map[entity.DigitalInputID][]entity.PushButton),
 		LightsByID:            make(map[entity.LightID]entity.Light, len(root.Lights)),
+		LightsByRelayID:       make(map[entity.RelayID][]entity.Light),
 		BindingsByButtonID:    make(map[entity.PushButtonID][]entity.Binding),
 		RelaysByID:            make(map[entity.RelayID]entity.Relay, len(root.Relays)),
 		RelaysByDevice:        make(map[entity.SysfsDeviceID]entity.Relay, len(root.Relays)),
@@ -38,6 +40,7 @@ func Build(root *entity.Root) *Index {
 
 	for _, light := range root.Lights {
 		index.LightsByID[light.ID] = light
+		index.LightsByRelayID[light.Relay] = append(index.LightsByRelayID[light.Relay], light)
 	}
 
 	for _, relay := range root.Relays {
@@ -82,6 +85,10 @@ func BindingsByButton(index *Index, buttonID entity.PushButtonID) []entity.Bindi
 func LightByID(index *Index, lightID entity.LightID) (entity.Light, bool) {
 	light, ok := index.LightsByID[lightID]
 	return light, ok
+}
+
+func LightsByRelay(index *Index, relayID entity.RelayID) []entity.Light {
+	return index.LightsByRelayID[relayID]
 }
 
 func RelayByID(index *Index, relayID entity.RelayID) (entity.Relay, bool) {

@@ -127,13 +127,14 @@ func TestHandleStateChangePublishesMappedInputAndButtonState(t *testing.T) {
 	assert.Equal(t, "ro_3_14", sysfsCommand.DeviceID)
 }
 
-func TestHandleStateChangePublishesMappedRelayState(t *testing.T) {
+func TestHandleStateChangePublishesMappedRelayAndLightState(t *testing.T) {
 	index := registry.Build(&entity.Root{
+		Lights: []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
 		Relays: []entity.Relay{{ID: entity.RelayID("office_light_relay"), Name: "Office light relay", SysfsDevice: entity.SysfsDeviceID("ro_3_14")}},
 	})
-	mqttCommands := make(chan mqtt.Command, 1)
+	mqttCommands := make(chan mqtt.Command, 2)
 	topics := mqtt.NewTopics("nest", "controller_1")
-	semanticEvents := make(chan event.Event, 1)
+	semanticEvents := make(chan event.Event, 2)
 
 	normalizeStateChange(t.Context(), index, semanticEvents, sysfs.StateChange{
 		Device:   sysfs.Device{Identifier: "ro_3_14", Path: "/sys/ro_3_14/ro_value"},
@@ -142,12 +143,19 @@ func TestHandleStateChangePublishesMappedRelayState(t *testing.T) {
 		IsRising: true,
 	})
 	dispatchEvent(t.Context(), index, nil, mqttCommands, topics, <-semanticEvents)
+	dispatchEvent(t.Context(), index, nil, mqttCommands, topics, <-semanticEvents)
 
-	command := <-mqttCommands
-	assert.Equal(t, mqtt.PublishCommandKind, command.Kind)
-	assert.Equal(t, "nest/units/controller_1/relays/office_light_relay/state", command.Publish.Topic)
-	assert.JSONEq(t, `{"relay_id":"office_light_relay","name":"Office light relay","sysfs_device":"ro_3_14","value":1}`, string(command.Publish.Payload))
-	assert.True(t, command.Publish.Retain)
+	relayCommand := <-mqttCommands
+	assert.Equal(t, mqtt.PublishCommandKind, relayCommand.Kind)
+	assert.Equal(t, "nest/units/controller_1/relays/office_light_relay/state", relayCommand.Publish.Topic)
+	assert.JSONEq(t, `{"relay_id":"office_light_relay","name":"Office light relay","sysfs_device":"ro_3_14","value":1}`, string(relayCommand.Publish.Payload))
+	assert.True(t, relayCommand.Publish.Retain)
+
+	lightCommand := <-mqttCommands
+	assert.Equal(t, mqtt.PublishCommandKind, lightCommand.Kind)
+	assert.Equal(t, "nest/units/controller_1/lights/office_light/state", lightCommand.Publish.Topic)
+	assert.JSONEq(t, `{"light_id":"office_light","name":"Office light","relay_id":"office_light_relay","value":1}`, string(lightCommand.Publish.Payload))
+	assert.True(t, lightCommand.Publish.Retain)
 }
 
 func TestHandleStateChangeLogsRawStateChangeForUnknownDevice(t *testing.T) {

@@ -57,6 +57,21 @@ func publishRelayState(ctx context.Context, commands chan<- mqtt.Command, topics
 	publishMQTT(ctx, commands, message)
 }
 
+func publishLightState(ctx context.Context, commands chan<- mqtt.Command, topics mqtt.Topics, light event.LightState) {
+	message, err := mqtt.LightStateMessage(topics, mqtt.LightObservation{
+		LightID: light.LightID,
+		Name:    light.Name,
+		RelayID: light.RelayID,
+		Value:   light.Value,
+	})
+	if err != nil {
+		slog.Error("build mqtt light state failed", "light_id", light.LightID, "error", err)
+		return
+	}
+
+	publishMQTT(ctx, commands, message)
+}
+
 func publishMQTT(ctx context.Context, commands chan<- mqtt.Command, message mqtt.PublishMessage) bool {
 	if commands == nil {
 		return false

@@ -9,6 +9,7 @@ const (
 	PushButtonPressedKind  Kind = "push_button_pressed"
 	PushButtonReleasedKind Kind = "push_button_released"
 	RelayStateKind         Kind = "relay_state"
+	LightStateKind         Kind = "light_state"
 	LightKind              Kind = "light"
 )
 
@@ -17,6 +18,7 @@ type Event struct {
 	DigitalInput *DigitalInput
 	PushButton   *PushButton
 	Relay        *Relay
+	LightState   *LightState
 	Light        *Light
 }
 
@@ -35,6 +37,13 @@ type Light struct {
 	LightID entity.LightID
 	Name    string
 	Action  entity.LightAction
+}
+
+type LightState struct {
+	LightID entity.LightID
+	Name    string
+	RelayID entity.RelayID
+	Value   int
 }
 
 type Relay struct {

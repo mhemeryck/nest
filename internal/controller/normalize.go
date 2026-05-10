@@ -52,7 +52,7 @@ func semanticEventsFromStateChange(index *registry.Index, stateChange sysfs.Stat
 	}
 
 	if relay, ok := registry.RelayBySysfsDevice(index, deviceID); ok {
-		return []event.Event{{
+		events := []event.Event{{
 			Kind: event.RelayStateKind,
 			Relay: &event.Relay{
 				RelayID:     relay.ID,
@@ -60,7 +60,21 @@ func semanticEventsFromStateChange(index *registry.Index, stateChange sysfs.Stat
 				SysfsDevice: relay.SysfsDevice,
 				Value:       sysfs.PrintableValue(stateChange.NewValue),
 			},
-		}}, true
+		}}
+
+		for _, light := range registry.LightsByRelay(index, relay.ID) {
+			events = append(events, event.Event{
+				Kind: event.LightStateKind,
+				LightState: &event.LightState{
+					LightID: light.ID,
+					Name:    light.Name,
+					RelayID: relay.ID,
+					Value:   sysfs.PrintableValue(stateChange.NewValue),
+				},
+			})
+		}
+
+		return events, true
 	}
 
 	return nil, false

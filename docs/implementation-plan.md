@@ -83,7 +83,7 @@ Covers come later because motor control adds safety requirements around up/down 
 - [x] Publish mapped input observations and state
 - [x] Publish mapped push button observations and state
 - [x] Publish mapped relay state changes
-- [ ] Publish mapped light state changes
+- [x] Publish mapped light state changes
 - [x] Publish a retained unit autodiscovery document on a dedicated discovery topic
 - [x] Include state topics, command topics, entity IDs, capabilities, and command enablement in discovery
 - [x] Do not subscribe to command topics yet
@@ -108,7 +108,7 @@ Current status:
 
 - MQTT config, actor wiring, startup availability, retained discovery, and semantic input, push button, and relay publishing are implemented
 - Manual local broker verification published availability, digital input, push button, and relay state messages under `nest/units/local/...`
-- Light state publishing still needs to be decided and implemented
+- Light state publishing is derived from relay state for relay-backed local lights
 - Controller dispatch currently passes registry, sysfs command channel, MQTT command channel, and MQTT topics through several helpers
 - A follow-up refactor could introduce an unexported data-only dispatch context passed to package-level functions, without receiver methods
 - Reconnect republishing and offline availability are deferred to MQTT contract hardening unless needed earlier

@@ -69,3 +69,18 @@ func TestRelayStateMessage(t *testing.T) {
 	assert.True(t, message.Retain)
 	assert.Equal(t, byte(0), message.QoS)
 }
+
+func TestLightStateMessage(t *testing.T) {
+	message, err := LightStateMessage(NewTopics("nest", "controller_1"), LightObservation{
+		LightID: entity.LightID("office_light"),
+		Name:    "Office light",
+		RelayID: entity.RelayID("office_light_relay"),
+		Value:   1,
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "nest/units/controller_1/lights/office_light/state", message.Topic)
+	assert.JSONEq(t, `{"light_id":"office_light","name":"Office light","relay_id":"office_light_relay","value":1}`, string(message.Payload))
+	assert.True(t, message.Retain)
+	assert.Equal(t, byte(0), message.QoS)
+}
