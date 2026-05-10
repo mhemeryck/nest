@@ -248,3 +248,31 @@ These should be decided before transport and entity complexity increase.
 - [ ] Whether Modbus output units execute semantic commands or expose coil-level relay control
 - [ ] Whether command topics or transport addresses should be parsed by the actor or resolved through registry mappings
 - [ ] Whether actor grouping should move integrations under `internal/actors` once a second actor makes the grouping useful
+
+## Future Config Distribution Direction
+
+Out of scope for the current MQTT observability phase, but useful for guiding registry and topic-index decisions.
+
+Eventually, configuration may come from a central/global source that describes all controller units and their relationships.
+
+That global configuration could be distributed to each unit, possibly over MQTT or another control plane.
+Each unit would project the global configuration into the subset it needs locally, then build its local runtime state from that projection.
+
+The intended layering should stay roughly:
+
+```text
+global config
+  -> unit-local config projection
+  -> parsed config structs
+  -> domain entities
+  -> runtime registries/indexes
+  -> actor-specific addressing
+```
+
+Implications:
+
+- The domain registry should stay focused on semantic/domain lookup for the local unit
+- MQTT topic names and other transport addresses should not be stored directly in the domain registry by default
+- MQTT topics should remain actor-specific addressing, owned by the MQTT package or a future MQTT topic index
+- If topic generation spreads or the contract hardens, introduce a dedicated MQTT topic index built from domain entities and MQTT configuration
+- Global config projection should decide what each unit knows about, while actor-specific indexes decide how that local knowledge maps to transports
