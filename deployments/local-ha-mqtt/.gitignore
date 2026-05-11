@@ -1,0 +1,10 @@
+homeassistant/.storage/
+homeassistant/.HA_VERSION
+homeassistant/blueprints/
+homeassistant/*.log
+homeassistant/*.log.*
+homeassistant/home-assistant_v2.db*
+mosquitto/data/*
+mosquitto/log/*
+!mosquitto/data/.gitkeep
+!mosquitto/log/.gitkeep
