@@ -16,7 +16,7 @@ func TestBuildWorkerConfigs(t *testing.T) {
 		{Path: "/ro1", Type: RelayOutput, Identifier: "ro1"},
 	}
 
-	configs := buildWorkerConfigs(devices)
+	configs := buildWorkerConfigs(devices, PollIntervals{})
 
 	assert.Len(t, configs, 3)
 
@@ -37,10 +37,30 @@ func TestBuildWorkerConfigs(t *testing.T) {
 	diCfg, ok := configByType[DigitalInput]
 	require.True(t, ok)
 	assert.Len(t, diCfg.Devices, 2)
-	assert.Equal(t, 20*time.Millisecond, diCfg.Interval)
+	assert.Equal(t, 100*time.Millisecond, diCfg.Interval)
 
 	roCfg, ok := configByType[RelayOutput]
 	require.True(t, ok)
 	assert.Len(t, roCfg.Devices, 1)
 	assert.Equal(t, 1*time.Second, roCfg.Interval)
+}
+
+func TestBuildWorkerConfigsUsesPollIntervalOverrides(t *testing.T) {
+	devices := []*Device{
+		{Path: "/di1", Type: DigitalInput, Identifier: "di1"},
+		{Path: "/ro1", Type: RelayOutput, Identifier: "ro1"},
+	}
+
+	configs := buildWorkerConfigs(devices, PollIntervals{
+		DigitalInput: 250 * time.Millisecond,
+		RelayOutput:  2 * time.Second,
+	})
+
+	configByType := make(map[DeviceType]WorkerConfig)
+	for _, cfg := range configs {
+		configByType[cfg.Devices[0].Type] = cfg
+	}
+
+	assert.Equal(t, 250*time.Millisecond, configByType[DigitalInput].Interval)
+	assert.Equal(t, 2*time.Second, configByType[RelayOutput].Interval)
 }

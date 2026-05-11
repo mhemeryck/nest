@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,6 +23,19 @@ func TestLoad(t *testing.T) {
 	assert.Len(t, file.Relays, 1)
 	assert.Len(t, file.Bindings, 1)
 	assert.Equal(t, []string{"di_3_16", "ro_3_14"}, DeviceIDs(file))
+}
+
+func TestLoadAcceptsSysfsPollIntervals(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "config.yaml")
+	writeTestFile(t, path, "sysfs:\n  root: /tmp\n  poll_intervals:\n    digital_input: 100ms\n    digital_output: 250ms\n    relay_output: 2s\ndigital_inputs:\n  - id: button_input\n    device: di_3_16\n")
+
+	file, err := Load(path)
+	require.NoError(t, err)
+
+	assert.Equal(t, 100*time.Millisecond, file.Sysfs.PollIntervals.DigitalInput)
+	assert.Equal(t, 250*time.Millisecond, file.Sysfs.PollIntervals.DigitalOutput)
+	assert.Equal(t, 2*time.Second, file.Sysfs.PollIntervals.RelayOutput)
 }
 
 func TestLoadRejectsUnknownFields(t *testing.T) {
@@ -69,6 +83,19 @@ func TestValidate(t *testing.T) {
 				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
 			},
 			message: "sysfs.root: must not have leading or trailing whitespace",
+		},
+		{
+			name: "rejects negative sysfs poll intervals",
+			file: Root{
+				Sysfs: SysfsConfig{
+					Root: "/tmp",
+					PollIntervals: PollIntervalsConfig{
+						DigitalInput: -time.Second,
+					},
+				},
+				DigitalInputs: []DigitalInputConfig{{ID: "button_input", Device: "di_3_16"}},
+			},
+			message: "sysfs.poll_intervals.digital_input: must not be negative",
 		},
 		{
 			name: "requires enabled MQTT host",

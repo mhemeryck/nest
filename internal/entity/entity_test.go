@@ -2,6 +2,7 @@ package entity
 
 import (
 	"testing"
+	"time"
 
 	"github.com/mhemeryck/nest/internal/config"
 	"github.com/stretchr/testify/assert"
@@ -10,7 +11,13 @@ import (
 
 func TestFromConfig(t *testing.T) {
 	root := FromConfig(&config.Root{
-		Sysfs: config.SysfsConfig{Root: "test/fixtures"},
+		Sysfs: config.SysfsConfig{
+			Root: "test/fixtures",
+			PollIntervals: config.PollIntervalsConfig{
+				DigitalInput: 100 * time.Millisecond,
+				RelayOutput:  2 * time.Second,
+			},
+		},
 		MQTT: config.MQTTConfig{
 			Enabled:     true,
 			Host:        "localhost",
@@ -49,6 +56,7 @@ func TestFromConfig(t *testing.T) {
 
 	require.NotNil(t, root)
 	assert.Equal(t, "test/fixtures", root.SysfsRoot)
+	assert.Equal(t, PollIntervals{DigitalInput: 100 * time.Millisecond, RelayOutput: 2 * time.Second}, root.SysfsPollIntervals)
 	assert.Equal(t, MQTT{
 		Enabled:     true,
 		Host:        "localhost",

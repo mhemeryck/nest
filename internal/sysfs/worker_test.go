@@ -43,12 +43,12 @@ func TestPollWorkerDetectsChange(t *testing.T) {
 		}
 	}()
 
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(150 * time.Millisecond)
 
 	err = writeValue(path1, On)
 	require.NoError(t, err)
 
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(150 * time.Millisecond)
 
 	cancel()
 	<-doneSysfs
