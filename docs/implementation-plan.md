@@ -125,26 +125,36 @@ nest/units/local/push_buttons/office_button/state {"button_id":"office_button","
 nest/units/local/relays/office_light_relay/state {"relay_id":"office_light_relay","name":"Office light relay","sysfs_device":"ro_3_14","value":0}
 ```
 
-## Phase 6: MQTT Contract Hardening
+## Phase 6: Home Assistant MQTT Discovery Contract
 
-- [ ] Stabilize the MQTT topic structure
-- [ ] Stabilize the autodiscovery payload schema
-- [ ] Add schema versioning for discovery documents
-- [ ] Decide retained vs non-retained behavior per topic class
-- [ ] Handle reconnects and republish availability and discovery
+- [ ] Treat Home Assistant MQTT discovery as the primary MQTT integration contract
+- [ ] Keep the unit-level `nest` discovery document as optional diagnostic output, not as the Home Assistant-facing contract
+- [ ] Define one Home Assistant device identity per physical `nest` controller unit
+- [ ] Define stable Home Assistant unique IDs derived from `unit_id` and entity IDs
+- [ ] Preserve current Home Assistant entity IDs where practical during migration
+- [ ] Publish retained Home Assistant discovery config topics for migrated lights
+- [ ] Publish retained Home Assistant discovery config topics for diagnostic inputs, buttons, relays, or binary sensors where useful
+- [ ] Lock Home Assistant-compatible state payloads for each entity class
+- [ ] Decide retained vs non-retained behavior per Home Assistant state topic class
+- [ ] Handle reconnects and republish Home Assistant discovery and availability
 - [ ] Add MQTT Last Will and graceful offline availability publishing
 - [ ] Add logging for publish failures and dropped messages
 - [ ] Decide whether dropped publish warnings need rate limiting or counters
-- [ ] Add tests for generated topics and discovery payloads
+- [ ] Add tests for Home Assistant discovery topics and payloads
 
-Notes from the earlier passive MQTT prototype:
+Notes from the current Home Assistant migration context:
 
+- MQTT exists primarily to integrate with Home Assistant without maintaining YAML MQTT entity definitions
+- Newer Home Assistant setups should discover `nest` entities from retained MQTT discovery config topics
+- `nest` should own hardware-control behavior such as wall-button-to-light mappings so that local control survives Home Assistant or MQTT outages
+- Home Assistant should remain responsible for UI, dashboards, notifications, alarm orchestration, and higher-level time, sun, and external-service automations
+- State and command topics may still live under a `nest/...` namespace as long as the Home Assistant discovery payloads reference them correctly
+- Home Assistant discovery should be verified locally with a broker and disposable Home Assistant instance before depending on it for migration
 - MQTT Last Will and offline availability are useful, but should be part of contract hardening rather than the first passive publishing slice
 - Reconnect handling should republish retained discovery and availability so subscribers recover after broker interruptions
 - Dropped MQTT publish logging is useful for visibility, but may need rate limiting if frequent input changes happen while the broker is unavailable
-- Home Assistant discovery should remain separate from the unit-level `nest` discovery contract until the MQTT topic and payload schema are stable
 
-**Deliverable**: MQTT telemetry and discovery are reliable enough to guide migration decisions.
+**Deliverable**: `nest` publishes Home Assistant-compatible MQTT discovery and state messages for migrated entities, while keeping local hardware control independent from Home Assistant.
 
 ## Phase 7: Input Semantics
 
