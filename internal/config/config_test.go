@@ -17,6 +17,9 @@ func TestLoad(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "test/fixtures", file.Sysfs.Root)
+	assert.Equal(t, 100*time.Millisecond, file.Sysfs.PollIntervals.DigitalInput)
+	assert.Equal(t, 250*time.Millisecond, file.Sysfs.PollIntervals.DigitalOutput)
+	assert.Equal(t, time.Second, file.Sysfs.PollIntervals.RelayOutput)
 	assert.Len(t, file.DigitalInputs, 1)
 	assert.Len(t, file.PushButtons, 1)
 	assert.Len(t, file.Lights, 1)

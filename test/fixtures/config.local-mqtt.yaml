@@ -1,5 +1,9 @@
 sysfs:
   root: test/fixtures
+  poll_intervals:
+    digital_input: 100ms
+    digital_output: 250ms
+    relay_output: 1s
 
 mqtt:
   enabled: true
