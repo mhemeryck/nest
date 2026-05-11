@@ -1,6 +1,10 @@
 package entity
 
-import "github.com/mhemeryck/nest/internal/config"
+import (
+	"time"
+
+	"github.com/mhemeryck/nest/internal/config"
+)
 
 type (
 	SysfsDeviceID  string
@@ -14,13 +18,20 @@ type (
 const LightActionToggle LightAction = "toggle"
 
 type Root struct {
-	SysfsRoot     string
-	MQTT          MQTT
-	DigitalInputs []DigitalInput
-	PushButtons   []PushButton
-	Lights        []Light
-	Relays        []Relay
-	Bindings      []Binding
+	SysfsRoot          string
+	SysfsPollIntervals PollIntervals
+	MQTT               MQTT
+	DigitalInputs      []DigitalInput
+	PushButtons        []PushButton
+	Lights             []Light
+	Relays             []Relay
+	Bindings           []Binding
+}
+
+type PollIntervals struct {
+	DigitalInput  time.Duration
+	DigitalOutput time.Duration
+	RelayOutput   time.Duration
 }
 
 type MQTT struct {
@@ -69,13 +80,14 @@ func FromConfig(root *config.Root) *Root {
 	}
 
 	entities := &Root{
-		SysfsRoot:     root.Sysfs.Root,
-		MQTT:          mqttFromConfig(root.MQTT),
-		DigitalInputs: make([]DigitalInput, 0, len(root.DigitalInputs)),
-		PushButtons:   make([]PushButton, 0, len(root.PushButtons)),
-		Lights:        make([]Light, 0, len(root.Lights)),
-		Relays:        make([]Relay, 0, len(root.Relays)),
-		Bindings:      make([]Binding, 0, len(root.Bindings)),
+		SysfsRoot:          root.Sysfs.Root,
+		SysfsPollIntervals: pollIntervalsFromConfig(root.Sysfs.PollIntervals),
+		MQTT:               mqttFromConfig(root.MQTT),
+		DigitalInputs:      make([]DigitalInput, 0, len(root.DigitalInputs)),
+		PushButtons:        make([]PushButton, 0, len(root.PushButtons)),
+		Lights:             make([]Light, 0, len(root.Lights)),
+		Relays:             make([]Relay, 0, len(root.Relays)),
+		Bindings:           make([]Binding, 0, len(root.Bindings)),
 	}
 
 	for _, input := range root.DigitalInputs {
@@ -118,6 +130,14 @@ func FromConfig(root *config.Root) *Root {
 	}
 
 	return entities
+}
+
+func pollIntervalsFromConfig(intervals config.PollIntervalsConfig) PollIntervals {
+	return PollIntervals{
+		DigitalInput:  intervals.DigitalInput,
+		DigitalOutput: intervals.DigitalOutput,
+		RelayOutput:   intervals.RelayOutput,
+	}
 }
 
 func mqttFromConfig(mqtt config.MQTTConfig) MQTT {

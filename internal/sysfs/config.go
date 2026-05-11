@@ -7,14 +7,16 @@ type WorkerConfig struct {
 	Devices  []*Device
 }
 
-func buildWorkerConfigs(devices []*Device) []WorkerConfig {
+type PollIntervals struct {
+	DigitalInput  time.Duration
+	DigitalOutput time.Duration
+	RelayOutput   time.Duration
+}
+
+func buildWorkerConfigs(devices []*Device, intervals PollIntervals) []WorkerConfig {
 	configs := make(map[DeviceType]WorkerConfig)
 
-	defaultIntervals := map[DeviceType]time.Duration{
-		DigitalInput:  20 * time.Millisecond,
-		DigitalOutput: 100 * time.Millisecond,
-		RelayOutput:   1 * time.Second,
-	}
+	defaultIntervals := defaultPollIntervals(intervals)
 
 	for _, d := range devices {
 		cfg, ok := configs[d.Type]
@@ -31,4 +33,24 @@ func buildWorkerConfigs(devices []*Device) []WorkerConfig {
 	}
 
 	return result
+}
+
+func defaultPollIntervals(overrides PollIntervals) map[DeviceType]time.Duration {
+	intervals := map[DeviceType]time.Duration{
+		DigitalInput:  100 * time.Millisecond,
+		DigitalOutput: 100 * time.Millisecond,
+		RelayOutput:   1 * time.Second,
+	}
+
+	if overrides.DigitalInput > 0 {
+		intervals[DigitalInput] = overrides.DigitalInput
+	}
+	if overrides.DigitalOutput > 0 {
+		intervals[DigitalOutput] = overrides.DigitalOutput
+	}
+	if overrides.RelayOutput > 0 {
+		intervals[RelayOutput] = overrides.RelayOutput
+	}
+
+	return intervals
 }

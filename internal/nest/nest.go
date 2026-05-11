@@ -74,7 +74,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	// Start hardware and controller actors with unidirectional command and observation channels.
 	sysfsCommands, states, sysfsDone := sysfsChannels()
-	go sysfs.Run(ctx, configuredDevices, sysfsCommands, states, sysfsDone)
+	go sysfs.Run(ctx, configuredDevices, sysfsCommands, states, sysfsDone, sysfsPollIntervals(root))
 
 	controllerDone := make(chan struct{})
 	go controller.Run(ctx, index, sysfsCommands, mqttCommands, mqttTopics(root), states, controllerDone)

@@ -8,6 +8,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -29,7 +30,14 @@ type Root struct {
 }
 
 type SysfsConfig struct {
-	Root string `yaml:"root"`
+	Root          string              `yaml:"root"`
+	PollIntervals PollIntervalsConfig `yaml:"poll_intervals"`
+}
+
+type PollIntervalsConfig struct {
+	DigitalInput  time.Duration `yaml:"digital_input"`
+	DigitalOutput time.Duration `yaml:"digital_output"`
+	RelayOutput   time.Duration `yaml:"relay_output"`
 }
 
 type MQTTConfig struct {
@@ -143,7 +151,20 @@ func Validate(f *Root) error {
 }
 
 func validateSysfs(sysfs SysfsConfig) error {
-	return validateRequiredField("sysfs.root", sysfs.Root)
+	return errors.Join(
+		validateRequiredField("sysfs.root", sysfs.Root),
+		validatePollInterval("sysfs.poll_intervals.digital_input", sysfs.PollIntervals.DigitalInput),
+		validatePollInterval("sysfs.poll_intervals.digital_output", sysfs.PollIntervals.DigitalOutput),
+		validatePollInterval("sysfs.poll_intervals.relay_output", sysfs.PollIntervals.RelayOutput),
+	)
+}
+
+func validatePollInterval(field string, value time.Duration) error {
+	if value < 0 {
+		return fmt.Errorf("%s: must not be negative", field)
+	}
+
+	return nil
 }
 
 func validateMQTT(mqtt MQTTConfig) error {
