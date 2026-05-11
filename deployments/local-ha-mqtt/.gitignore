@@ -1,4 +1,6 @@
 homeassistant/.storage/
+homeassistant/.cache/
+homeassistant/.ha_run.lock
 homeassistant/.HA_VERSION
 homeassistant/blueprints/
 homeassistant/*.log
