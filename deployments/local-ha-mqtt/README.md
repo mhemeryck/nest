@@ -17,6 +17,7 @@ This still allows a locally running `nest` process to publish to the test broker
 The first Home Assistant startup asks for a local user account.
 After onboarding, add the MQTT integration from the Home Assistant UI.
 Use `mosquitto` as the broker host and `1883` as the port.
+Current Home Assistant versions no longer accept `broker` and `port` under `mqtt:` in YAML.
 The default Home Assistant MQTT discovery prefix is `homeassistant`.
 
 ## Publish A Test Light

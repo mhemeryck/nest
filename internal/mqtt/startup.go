@@ -9,8 +9,19 @@ func StartupCommands(root *entity.Root) ([]Command, error) {
 		return nil, err
 	}
 
-	return []Command{
+	commands := []Command{
 		PublishCommand(discovery),
-		PublishCommand(AvailabilityMessage(topics, AvailabilityOnline)),
-	}, nil
+	}
+
+	for _, light := range root.Lights {
+		message, err := HomeAssistantLightDiscoveryMessage(light, topics)
+		if err != nil {
+			return nil, err
+		}
+		commands = append(commands, PublishCommand(message))
+	}
+
+	commands = append(commands, PublishCommand(AvailabilityMessage(topics, AvailabilityOnline)))
+
+	return commands, nil
 }
