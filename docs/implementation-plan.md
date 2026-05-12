@@ -106,9 +106,9 @@ Boundary note:
 
 Current status:
 
-- MQTT config, actor wiring, startup availability, retained discovery, and semantic input, push button, and relay publishing are implemented
-- Manual local broker verification published availability, digital input, push button, and relay state messages under `nest/units/local/...`
-- Light state publishing is derived from relay state for relay-backed local lights
+- MQTT config, actor wiring, startup availability, retained unit discovery, and Home Assistant light discovery are implemented
+- Earlier passive digital input, push button, and relay telemetry was superseded by the decision to expose Home Assistant-facing house entities rather than raw hardware diagnostics by default
+- Light state publishing is derived from relay state for relay-backed local lights and uses a canonical JSON entity snapshot
 - ~~Controller dispatch currently passes registry, sysfs command channel, MQTT command channel, and MQTT topics through several helpers~~
 - Superseded by splitting semantic event dispatch into actor-specific command dispatchers instead of adding a context bag
 - Reconnect republishing and offline availability are deferred to MQTT contract hardening unless needed earlier
@@ -117,12 +117,9 @@ Manual verification sample:
 
 ```text
 nest/units/local/availability online
-nest/units/local/digital_inputs/office_button_input/state {"input_id":"office_button_input","sysfs_device":"di_3_16","value":1}
-nest/units/local/push_buttons/office_button/state {"button_id":"office_button","name":"Office light button","state":"pressed"}
-nest/units/local/relays/office_light_relay/state {"relay_id":"office_light_relay","name":"Office light relay","sysfs_device":"ro_3_14","value":1}
-nest/units/local/digital_inputs/office_button_input/state {"input_id":"office_button_input","sysfs_device":"di_3_16","value":0}
-nest/units/local/push_buttons/office_button/state {"button_id":"office_button","name":"Office light button","state":"released"}
-nest/units/local/relays/office_light_relay/state {"relay_id":"office_light_relay","name":"Office light relay","sysfs_device":"ro_3_14","value":0}
+homeassistant/light/nest_local_office_light/config {"name":"Office light",...}
+nest/units/local/lights/office_light/state {"state":"ON"}
+nest/units/local/lights/office_light/state {"state":"OFF"}
 ```
 
 ## Phase 6: Home Assistant MQTT Discovery Contract
@@ -134,8 +131,8 @@ nest/units/local/relays/office_light_relay/state {"relay_id":"office_light_relay
 - [ ] Preserve current Home Assistant entity IDs where practical during migration
 - [ ] Publish retained Home Assistant discovery config topics for migrated lights
 - [ ] Advertise required Home Assistant light command topics before command handling is enabled, while documenting them as no-op placeholders
-- [ ] Publish retained Home Assistant discovery config topics for diagnostic inputs, buttons, relays, or binary sensors where useful
-- [ ] Lock Home Assistant-compatible state payloads for each entity class
+- [ ] Publish only meaningful Home Assistant entities by default, not raw hardware diagnostics
+- [ ] Lock canonical JSON state payloads for each entity class
 - [ ] Decide retained vs non-retained behavior per Home Assistant state topic class
 - [ ] Handle reconnects and republish Home Assistant discovery and availability
 - [ ] Add MQTT Last Will and graceful offline availability publishing
@@ -146,10 +143,16 @@ nest/units/local/relays/office_light_relay/state {"relay_id":"office_light_relay
 Notes from the current Home Assistant migration context:
 
 - MQTT exists primarily to integrate with Home Assistant without maintaining YAML MQTT entity definitions
+- Home Assistant is the primary MQTT consumer, so MQTT should expose the house model rather than the hardware implementation
 - Newer Home Assistant setups should discover `nest` entities from retained MQTT discovery config topics
 - `nest` should own hardware-control behavior such as wall-button-to-light mappings so that local control survives Home Assistant or MQTT outages
 - Home Assistant should remain responsible for UI, dashboards, notifications, alarm orchestration, and higher-level time, sun, and external-service automations
 - State and command topics may still live under a `nest/...` namespace as long as the Home Assistant discovery payloads reference them correctly
+- State topics should publish canonical JSON entity snapshots, even for simple on/off entities
+- The topic identifies the entity, while the payload carries the current entity state and dynamic attributes
+- Static metadata belongs in Home Assistant discovery payloads or local `nest` configuration, not in every state update
+- Hardware details such as sysfs device IDs, relay IDs, and raw input addresses should stay out of MQTT by default
+- Diagnostic MQTT topics should only be added later for concrete debugging needs
 - Home Assistant discovery should be verified locally with a broker and disposable Home Assistant instance before depending on it for migration
 - MQTT Last Will and offline availability are useful, but should be part of contract hardening rather than the first passive publishing slice
 - Reconnect handling should republish retained discovery and availability so subscribers recover after broker interruptions

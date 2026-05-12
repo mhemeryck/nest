@@ -18,7 +18,7 @@ func TestBuildHomeAssistantLightDiscovery(t *testing.T) {
 	assert.Equal(t, "nest_controller_1_office_light", doc.UniqueID)
 	assert.Equal(t, "nest/units/controller_1/lights/office_light/state", doc.StateTopic)
 	assert.Equal(t, "nest/units/controller_1/lights/office_light/command", doc.CommandTopic)
-	assert.Equal(t, "{{ 'ON' if value_json.value == 1 else 'OFF' }}", doc.StateValueTemplate)
+	assert.Equal(t, "{{ value_json.state }}", doc.StateValueTemplate)
 	assert.Equal(t, "ON", doc.PayloadOn)
 	assert.Equal(t, "OFF", doc.PayloadOff)
 	assert.Equal(t, "nest/units/controller_1/availability", doc.AvailabilityTopic)

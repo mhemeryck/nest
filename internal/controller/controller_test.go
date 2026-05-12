@@ -88,7 +88,7 @@ func TestDispatchPushButtonEventTogglesLightRelay(t *testing.T) {
 	assert.Equal(t, "1\n", string(data))
 }
 
-func TestHandleStateChangePublishesMappedInputAndButtonState(t *testing.T) {
+func TestHandleStateChangeDoesNotPublishRawInputOrButtonState(t *testing.T) {
 	index := registry.Build(&entity.Root{
 		DigitalInputs: []entity.DigitalInput{{ID: entity.DigitalInputID("office_button_input"), SysfsDevice: entity.SysfsDeviceID("di_3_16")}},
 		PushButtons:   []entity.PushButton{{ID: entity.PushButtonID("office_button"), Name: "Office button", Input: entity.DigitalInputID("office_button_input")}},
@@ -110,24 +110,14 @@ func TestHandleStateChangePublishesMappedInputAndButtonState(t *testing.T) {
 	dispatchEvent(t.Context(), index, sysfsCommands, mqttCommands, topics, <-semanticEvents)
 	dispatchEvent(t.Context(), index, sysfsCommands, mqttCommands, topics, <-semanticEvents)
 
-	inputCommand := <-mqttCommands
-	assert.Equal(t, mqtt.PublishCommandKind, inputCommand.Kind)
-	assert.Equal(t, "nest/units/controller_1/digital_inputs/office_button_input/state", inputCommand.Publish.Topic)
-	assert.JSONEq(t, `{"input_id":"office_button_input","sysfs_device":"di_3_16","value":1}`, string(inputCommand.Publish.Payload))
-	assert.True(t, inputCommand.Publish.Retain)
-
-	buttonCommand := <-mqttCommands
-	assert.Equal(t, mqtt.PublishCommandKind, buttonCommand.Kind)
-	assert.Equal(t, "nest/units/controller_1/push_buttons/office_button/state", buttonCommand.Publish.Topic)
-	assert.JSONEq(t, `{"button_id":"office_button","name":"Office button","state":"pressed"}`, string(buttonCommand.Publish.Payload))
-	assert.False(t, buttonCommand.Publish.Retain)
+	assert.Empty(t, mqttCommands)
 
 	sysfsCommand := <-sysfsCommands
 	assert.Equal(t, sysfs.ToggleCommand, sysfsCommand.Kind)
 	assert.Equal(t, "ro_3_14", sysfsCommand.DeviceID)
 }
 
-func TestHandleStateChangePublishesMappedRelayAndLightState(t *testing.T) {
+func TestHandleStateChangePublishesMappedLightState(t *testing.T) {
 	index := registry.Build(&entity.Root{
 		Lights: []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
 		Relays: []entity.Relay{{ID: entity.RelayID("office_light_relay"), Name: "Office light relay", SysfsDevice: entity.SysfsDeviceID("ro_3_14")}},
@@ -145,17 +135,12 @@ func TestHandleStateChangePublishesMappedRelayAndLightState(t *testing.T) {
 	dispatchEvent(t.Context(), index, nil, mqttCommands, topics, <-semanticEvents)
 	dispatchEvent(t.Context(), index, nil, mqttCommands, topics, <-semanticEvents)
 
-	relayCommand := <-mqttCommands
-	assert.Equal(t, mqtt.PublishCommandKind, relayCommand.Kind)
-	assert.Equal(t, "nest/units/controller_1/relays/office_light_relay/state", relayCommand.Publish.Topic)
-	assert.JSONEq(t, `{"relay_id":"office_light_relay","name":"Office light relay","sysfs_device":"ro_3_14","value":1}`, string(relayCommand.Publish.Payload))
-	assert.True(t, relayCommand.Publish.Retain)
-
 	lightCommand := <-mqttCommands
 	assert.Equal(t, mqtt.PublishCommandKind, lightCommand.Kind)
 	assert.Equal(t, "nest/units/controller_1/lights/office_light/state", lightCommand.Publish.Topic)
-	assert.JSONEq(t, `{"light_id":"office_light","name":"Office light","relay_id":"office_light_relay","value":1}`, string(lightCommand.Publish.Payload))
+	assert.JSONEq(t, `{"state":"ON"}`, string(lightCommand.Publish.Payload))
 	assert.True(t, lightCommand.Publish.Retain)
+	assert.Empty(t, mqttCommands)
 }
 
 func TestPublishMQTTDoesNotBlockWhenCommandChannelIsFull(t *testing.T) {

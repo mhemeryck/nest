@@ -30,7 +30,7 @@ func BuildHomeAssistantLightDiscovery(light entity.Light, topics Topics) HomeAss
 		UniqueID:           homeAssistantUniqueID(topics, string(light.ID)),
 		StateTopic:         LightStateTopic(topics, light.ID),
 		CommandTopic:       LightCommandTopic(topics, light.ID),
-		StateValueTemplate: "{{ 'ON' if value_json.value == 1 else 'OFF' }}",
+		StateValueTemplate: "{{ value_json.state }}",
 		PayloadOn:          "ON",
 		PayloadOff:         "OFF",
 		AvailabilityTopic:  AvailabilityTopic(topics),

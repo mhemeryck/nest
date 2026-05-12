@@ -32,7 +32,7 @@ Publish retained availability and state:
 
 ```sh
 mosquitto_pub -h localhost -p 1883 -r -t 'nest/units/local/availability' -m 'online'
-mosquitto_pub -h localhost -p 1883 -r -t 'nest/units/local/lights/office_light/state' -m '{"light_id":"office_light","name":"Office light","relay_id":"office_light_relay","value":0}'
+mosquitto_pub -h localhost -p 1883 -r -t 'nest/units/local/lights/office_light/state' -m '{"state":"OFF"}'
 ```
 
 The light should appear in Home Assistant after discovery is processed.

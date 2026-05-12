@@ -35,12 +35,6 @@ func dispatchSysfsCommand(ctx context.Context, index *registry.Index, commands c
 
 func dispatchMQTTCommand(ctx context.Context, commands chan<- mqtt.Command, topics mqtt.Topics, busEvent event.Event) {
 	switch busEvent.Kind {
-	case event.DigitalInputStateKind:
-		publishDigitalInputState(ctx, commands, topics, *busEvent.DigitalInput)
-	case event.PushButtonPressedKind, event.PushButtonReleasedKind:
-		publishPushButtonState(ctx, commands, topics, busEvent.Kind, *busEvent.PushButton)
-	case event.RelayStateKind:
-		publishRelayState(ctx, commands, topics, *busEvent.Relay)
 	case event.LightStateKind:
 		publishLightState(ctx, commands, topics, *busEvent.LightState)
 	}
