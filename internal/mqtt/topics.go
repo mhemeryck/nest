@@ -46,8 +46,8 @@ func LightCommandTopic(topics Topics, lightID entity.LightID) string {
 	return joinTopic(topics, "units", topics.UnitID, "lights", string(lightID), "command")
 }
 
-func HomeAssistantLightDiscoveryTopic(topics Topics, lightID entity.LightID) string {
-	return strings.Join([]string{"homeassistant", "light", homeAssistantUniqueID(topics, string(lightID)), "config"}, "/")
+func HomeAssistantDeviceDiscoveryTopic(topics Topics) string {
+	return strings.Join([]string{"homeassistant", "device", homeAssistantUniqueID(topics, "unit"), "config"}, "/")
 }
 
 func joinTopic(topics Topics, parts ...string) string {

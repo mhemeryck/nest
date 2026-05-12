@@ -2,44 +2,57 @@ package mqtt
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/mhemeryck/nest/internal/entity"
 )
 
+type HomeAssistantDeviceDiscovery struct {
+	Device            HomeAssistantDevice                        `json:"dev"`
+	Origin            HomeAssistantOrigin                        `json:"o"`
+	Components        map[string]HomeAssistantComponentDiscovery `json:"cmps"`
+	AvailabilityTopic string                                     `json:"availability_topic"`
+}
+
 type HomeAssistantDevice struct {
-	Identifiers  []string `json:"identifiers"`
+	Identifiers  []string `json:"ids"`
 	Name         string   `json:"name"`
-	Manufacturer string   `json:"manufacturer"`
+	Manufacturer string   `json:"mf"`
 }
 
-type HomeAssistantLightDiscovery struct {
-	Name               string              `json:"name"`
-	UniqueID           string              `json:"unique_id"`
-	StateTopic         string              `json:"state_topic"`
-	CommandTopic       string              `json:"command_topic"`
-	StateValueTemplate string              `json:"state_value_template"`
-	PayloadOn          string              `json:"payload_on"`
-	PayloadOff         string              `json:"payload_off"`
-	AvailabilityTopic  string              `json:"availability_topic"`
-	Device             HomeAssistantDevice `json:"device"`
+type HomeAssistantOrigin struct {
+	Name string `json:"name"`
 }
 
-func BuildHomeAssistantLightDiscovery(light entity.Light, topics Topics) HomeAssistantLightDiscovery {
-	return HomeAssistantLightDiscovery{
-		Name:               light.Name,
-		UniqueID:           homeAssistantUniqueID(topics, string(light.ID)),
-		StateTopic:         LightStateTopic(topics, light.ID),
-		CommandTopic:       LightCommandTopic(topics, light.ID),
-		StateValueTemplate: "{{ value_json.state }}",
-		PayloadOn:          "ON",
-		PayloadOff:         "OFF",
-		AvailabilityTopic:  AvailabilityTopic(topics),
-		Device:             homeAssistantDevice(topics),
+type HomeAssistantComponentDiscovery struct {
+	Platform           string `json:"p"`
+	Name               string `json:"name"`
+	UniqueID           string `json:"unique_id"`
+	DefaultEntityID    string `json:"default_entity_id"`
+	StateTopic         string `json:"state_topic"`
+	CommandTopic       string `json:"command_topic"`
+	StateValueTemplate string `json:"state_value_template"`
+	PayloadOn          string `json:"payload_on"`
+	PayloadOff         string `json:"payload_off"`
+}
+
+func BuildHomeAssistantDeviceDiscovery(root *entity.Root, topics Topics) HomeAssistantDeviceDiscovery {
+	doc := HomeAssistantDeviceDiscovery{
+		Device:            homeAssistantDevice(topics),
+		Origin:            HomeAssistantOrigin{Name: "nest"},
+		Components:        make(map[string]HomeAssistantComponentDiscovery, len(root.Lights)),
+		AvailabilityTopic: AvailabilityTopic(topics),
 	}
+
+	for _, light := range root.Lights {
+		doc.Components[string(light.ID)] = homeAssistantLightComponent(light, topics)
+	}
+
+	return doc
 }
 
-func HomeAssistantLightDiscoveryPayload(light entity.Light, topics Topics) ([]byte, error) {
-	payload, err := json.Marshal(BuildHomeAssistantLightDiscovery(light, topics))
+func HomeAssistantDeviceDiscoveryPayload(root *entity.Root, topics Topics) ([]byte, error) {
+	payload, err := json.Marshal(BuildHomeAssistantDeviceDiscovery(root, topics))
 	if err != nil {
 		return nil, err
 	}
@@ -47,18 +60,32 @@ func HomeAssistantLightDiscoveryPayload(light entity.Light, topics Topics) ([]by
 	return payload, nil
 }
 
-func HomeAssistantLightDiscoveryMessage(light entity.Light, topics Topics) (PublishMessage, error) {
-	payload, err := HomeAssistantLightDiscoveryPayload(light, topics)
+func HomeAssistantDeviceDiscoveryMessage(root *entity.Root, topics Topics) (PublishMessage, error) {
+	payload, err := HomeAssistantDeviceDiscoveryPayload(root, topics)
 	if err != nil {
 		return PublishMessage{}, err
 	}
 
 	return PublishMessage{
-		Topic:   HomeAssistantLightDiscoveryTopic(topics, light.ID),
+		Topic:   HomeAssistantDeviceDiscoveryTopic(topics),
 		Payload: payload,
 		Retain:  true,
 		QoS:     0,
 	}, nil
+}
+
+func homeAssistantLightComponent(light entity.Light, topics Topics) HomeAssistantComponentDiscovery {
+	return HomeAssistantComponentDiscovery{
+		Platform:           "light",
+		Name:               light.Name,
+		UniqueID:           homeAssistantUniqueID(topics, string(light.ID)),
+		DefaultEntityID:    fmt.Sprintf("light.%s", light.ID),
+		StateTopic:         LightStateTopic(topics, light.ID),
+		CommandTopic:       LightCommandTopic(topics, light.ID),
+		StateValueTemplate: "{{ value_json.state }}",
+		PayloadOn:          "ON",
+		PayloadOff:         "OFF",
+	}
 }
 
 func homeAssistantDevice(topics Topics) HomeAssistantDevice {

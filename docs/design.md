@@ -127,9 +127,8 @@ It also avoids a mesh where integrations talk directly to each other.
 MQTT is primarily a Home Assistant integration boundary.
 It should expose the semantic house model, not the low-level hardware implementation.
 Home Assistant should discover entities from retained MQTT discovery payloads and then consume state and availability topics referenced by those payloads.
-The intended final discovery model is one Home Assistant device discovery payload per physical `nest` controller unit.
-Each controller should publish the grouped components it owns under that retained device discovery message.
-Single-component discovery can still be useful as an incremental validation step while the entity contract is being hardened.
+The discovery model is one Home Assistant device discovery payload per physical `nest` controller unit.
+Each controller publishes the grouped components it owns under that retained device discovery message.
 
 MQTT state topics should publish canonical JSON entity snapshots.
 The topic identifies the entity, while the payload contains the current state and dynamic attributes for that entity.

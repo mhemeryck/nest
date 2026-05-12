@@ -117,7 +117,7 @@ Manual verification sample:
 
 ```text
 nest/units/local/availability online
-homeassistant/light/nest_local_office_light/config {"name":"Office light",...}
+homeassistant/device/nest_local_unit/config {"dev":{"ids":["nest_local_unit"],...},"cmps":{"office_light":{...}}}
 nest/units/local/lights/office_light/state {"state":"ON"}
 nest/units/local/lights/office_light/state {"state":"OFF"}
 ```
@@ -126,11 +126,11 @@ nest/units/local/lights/office_light/state {"state":"OFF"}
 
 - [ ] Treat Home Assistant MQTT discovery as the primary MQTT integration contract
 - [ ] Keep the unit-level `nest` discovery document as optional diagnostic output, not as the Home Assistant-facing contract
-- [ ] Define one Home Assistant device identity per physical `nest` controller unit
-- [ ] Move toward one retained Home Assistant device discovery payload per controller unit once the light component contract is stable
-- [ ] Define stable Home Assistant unique IDs derived from `unit_id` and entity IDs
+- [x] Define one Home Assistant device identity per physical `nest` controller unit
+- [x] Publish one retained Home Assistant device discovery payload per controller unit
+- [x] Define stable Home Assistant unique IDs derived from `unit_id` and entity IDs
 - [ ] Preserve current Home Assistant entity IDs where practical during migration
-- [ ] Publish retained Home Assistant discovery config topics for migrated lights
+- [x] Publish retained Home Assistant discovery components for configured lights
 - [ ] Advertise required Home Assistant light command topics before command handling is enabled, while documenting them as no-op placeholders
 - [ ] Publish only meaningful Home Assistant entities by default, not raw hardware diagnostics
 - [ ] Lock canonical JSON state payloads for each entity class
@@ -146,8 +146,7 @@ Notes from the current Home Assistant migration context:
 - MQTT exists primarily to integrate with Home Assistant without maintaining YAML MQTT entity definitions
 - Home Assistant is the primary MQTT consumer, so MQTT should expose the house model rather than the hardware implementation
 - Newer Home Assistant setups should discover `nest` entities from retained MQTT discovery config topics
-- The intended final discovery shape is one Home Assistant device discovery payload per physical `nest` controller unit, grouping the entities that unit exposes
-- The current single-component discovery implementation is an incremental compatibility step for validating the light contract before grouping components per controller
+- Home Assistant discovery uses one device discovery payload per physical `nest` controller unit, grouping the entities that unit exposes
 - `nest` should own hardware-control behavior such as wall-button-to-light mappings so that local control survives Home Assistant or MQTT outages
 - Home Assistant should remain responsible for UI, dashboards, notifications, alarm orchestration, and higher-level time, sun, and external-service automations
 - State and command topics may still live under a `nest/...` namespace as long as the Home Assistant discovery payloads reference them correctly

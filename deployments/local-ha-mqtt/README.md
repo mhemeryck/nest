@@ -20,12 +20,12 @@ Use `mosquitto` as the broker host and `1883` as the port.
 Current Home Assistant versions no longer accept `broker` and `port` under `mqtt:` in YAML.
 The default Home Assistant MQTT discovery prefix is `homeassistant`.
 
-## Publish A Test Light
+## Publish A Test Device
 
-Publish retained Home Assistant MQTT discovery config:
+Publish retained Home Assistant MQTT device discovery config:
 
 ```sh
-mosquitto_pub -h localhost -p 1883 -r -t 'homeassistant/light/nest_local_office_light/config' -m '{"name":"Office Light","unique_id":"nest_local_office_light","state_topic":"nest/units/local/lights/office_light/state","command_topic":"nest/units/local/lights/office_light/set","payload_on":"ON","payload_off":"OFF","availability_topic":"nest/units/local/availability","device":{"identifiers":["nest_local"],"name":"nest local","manufacturer":"nest"}}'
+mosquitto_pub -h localhost -p 1883 -r -t 'homeassistant/device/nest_local_unit/config' -m '{"dev":{"ids":["nest_local_unit"],"name":"nest local","mf":"nest"},"o":{"name":"nest"},"availability_topic":"nest/units/local/availability","cmps":{"office_light":{"p":"light","name":"Office light","unique_id":"nest_local_office_light","default_entity_id":"light.office_light","state_topic":"nest/units/local/lights/office_light/state","command_topic":"nest/units/local/lights/office_light/command","state_value_template":"{{ value_json.state }}","payload_on":"ON","payload_off":"OFF"}}}'
 ```
 
 Publish retained availability and state:
@@ -35,8 +35,8 @@ mosquitto_pub -h localhost -p 1883 -r -t 'nest/units/local/availability' -m 'onl
 mosquitto_pub -h localhost -p 1883 -r -t 'nest/units/local/lights/office_light/state' -m '{"state":"OFF"}'
 ```
 
-The light should appear in Home Assistant after discovery is processed.
-Use this to validate entity naming, unique ID behavior, availability, state payloads, and command topic behavior before encoding the contract in `nest`.
+The `nest local` device and `Office light` entity should appear in Home Assistant after discovery is processed.
+Use this to validate device grouping, entity naming, unique ID behavior, availability, state payloads, and command topic behavior before encoding the contract in `nest`.
 
 ## Observe Commands
 
@@ -67,5 +67,20 @@ rm -rf deployments/local-ha-mqtt/homeassistant/.storage deployments/local-ha-mqt
 To remove the retained discovery entity from a running broker, publish an empty retained message:
 
 ```sh
+mosquitto_pub -h localhost -p 1883 -r -n -t 'homeassistant/device/nest_local_unit/config'
+```
+
+If you previously tested single-component discovery, also clear the old retained component topic:
+
+```sh
 mosquitto_pub -h localhost -p 1883 -r -n -t 'homeassistant/light/nest_local_office_light/config'
+mosquitto_pub -h localhost -p 1883 -r -n -t 'homeassistant/light/nest_local_hallway_light/config'
+```
+
+If Home Assistant still reports duplicate unique IDs after clearing the retained topics, delete the old MQTT entities from the Home Assistant UI or reset the disposable Home Assistant state:
+
+```sh
+docker compose --project-directory deployments/local-ha-mqtt down
+rm -rf deployments/local-ha-mqtt/homeassistant/.storage deployments/local-ha-mqtt/homeassistant/home-assistant_v2.db* deployments/local-ha-mqtt/mosquitto/data/*
+docker compose --project-directory deployments/local-ha-mqtt up
 ```
