@@ -38,6 +38,7 @@ func TestStartupCommands(t *testing.T) {
 	assert.Equal(t, "homeassistant/light/nest_controller_1_office_light/config", commands[1].Publish.Topic)
 	assert.True(t, commands[1].Publish.Retain)
 	assert.Contains(t, string(commands[1].Publish.Payload), `"unique_id":"nest_controller_1_office_light"`)
+	assert.Contains(t, string(commands[1].Publish.Payload), `"command_topic":"nest/units/controller_1/lights/office_light/command"`)
 	assert.Equal(t, PublishCommandKind, commands[2].Kind)
 	assert.Equal(t, "nest/units/controller_1/availability", commands[2].Publish.Topic)
 	assert.Equal(t, []byte("online"), commands[2].Publish.Payload)

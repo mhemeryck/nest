@@ -48,6 +48,7 @@ mosquitto_sub -h localhost -p 1883 -t 'nest/units/local/lights/office_light/set'
 
 Home Assistant should publish `ON` or `OFF` to the command topic when the light is toggled.
 `nest` should not subscribe to or act on these command topics until MQTT commands are explicitly enabled later.
+Home Assistant requires MQTT light discovery payloads to include a `command_topic`, even when `nest` is currently using the topic as a no-op placeholder.
 
 ## Cleanup
 

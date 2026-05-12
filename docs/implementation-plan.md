@@ -133,6 +133,7 @@ nest/units/local/relays/office_light_relay/state {"relay_id":"office_light_relay
 - [ ] Define stable Home Assistant unique IDs derived from `unit_id` and entity IDs
 - [ ] Preserve current Home Assistant entity IDs where practical during migration
 - [ ] Publish retained Home Assistant discovery config topics for migrated lights
+- [ ] Advertise required Home Assistant light command topics before command handling is enabled, while documenting them as no-op placeholders
 - [ ] Publish retained Home Assistant discovery config topics for diagnostic inputs, buttons, relays, or binary sensors where useful
 - [ ] Lock Home Assistant-compatible state payloads for each entity class
 - [ ] Decide retained vs non-retained behavior per Home Assistant state topic class

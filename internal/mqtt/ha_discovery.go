@@ -16,6 +16,7 @@ type HomeAssistantLightDiscovery struct {
 	Name              string              `json:"name"`
 	UniqueID          string              `json:"unique_id"`
 	StateTopic        string              `json:"state_topic"`
+	CommandTopic      string              `json:"command_topic"`
 	ValueTemplate     string              `json:"value_template"`
 	PayloadOn         string              `json:"payload_on"`
 	PayloadOff        string              `json:"payload_off"`
@@ -28,6 +29,7 @@ func BuildHomeAssistantLightDiscovery(light entity.Light, topics Topics) HomeAss
 		Name:              light.Name,
 		UniqueID:          homeAssistantUniqueID(topics, string(light.ID)),
 		StateTopic:        LightStateTopic(topics, light.ID),
+		CommandTopic:      LightCommandTopic(topics, light.ID),
 		ValueTemplate:     "{{ 'ON' if value_json.value == 1 else 'OFF' }}",
 		PayloadOn:         "ON",
 		PayloadOff:        "OFF",
