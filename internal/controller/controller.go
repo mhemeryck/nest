@@ -26,10 +26,46 @@ func Run(
 	defer close(done)
 	semanticEvents := make(chan event.Event, 32)
 	normalizerDone := make(chan struct{})
-	go normalizeStateChanges(ctx, index, stateChanges, semanticEvents, normalizerDone)
+	go normalizeEvents(ctx, index, stateChanges, mqttEvents, semanticEvents, normalizerDone)
 
-	dispatchEvents(ctx, root, index, sysfsCommands, mqttCommands, mqttTopics, semanticEvents, mqttEvents)
+	dispatchEvents(ctx, root, index, sysfsCommands, mqttCommands, mqttTopics, semanticEvents)
 	<-normalizerDone
+}
+
+func normalizeEvents(
+	ctx context.Context,
+	index *registry.Index,
+	stateChanges <-chan sysfs.StateChange,
+	mqttEvents <-chan mqtt.Event,
+	semanticEvents chan<- event.Event,
+	done chan<- struct{},
+) {
+	defer close(done)
+	defer close(semanticEvents)
+	normalizerCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	normalizerDone := make(chan struct{}, 2)
+
+	go func() {
+		normalizeStateChanges(normalizerCtx, index, stateChanges, semanticEvents)
+		normalizerDone <- struct{}{}
+	}()
+	go func() {
+		normalizeMQTTEvents(normalizerCtx, mqttEvents, semanticEvents)
+		normalizerDone <- struct{}{}
+	}()
+
+	completed := 0
+	select {
+	case <-ctx.Done():
+	case <-normalizerDone:
+		completed++
+	}
+	cancel()
+	for completed < 2 {
+		<-normalizerDone
+		completed++
+	}
 }
 
 func normalizeStateChanges(
@@ -37,10 +73,7 @@ func normalizeStateChanges(
 	index *registry.Index,
 	stateChanges <-chan sysfs.StateChange,
 	semanticEvents chan<- event.Event,
-	done chan<- struct{},
 ) {
-	defer close(done)
-	defer close(semanticEvents)
 	for {
 		select {
 		case <-ctx.Done():
@@ -55,6 +88,21 @@ func normalizeStateChanges(
 	}
 }
 
+func normalizeMQTTEvents(ctx context.Context, mqttEvents <-chan mqtt.Event, semanticEvents chan<- event.Event) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case mqttEvent, ok := <-mqttEvents:
+			if !ok {
+				return
+			}
+
+			publishSemanticEvent(ctx, semanticEvents, semanticEventFromMQTTEvent(mqttEvent))
+		}
+	}
+}
+
 func dispatchEvents(
 	ctx context.Context,
 	root *entity.Root,
@@ -63,7 +111,6 @@ func dispatchEvents(
 	mqttCommands chan<- mqtt.Command,
 	mqttTopics mqtt.Topics,
 	semanticEvents <-chan event.Event,
-	mqttEvents <-chan mqtt.Event,
 ) {
 	for {
 		select {
@@ -74,26 +121,8 @@ func dispatchEvents(
 				return
 			}
 
-			dispatchEvent(ctx, index, sysfsCommands, mqttCommands, mqttTopics, semanticEvent)
-		case mqttEvent, ok := <-mqttEvents:
-			if !ok {
-				return
-			}
-
-			dispatchMQTTActorEvent(ctx, root, mqttCommands, mqttEvent)
+			dispatchEvent(ctx, root, index, sysfsCommands, mqttCommands, mqttTopics, semanticEvent)
 		}
-	}
-}
-
-func dispatchMQTTActorEvent(ctx context.Context, root *entity.Root, commands chan<- mqtt.Command, event mqtt.Event) {
-	logMQTTEvent(event)
-
-	if event.Kind != mqtt.ConnectedEventKind {
-		return
-	}
-
-	if err := publishMQTTStartup(ctx, root, commands); err != nil {
-		slog.Error("mqtt startup publish failed", "error", err)
 	}
 }
 
@@ -114,19 +143,22 @@ func publishMQTTStartup(ctx context.Context, root *entity.Root, commands chan<- 
 	return nil
 }
 
-func logMQTTEvent(event mqtt.Event) {
-	switch event.Kind {
+func semanticEventFromMQTTEvent(mqttEvent mqtt.Event) event.Event {
+	semanticEvent := event.Event{MQTT: &event.MQTT{PublishTopic: mqttEvent.Publish.Topic, Error: mqttEvent.Error}}
+	switch mqttEvent.Kind {
 	case mqtt.ConnectedEventKind:
-		slog.Info("mqtt actor connected")
+		semanticEvent.Kind = event.MQTTConnectedKind
 	case mqtt.ConnectFailedKind:
-		slog.Error("mqtt actor connect failed", "error", event.Error)
+		semanticEvent.Kind = event.MQTTConnectFailedKind
 	case mqtt.DisconnectedEventKind:
-		slog.Info("mqtt actor disconnected")
+		semanticEvent.Kind = event.MQTTDisconnectedKind
 	case mqtt.PublishedEventKind:
-		slog.Debug("mqtt message published", "topic", event.Publish.Topic)
+		semanticEvent.Kind = event.MQTTPublishedKind
 	case mqtt.PublishFailedKind:
-		slog.Error("mqtt message publish failed", "topic", event.Publish.Topic, "error", event.Error)
+		semanticEvent.Kind = event.MQTTPublishFailedKind
 	}
+
+	return semanticEvent
 }
 
 func normalizeStateChange(ctx context.Context, index *registry.Index, semanticEvents chan<- event.Event, stateChange sysfs.StateChange) {

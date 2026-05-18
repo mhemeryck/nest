@@ -13,6 +13,7 @@ import (
 
 func dispatchEvent(
 	ctx context.Context,
+	root *entity.Root,
 	index *registry.Index,
 	sysfsCommands chan<- sysfs.Command,
 	mqttCommands chan<- mqtt.Command,
@@ -21,7 +22,7 @@ func dispatchEvent(
 ) {
 	logSemanticEvent(busEvent)
 	dispatchSysfsCommand(ctx, index, sysfsCommands, busEvent)
-	dispatchMQTTCommand(ctx, mqttCommands, mqttTopics, busEvent)
+	dispatchMQTTCommand(ctx, root, mqttCommands, mqttTopics, busEvent)
 }
 
 func dispatchSysfsCommand(ctx context.Context, index *registry.Index, commands chan<- sysfs.Command, busEvent event.Event) {
@@ -33,10 +34,14 @@ func dispatchSysfsCommand(ctx context.Context, index *registry.Index, commands c
 	}
 }
 
-func dispatchMQTTCommand(ctx context.Context, commands chan<- mqtt.Command, topics mqtt.Topics, busEvent event.Event) {
+func dispatchMQTTCommand(ctx context.Context, root *entity.Root, commands chan<- mqtt.Command, topics mqtt.Topics, busEvent event.Event) {
 	switch busEvent.Kind {
 	case event.LightStateKind:
 		publishLightState(ctx, commands, topics, *busEvent.LightState)
+	case event.MQTTConnectedKind:
+		if err := publishMQTTStartup(ctx, root, commands); err != nil {
+			slog.Error("mqtt startup publish failed", "error", err)
+		}
 	}
 }
 
@@ -58,6 +63,16 @@ func logSemanticEvent(busEvent event.Event) {
 		logPushButtonEvent(busEvent.Kind, *busEvent.PushButton)
 	case event.LightKind:
 		logLightEvent(*busEvent.Light)
+	case event.MQTTConnectedKind:
+		slog.Info("mqtt actor connected")
+	case event.MQTTConnectFailedKind:
+		slog.Error("mqtt actor connect failed", "error", busEvent.MQTT.Error)
+	case event.MQTTDisconnectedKind:
+		slog.Info("mqtt actor disconnected")
+	case event.MQTTPublishedKind:
+		slog.Debug("mqtt message published", "topic", busEvent.MQTT.PublishTopic)
+	case event.MQTTPublishFailedKind:
+		slog.Error("mqtt message publish failed", "topic", busEvent.MQTT.PublishTopic, "error", busEvent.MQTT.Error)
 	}
 }
 

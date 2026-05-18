@@ -66,7 +66,7 @@ func TestDispatchPushButtonEventTogglesLightRelay(t *testing.T) {
 	commands := make(chan sysfs.Command, 1)
 
 	logs := captureLogs(t, func() {
-		dispatchEvent(t.Context(), index, commands, nil, mqtt.Topics{}, event.Event{
+		dispatchEvent(t.Context(), &entity.Root{}, index, commands, nil, mqtt.Topics{}, event.Event{
 			Kind: event.PushButtonPressedKind,
 			PushButton: &event.PushButton{
 				ButtonID: entity.PushButtonID("office_button"),
@@ -107,8 +107,8 @@ func TestHandleStateChangeDoesNotPublishRawInputOrButtonState(t *testing.T) {
 		NewValue: sysfs.On,
 		IsRising: true,
 	})
-	dispatchEvent(t.Context(), index, sysfsCommands, mqttCommands, topics, <-semanticEvents)
-	dispatchEvent(t.Context(), index, sysfsCommands, mqttCommands, topics, <-semanticEvents)
+	dispatchEvent(t.Context(), &entity.Root{}, index, sysfsCommands, mqttCommands, topics, <-semanticEvents)
+	dispatchEvent(t.Context(), &entity.Root{}, index, sysfsCommands, mqttCommands, topics, <-semanticEvents)
 
 	assert.Empty(t, mqttCommands)
 
@@ -132,8 +132,8 @@ func TestHandleStateChangePublishesMappedLightState(t *testing.T) {
 		NewValue: sysfs.On,
 		IsRising: true,
 	})
-	dispatchEvent(t.Context(), index, nil, mqttCommands, topics, <-semanticEvents)
-	dispatchEvent(t.Context(), index, nil, mqttCommands, topics, <-semanticEvents)
+	dispatchEvent(t.Context(), &entity.Root{}, index, nil, mqttCommands, topics, <-semanticEvents)
+	dispatchEvent(t.Context(), &entity.Root{}, index, nil, mqttCommands, topics, <-semanticEvents)
 
 	lightCommand := <-mqttCommands
 	assert.Equal(t, mqtt.PublishCommandKind, lightCommand.Kind)
@@ -153,7 +153,7 @@ func TestPublishMQTTDoesNotBlockWhenCommandChannelIsFull(t *testing.T) {
 	assert.Len(t, commands, 1)
 }
 
-func TestDispatchMQTTActorEventPublishesStartupCommandsOnConnect(t *testing.T) {
+func TestNormalizeMQTTEventPublishesStartupCommandsOnConnect(t *testing.T) {
 	root := &entity.Root{
 		MQTT: entity.MQTT{
 			TopicPrefix: "nest",
@@ -166,8 +166,9 @@ func TestDispatchMQTTActorEventPublishesStartupCommandsOnConnect(t *testing.T) {
 		}},
 	}
 	commands := make(chan mqtt.Command, 3)
+	semanticEvent := semanticEventFromMQTTEvent(mqtt.ConnectedEvent())
 
-	dispatchMQTTActorEvent(t.Context(), root, commands, mqtt.ConnectedEvent())
+	dispatchEvent(t.Context(), root, registry.Build(root), nil, commands, mqtt.Topics{}, semanticEvent)
 
 	require.Len(t, commands, 3)
 	assert.Equal(t, "nest/units/controller_1/discovery", (<-commands).Publish.Topic)
@@ -175,10 +176,11 @@ func TestDispatchMQTTActorEventPublishesStartupCommandsOnConnect(t *testing.T) {
 	assert.Equal(t, "nest/units/controller_1/availability", (<-commands).Publish.Topic)
 }
 
-func TestDispatchMQTTActorEventIgnoresNonConnectEvents(t *testing.T) {
+func TestNormalizeMQTTEventIgnoresNonConnectEvents(t *testing.T) {
 	commands := make(chan mqtt.Command, 1)
+	semanticEvent := semanticEventFromMQTTEvent(mqtt.PublishedEvent(mqtt.PublishMessage{Topic: "nest/topic"}))
 
-	dispatchMQTTActorEvent(t.Context(), &entity.Root{}, commands, mqtt.PublishedEvent(mqtt.PublishMessage{Topic: "nest/topic"}))
+	dispatchEvent(t.Context(), &entity.Root{}, registry.Build(&entity.Root{}), nil, commands, mqtt.Topics{}, semanticEvent)
 
 	assert.Empty(t, commands)
 }
@@ -217,8 +219,8 @@ func TestHandleStateChangeLogsPushButtonRelease(t *testing.T) {
 			NewValue: sysfs.Off,
 			IsRising: false,
 		})
-		dispatchEvent(t.Context(), index, nil, nil, mqtt.Topics{}, <-semanticEvents)
-		dispatchEvent(t.Context(), index, nil, nil, mqtt.Topics{}, <-semanticEvents)
+		dispatchEvent(t.Context(), &entity.Root{}, index, nil, nil, mqtt.Topics{}, <-semanticEvents)
+		dispatchEvent(t.Context(), &entity.Root{}, index, nil, nil, mqtt.Topics{}, <-semanticEvents)
 	})
 
 	assert.Contains(t, logs, "push button event")
