@@ -2,9 +2,11 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/mhemeryck/nest/internal/controller/event"
+	"github.com/mhemeryck/nest/internal/entity"
 	"github.com/mhemeryck/nest/internal/mqtt"
 	"github.com/mhemeryck/nest/internal/registry"
 	"github.com/mhemeryck/nest/internal/sysfs"
@@ -12,11 +14,13 @@ import (
 
 func Run(
 	ctx context.Context,
+	root *entity.Root,
 	index *registry.Index,
 	sysfsCommands chan<- sysfs.Command,
 	mqttCommands chan<- mqtt.Command,
 	mqttTopics mqtt.Topics,
 	stateChanges <-chan sysfs.StateChange,
+	mqttEvents <-chan mqtt.Event,
 	done chan<- struct{},
 ) {
 	defer close(done)
@@ -24,7 +28,7 @@ func Run(
 	normalizerDone := make(chan struct{})
 	go normalizeStateChanges(ctx, index, stateChanges, semanticEvents, normalizerDone)
 
-	dispatchEvents(ctx, index, sysfsCommands, mqttCommands, mqttTopics, semanticEvents)
+	dispatchEvents(ctx, root, index, sysfsCommands, mqttCommands, mqttTopics, semanticEvents, mqttEvents)
 	<-normalizerDone
 }
 
@@ -53,11 +57,13 @@ func normalizeStateChanges(
 
 func dispatchEvents(
 	ctx context.Context,
+	root *entity.Root,
 	index *registry.Index,
 	sysfsCommands chan<- sysfs.Command,
 	mqttCommands chan<- mqtt.Command,
 	mqttTopics mqtt.Topics,
 	semanticEvents <-chan event.Event,
+	mqttEvents <-chan mqtt.Event,
 ) {
 	for {
 		select {
@@ -69,7 +75,57 @@ func dispatchEvents(
 			}
 
 			dispatchEvent(ctx, index, sysfsCommands, mqttCommands, mqttTopics, semanticEvent)
+		case mqttEvent, ok := <-mqttEvents:
+			if !ok {
+				return
+			}
+
+			dispatchMQTTActorEvent(ctx, root, mqttCommands, mqttEvent)
 		}
+	}
+}
+
+func dispatchMQTTActorEvent(ctx context.Context, root *entity.Root, commands chan<- mqtt.Command, event mqtt.Event) {
+	logMQTTEvent(event)
+
+	if event.Kind != mqtt.ConnectedEventKind {
+		return
+	}
+
+	if err := publishMQTTStartup(ctx, root, commands); err != nil {
+		slog.Error("mqtt startup publish failed", "error", err)
+	}
+}
+
+func publishMQTTStartup(ctx context.Context, root *entity.Root, commands chan<- mqtt.Command) error {
+	startupCommands, err := mqtt.StartupCommands(root)
+	if err != nil {
+		return fmt.Errorf("build mqtt startup commands: %w", err)
+	}
+
+	for _, command := range startupCommands {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case commands <- command:
+		}
+	}
+
+	return nil
+}
+
+func logMQTTEvent(event mqtt.Event) {
+	switch event.Kind {
+	case mqtt.ConnectedEventKind:
+		slog.Info("mqtt actor connected")
+	case mqtt.ConnectFailedKind:
+		slog.Error("mqtt actor connect failed", "error", event.Error)
+	case mqtt.DisconnectedEventKind:
+		slog.Info("mqtt actor disconnected")
+	case mqtt.PublishedEventKind:
+		slog.Debug("mqtt message published", "topic", event.Publish.Topic)
+	case mqtt.PublishFailedKind:
+		slog.Error("mqtt message publish failed", "topic", event.Publish.Topic, "error", event.Error)
 	}
 }
 

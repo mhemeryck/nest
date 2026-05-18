@@ -14,7 +14,8 @@ func TestBrokerURL(t *testing.T) {
 }
 
 func TestClientOptions(t *testing.T) {
-	options := clientOptions(entity.MQTT{
+	events := make(chan Event, 1)
+	options := clientOptions(t.Context(), entity.MQTT{
 		Host:        "mqtt.local",
 		Port:        1883,
 		ClientID:    "nest-controller-1",
@@ -22,7 +23,7 @@ func TestClientOptions(t *testing.T) {
 		Password:    "secret",
 		TopicPrefix: "nest",
 		UnitID:      "controller_1",
-	})
+	}, events)
 
 	assert.Equal(t, "nest-controller-1", options.ClientID)
 	assert.Equal(t, "nest", options.Username)
@@ -35,4 +36,7 @@ func TestClientOptions(t *testing.T) {
 	if assert.Len(t, options.Servers, 1) {
 		assert.Equal(t, "tcp://mqtt.local:1883", options.Servers[0].String())
 	}
+
+	options.OnConnect(nil)
+	assert.Equal(t, ConnectedEvent(), <-events)
 }

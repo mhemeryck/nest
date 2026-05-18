@@ -64,12 +64,6 @@ func Run(ctx context.Context, opts Options) error {
 	mqttCommands, mqttEvents, mqttDone := mqttChannels(root)
 	if mqttCommands != nil {
 		go mqtt.Run(ctx, root.MQTT, mqttCommands, mqttEvents, mqttDone)
-		go logMQTTEvents(ctx, mqttEvents)
-		if err := publishMQTTStartup(ctx, root, mqttCommands); err != nil {
-			cancel()
-			<-mqttDone
-			return err
-		}
 	}
 
 	// Start hardware and controller actors with unidirectional command and observation channels.
@@ -77,7 +71,7 @@ func Run(ctx context.Context, opts Options) error {
 	go sysfs.Run(ctx, configuredDevices, sysfsCommands, states, sysfsDone, sysfsPollIntervals(root))
 
 	controllerDone := make(chan struct{})
-	go controller.Run(ctx, index, sysfsCommands, mqttCommands, mqttTopics(root), states, controllerDone)
+	go controller.Run(ctx, root, index, sysfsCommands, mqttCommands, mqttTopics(root), states, mqttEvents, controllerDone)
 
 	slog.Info("polling devices", "message", "press Ctrl+C to exit")
 

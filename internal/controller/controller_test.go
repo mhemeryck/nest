@@ -24,7 +24,7 @@ func TestRunReturnsOnSignal(t *testing.T) {
 	stateChanges := make(chan sysfs.StateChange)
 	commands := make(chan sysfs.Command)
 	done := make(chan struct{})
-	go Run(ctx, index, commands, nil, mqtt.Topics{}, stateChanges, done)
+	go Run(ctx, &entity.Root{}, index, commands, nil, mqtt.Topics{}, stateChanges, nil, done)
 
 	cancel()
 
@@ -41,7 +41,7 @@ func TestRunReturnsWhenPollEventsClose(t *testing.T) {
 	stateChanges := make(chan sysfs.StateChange)
 	commands := make(chan sysfs.Command)
 	done := make(chan struct{})
-	go Run(ctx, index, commands, nil, mqtt.Topics{}, stateChanges, done)
+	go Run(ctx, &entity.Root{}, index, commands, nil, mqtt.Topics{}, stateChanges, nil, done)
 
 	close(stateChanges)
 
@@ -151,6 +151,36 @@ func TestPublishMQTTDoesNotBlockWhenCommandChannelIsFull(t *testing.T) {
 
 	assert.False(t, published)
 	assert.Len(t, commands, 1)
+}
+
+func TestDispatchMQTTActorEventPublishesStartupCommandsOnConnect(t *testing.T) {
+	root := &entity.Root{
+		MQTT: entity.MQTT{
+			TopicPrefix: "nest",
+			UnitID:      "controller_1",
+		},
+		Lights: []entity.Light{{
+			ID:    entity.LightID("office_light"),
+			Name:  "Office light",
+			Relay: entity.RelayID("office_light_relay"),
+		}},
+	}
+	commands := make(chan mqtt.Command, 3)
+
+	dispatchMQTTActorEvent(t.Context(), root, commands, mqtt.ConnectedEvent())
+
+	require.Len(t, commands, 3)
+	assert.Equal(t, "nest/units/controller_1/discovery", (<-commands).Publish.Topic)
+	assert.Equal(t, "homeassistant/device/nest_controller_1_unit/config", (<-commands).Publish.Topic)
+	assert.Equal(t, "nest/units/controller_1/availability", (<-commands).Publish.Topic)
+}
+
+func TestDispatchMQTTActorEventIgnoresNonConnectEvents(t *testing.T) {
+	commands := make(chan mqtt.Command, 1)
+
+	dispatchMQTTActorEvent(t.Context(), &entity.Root{}, commands, mqtt.PublishedEvent(mqtt.PublishMessage{Topic: "nest/topic"}))
+
+	assert.Empty(t, commands)
 }
 
 func TestHandleStateChangeLogsRawStateChangeForUnknownDevice(t *testing.T) {

@@ -18,15 +18,13 @@ const (
 func Run(ctx context.Context, cfg entity.MQTT, commands <-chan Command, events chan<- Event, done chan<- struct{}) {
 	defer close(done)
 
-	client := paho.NewClient(clientOptions(cfg))
+	client := paho.NewClient(clientOptions(ctx, cfg, events))
 	if err := waitToken(ctx, client.Connect()); err != nil {
 		slog.Error("mqtt connect failed", "broker", brokerURL(cfg), "error", err)
 		publishEvent(ctx, events, ConnectFailedEvent(err))
 		return
 	}
 
-	slog.Info("mqtt connected", "broker", brokerURL(cfg), "client_id", cfg.ClientID)
-	publishEvent(ctx, events, ConnectedEvent())
 	defer func() {
 		offlineCtx, cancel := context.WithTimeout(context.Background(), gracefulOfflineTimeout)
 		defer cancel()
@@ -68,12 +66,16 @@ func publish(ctx context.Context, client paho.Client, events chan<- Event, messa
 	publishEvent(ctx, events, PublishedEvent(message))
 }
 
-func clientOptions(cfg entity.MQTT) *paho.ClientOptions {
+func clientOptions(ctx context.Context, cfg entity.MQTT, events chan<- Event) *paho.ClientOptions {
 	options := paho.NewClientOptions()
 	options.AddBroker(brokerURL(cfg))
 	options.SetClientID(cfg.ClientID)
 	offline := AvailabilityMessage(NewTopics(cfg.TopicPrefix, cfg.UnitID), AvailabilityOffline)
 	options.SetWill(offline.Topic, string(offline.Payload), offline.QoS, offline.Retain)
+	options.SetOnConnectHandler(func(_ paho.Client) {
+		slog.Info("mqtt connected", "broker", brokerURL(cfg), "client_id", cfg.ClientID)
+		publishEvent(ctx, events, ConnectedEvent())
+	})
 	if cfg.Username != "" {
 		options.SetUsername(cfg.Username)
 	}

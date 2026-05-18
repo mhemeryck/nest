@@ -135,7 +135,7 @@ nest/units/local/lights/office_light/state {"state":"OFF"}
 - [ ] Publish only meaningful Home Assistant entities by default, not raw hardware diagnostics
 - [ ] Lock canonical JSON state payloads for each entity class
 - [ ] Decide retained vs non-retained behavior per Home Assistant state topic class
-- [ ] Handle reconnects and republish Home Assistant discovery and availability
+- [x] Handle reconnects and republish Home Assistant discovery and availability
 - [x] Add MQTT Last Will and graceful offline availability publishing
 - [ ] Add logging for publish failures and dropped messages
 - [ ] Decide whether dropped publish warnings need rate limiting or counters
