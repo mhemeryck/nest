@@ -136,7 +136,7 @@ nest/units/local/lights/office_light/state {"state":"OFF"}
 - [ ] Lock canonical JSON state payloads for each entity class
 - [ ] Decide retained vs non-retained behavior per Home Assistant state topic class
 - [ ] Handle reconnects and republish Home Assistant discovery and availability
-- [ ] Add MQTT Last Will and graceful offline availability publishing
+- [x] Add MQTT Last Will and graceful offline availability publishing
 - [ ] Add logging for publish failures and dropped messages
 - [ ] Decide whether dropped publish warnings need rate limiting or counters
 - [ ] Add tests for Home Assistant discovery topics and payloads

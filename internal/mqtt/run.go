@@ -10,7 +10,10 @@ import (
 	"github.com/mhemeryck/nest/internal/entity"
 )
 
-const disconnectQuiesce = 250 * time.Millisecond
+const (
+	disconnectQuiesce      = 250 * time.Millisecond
+	gracefulOfflineTimeout = 2 * time.Second
+)
 
 func Run(ctx context.Context, cfg entity.MQTT, commands <-chan Command, events chan<- Event, done chan<- struct{}) {
 	defer close(done)
@@ -25,6 +28,9 @@ func Run(ctx context.Context, cfg entity.MQTT, commands <-chan Command, events c
 	slog.Info("mqtt connected", "broker", brokerURL(cfg), "client_id", cfg.ClientID)
 	publishEvent(ctx, events, ConnectedEvent())
 	defer func() {
+		offlineCtx, cancel := context.WithTimeout(context.Background(), gracefulOfflineTimeout)
+		defer cancel()
+		publishGracefulOffline(offlineCtx, client, cfg)
 		client.Disconnect(uint(disconnectQuiesce / time.Millisecond))
 		publishEvent(ctx, events, DisconnectedEvent())
 	}()
@@ -66,6 +72,8 @@ func clientOptions(cfg entity.MQTT) *paho.ClientOptions {
 	options := paho.NewClientOptions()
 	options.AddBroker(brokerURL(cfg))
 	options.SetClientID(cfg.ClientID)
+	offline := AvailabilityMessage(NewTopics(cfg.TopicPrefix, cfg.UnitID), AvailabilityOffline)
+	options.SetWill(offline.Topic, string(offline.Payload), offline.QoS, offline.Retain)
 	if cfg.Username != "" {
 		options.SetUsername(cfg.Username)
 	}
@@ -77,6 +85,17 @@ func clientOptions(cfg entity.MQTT) *paho.ClientOptions {
 	options.SetOrderMatters(true)
 
 	return options
+}
+
+func publishGracefulOffline(ctx context.Context, client paho.Client, cfg entity.MQTT) {
+	message := AvailabilityMessage(NewTopics(cfg.TopicPrefix, cfg.UnitID), AvailabilityOffline)
+	token := client.Publish(message.Topic, message.QoS, message.Retain, message.Payload)
+	if err := waitToken(ctx, token); err != nil {
+		slog.Error("mqtt graceful offline publish failed", "topic", message.Topic, "error", err)
+		return
+	}
+
+	slog.Info("mqtt graceful offline published", "topic", message.Topic)
 }
 
 func brokerURL(cfg entity.MQTT) string {
