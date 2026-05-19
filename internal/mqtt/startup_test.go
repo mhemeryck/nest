@@ -35,6 +35,7 @@ func TestStartupCommands(t *testing.T) {
 	assert.True(t, commands[0].Publish.Retain)
 	assert.Contains(t, string(commands[0].Publish.Payload), `"cmps"`)
 	assert.Contains(t, string(commands[0].Publish.Payload), `"unique_id":"nest_controller_1_office_light"`)
+	assert.Contains(t, string(commands[0].Publish.Payload), `"default_entity_id":"light.controller_1_office_light"`)
 	assert.Contains(t, string(commands[0].Publish.Payload), `"command_topic":"nest/units/controller_1/lights/office_light/command"`)
 	assert.Equal(t, PublishCommandKind, commands[1].Kind)
 	assert.Equal(t, "nest/units/controller_1/availability", commands[1].Publish.Topic)

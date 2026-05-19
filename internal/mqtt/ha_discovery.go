@@ -79,7 +79,7 @@ func homeAssistantLightComponent(light entity.Light, topics Topics) HomeAssistan
 		Platform:           "light",
 		Name:               light.Name,
 		UniqueID:           homeAssistantUniqueID(topics, string(light.ID)),
-		DefaultEntityID:    fmt.Sprintf("light.%s", light.ID),
+		DefaultEntityID:    fmt.Sprintf("light.%s_%s", topics.UnitID, light.ID),
 		StateTopic:         LightStateTopic(topics, light.ID),
 		CommandTopic:       LightCommandTopic(topics, light.ID),
 		StateValueTemplate: "{{ value_json.state }}",

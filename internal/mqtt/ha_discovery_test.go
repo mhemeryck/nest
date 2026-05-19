@@ -55,7 +55,7 @@ func TestBuildHomeAssistantDeviceDiscovery(t *testing.T) {
 		Platform:           "light",
 		Name:               "Office light",
 		UniqueID:           "nest_controller_1_office_light",
-		DefaultEntityID:    "light.office_light",
+		DefaultEntityID:    "light.controller_1_office_light",
 		StateTopic:         "nest/units/controller_1/lights/office_light/state",
 		CommandTopic:       "nest/units/controller_1/lights/office_light/command",
 		StateValueTemplate: "{{ value_json.state }}",
