@@ -17,16 +17,6 @@ func TestAvailabilityMessage(t *testing.T) {
 	assert.Equal(t, byte(0), message.QoS)
 }
 
-func TestDiscoveryMessage(t *testing.T) {
-	message, err := DiscoveryMessage(testEntityRoot(), NewTopics("nest", "controller_1"))
-	require.NoError(t, err)
-
-	assert.Equal(t, "nest/units/controller_1/discovery", message.Topic)
-	assert.Contains(t, string(message.Payload), `"commands_enabled":false`)
-	assert.True(t, message.Retain)
-	assert.Equal(t, byte(0), message.QoS)
-}
-
 func TestLightStateMessage(t *testing.T) {
 	message, err := LightStateMessage(NewTopics("nest", "controller_1"), LightObservation{
 		LightID: entity.LightID("office_light"),

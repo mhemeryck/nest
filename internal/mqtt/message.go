@@ -34,20 +34,6 @@ func AvailabilityMessage(topics Topics, status AvailabilityStatus) PublishMessag
 	}
 }
 
-func DiscoveryMessage(root *entity.Root, topics Topics) (PublishMessage, error) {
-	payload, err := DiscoveryPayload(root, topics)
-	if err != nil {
-		return PublishMessage{}, err
-	}
-
-	return PublishMessage{
-		Topic:   DiscoveryTopic(topics),
-		Payload: payload,
-		Retain:  true,
-		QoS:     0,
-	}, nil
-}
-
 func LightStateMessage(topics Topics, observation LightObservation) (PublishMessage, error) {
 	payload, err := json.Marshal(struct {
 		State string `json:"state"`

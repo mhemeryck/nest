@@ -4,9 +4,38 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/mhemeryck/nest/internal/entity"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func testEntityRoot() *entity.Root {
+	return &entity.Root{
+		MQTT: entity.MQTT{
+			TopicPrefix: "nest",
+			UnitID:      "controller_1",
+		},
+		DigitalInputs: []entity.DigitalInput{{
+			ID:          entity.DigitalInputID("office_button_input"),
+			SysfsDevice: entity.SysfsDeviceID("di_3_16"),
+		}},
+		PushButtons: []entity.PushButton{{
+			ID:    entity.PushButtonID("office_button"),
+			Name:  "Office button",
+			Input: entity.DigitalInputID("office_button_input"),
+		}},
+		Relays: []entity.Relay{{
+			ID:          entity.RelayID("office_light_relay"),
+			Name:        "Office light relay",
+			SysfsDevice: entity.SysfsDeviceID("ro_3_14"),
+		}},
+		Lights: []entity.Light{{
+			ID:    entity.LightID("office_light"),
+			Name:  "Office light",
+			Relay: entity.RelayID("office_light_relay"),
+		}},
+	}
+}
 
 func TestBuildHomeAssistantDeviceDiscovery(t *testing.T) {
 	root := testEntityRoot()

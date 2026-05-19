@@ -13,7 +13,6 @@ func TestTopics(t *testing.T) {
 	assert.Equal(t, "nest", topics.Prefix)
 	assert.Equal(t, "controller_1", topics.UnitID)
 	assert.Equal(t, "nest/units/controller_1/availability", AvailabilityTopic(topics))
-	assert.Equal(t, "nest/units/controller_1/discovery", DiscoveryTopic(topics))
 	assert.Equal(t, "nest/units/controller_1/digital_inputs/office_button_input/state", DigitalInputStateTopic(topics, entity.DigitalInputID("office_button_input")))
 	assert.Equal(t, "nest/units/controller_1/push_buttons/office_button/state", PushButtonStateTopic(topics, entity.PushButtonID("office_button")))
 	assert.Equal(t, "nest/units/controller_1/relays/office_light_relay/state", RelayStateTopic(topics, entity.RelayID("office_light_relay")))

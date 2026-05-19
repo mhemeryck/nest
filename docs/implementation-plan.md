@@ -125,7 +125,7 @@ nest/units/local/lights/office_light/state {"state":"OFF"}
 ## Phase 6: Home Assistant MQTT Discovery Contract
 
 - [x] Treat Home Assistant MQTT discovery as the primary MQTT integration contract
-- [ ] Keep the unit-level `nest` discovery document as optional diagnostic output, not as the Home Assistant-facing contract
+- [x] Drop the unit-level `nest` discovery document in favor of the Home Assistant-facing contract
 - [x] Define one Home Assistant device identity per physical `nest` controller unit
 - [x] Publish one retained Home Assistant device discovery payload per controller unit
 - [x] Define stable Home Assistant unique IDs derived from `unit_id` and entity IDs

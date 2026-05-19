@@ -165,13 +165,12 @@ func TestNormalizeMQTTEventPublishesStartupCommandsOnConnect(t *testing.T) {
 			Relay: entity.RelayID("office_light_relay"),
 		}},
 	}
-	commands := make(chan mqtt.Command, 3)
+	commands := make(chan mqtt.Command, 2)
 	semanticEvent := semanticEventFromMQTTEvent(mqtt.ConnectedEvent())
 
 	dispatchEvent(t.Context(), root, registry.Build(root), nil, commands, mqtt.Topics{}, semanticEvent)
 
-	require.Len(t, commands, 3)
-	assert.Equal(t, "nest/units/controller_1/discovery", (<-commands).Publish.Topic)
+	require.Len(t, commands, 2)
 	assert.Equal(t, "homeassistant/device/nest_controller_1_unit/config", (<-commands).Publish.Topic)
 	assert.Equal(t, "nest/units/controller_1/availability", (<-commands).Publish.Topic)
 }

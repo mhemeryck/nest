@@ -22,10 +22,6 @@ func AvailabilityTopic(topics Topics) string {
 	return joinTopic(topics, "units", topics.UnitID, "availability")
 }
 
-func DiscoveryTopic(topics Topics) string {
-	return joinTopic(topics, "units", topics.UnitID, "discovery")
-}
-
 func DigitalInputStateTopic(topics Topics, inputID entity.DigitalInputID) string {
 	return joinTopic(topics, "units", topics.UnitID, "digital_inputs", string(inputID), "state")
 }
