@@ -138,7 +138,7 @@ nest/units/local/lights/office_light/state {"state":"OFF"}
 - [x] Handle reconnects and republish Home Assistant discovery and availability
 - [x] Add MQTT Last Will and graceful offline availability publishing
 - [x] Add logging for publish failures and dropped messages
-- [ ] Decide whether dropped publish warnings need rate limiting or counters
+- ~~[ ] Decide whether dropped publish warnings need rate limiting or counters~~
 - [x] Add tests for Home Assistant discovery topics and payloads
 
 Notes from the current Home Assistant migration context:
