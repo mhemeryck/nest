@@ -16,23 +16,37 @@ mqtt:
 digital_inputs:
   - id: office_button_input
     device: di_3_16
+  - id: hallway_button_input
+    device: di_3_15
 
 push_buttons:
   - id: office_button
     name: Office light button
     input: office_button_input
+  - id: hallway_button
+    name: Hallway light button
+    input: hallway_button_input
 
 relays:
   - id: office_light_relay
     name: Office light relay
     device: ro_3_14
+  - id: hallway_light_relay
+    name: Hallway light relay
+    device: ro_3_13
 
 lights:
   - id: office_light
     name: Office light
     relay: office_light_relay
+  - id: hallway_light
+    name: Hallway light
+    relay: hallway_light_relay
 
 bindings:
   - button: office_button
     light: office_light
+    action: toggle
+  - button: hallway_button
+    light: hallway_light
     action: toggle

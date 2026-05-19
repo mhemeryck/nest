@@ -124,6 +124,37 @@ It also avoids a mesh where integrations talk directly to each other.
 | **MQTT**       | HA integration           | Publish state, subscribe commands |
 | **Sysfs**      | Local relay control      | For covers, same-unit setups      |
 
+MQTT is primarily a Home Assistant integration boundary.
+It should expose the semantic house model, not the low-level hardware implementation.
+Home Assistant should discover entities from retained MQTT discovery payloads and then consume state and availability topics referenced by those payloads.
+The discovery model is one Home Assistant device discovery payload per physical `nest` controller unit.
+Each controller publishes the grouped components it owns under that retained device discovery message.
+The retained policy for this slice is:
+
+- retain Home Assistant discovery payloads
+- retain unit availability payloads
+- retain entity state payloads such as light state so Home Assistant can recover the latest known state after reconnects or restarts
+
+MQTT state topics should publish canonical JSON entity snapshots.
+The topic identifies the entity, while the payload contains the current state and dynamic attributes for that entity.
+Static metadata belongs in discovery payloads and `nest` configuration.
+Hardware details such as sysfs device IDs, relay IDs, Modbus coils, and raw input addresses should not be part of normal state payloads.
+
+For example, a relay-backed light state should look like:
+
+```json
+{"state":"ON"}
+```
+
+A future dimmable light can extend the same pattern without splitting one logical state update across several topics:
+
+```json
+{"state":"ON","brightness":180}
+```
+
+Diagnostic MQTT topics should only be introduced when there is a concrete debugging or migration need.
+They should not be the default contract consumed by Home Assistant.
+
 ## Config Structure
 
 ### Input Unit (Lights)

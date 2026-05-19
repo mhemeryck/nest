@@ -11,7 +11,11 @@ type StateChange struct {
 
 type CommandKind string
 
-const ToggleCommand CommandKind = "toggle"
+const (
+	ToggleCommand CommandKind = "toggle"
+	OnCommand     CommandKind = "on"
+	OffCommand    CommandKind = "off"
+)
 
 type Command struct {
 	Kind     CommandKind

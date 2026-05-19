@@ -22,10 +22,6 @@ func AvailabilityTopic(topics Topics) string {
 	return joinTopic(topics, "units", topics.UnitID, "availability")
 }
 
-func DiscoveryTopic(topics Topics) string {
-	return joinTopic(topics, "units", topics.UnitID, "discovery")
-}
-
 func DigitalInputStateTopic(topics Topics, inputID entity.DigitalInputID) string {
 	return joinTopic(topics, "units", topics.UnitID, "digital_inputs", string(inputID), "state")
 }
@@ -46,6 +42,28 @@ func LightCommandTopic(topics Topics, lightID entity.LightID) string {
 	return joinTopic(topics, "units", topics.UnitID, "lights", string(lightID), "command")
 }
 
+func LightCommandSubscriptionTopic(topics Topics) string {
+	return joinTopic(topics, "units", topics.UnitID, "lights", "+", "command")
+}
+
+func ParseLightCommandTopic(topics Topics, topic string) (entity.LightID, bool) {
+	prefix := joinTopic(topics, "units", topics.UnitID, "lights") + "/"
+	if !strings.HasPrefix(topic, prefix) || !strings.HasSuffix(topic, "/command") {
+		return "", false
+	}
+
+	lightID := strings.TrimSuffix(strings.TrimPrefix(topic, prefix), "/command")
+	if lightID == "" || strings.Contains(lightID, "/") {
+		return "", false
+	}
+
+	return entity.LightID(lightID), true
+}
+
+func HomeAssistantDeviceDiscoveryTopic(topics Topics) string {
+	return strings.Join([]string{"homeassistant", "device", homeAssistantUniqueID(topics, "unit"), "config"}, "/")
+}
+
 func joinTopic(topics Topics, parts ...string) string {
 	segments := make([]string, 0, len(parts)+1)
 	if topics.Prefix != "" {
@@ -54,4 +72,8 @@ func joinTopic(topics Topics, parts ...string) string {
 	segments = append(segments, parts...)
 
 	return strings.Join(segments, "/")
+}
+
+func homeAssistantUniqueID(topics Topics, entityID string) string {
+	return strings.Join([]string{"nest", topics.UnitID, entityID}, "_")
 }

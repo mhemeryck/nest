@@ -11,6 +11,11 @@ const (
 	RelayStateKind         Kind = "relay_state"
 	LightStateKind         Kind = "light_state"
 	LightKind              Kind = "light"
+	MQTTConnectedKind      Kind = "mqtt_connected"
+	MQTTConnectFailedKind  Kind = "mqtt_connect_failed"
+	MQTTDisconnectedKind   Kind = "mqtt_disconnected"
+	MQTTPublishedKind      Kind = "mqtt_published"
+	MQTTPublishFailedKind  Kind = "mqtt_publish_failed"
 )
 
 type Event struct {
@@ -20,6 +25,12 @@ type Event struct {
 	Relay        *Relay
 	LightState   *LightState
 	Light        *Light
+	MQTT         *MQTT
+}
+
+type MQTT struct {
+	PublishTopic string
+	Error        string
 }
 
 type DigitalInput struct {

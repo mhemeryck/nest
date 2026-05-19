@@ -24,7 +24,7 @@ func TestRunReturnsOnSignal(t *testing.T) {
 	stateChanges := make(chan sysfs.StateChange)
 	commands := make(chan sysfs.Command)
 	done := make(chan struct{})
-	go Run(ctx, index, commands, nil, mqtt.Topics{}, stateChanges, done)
+	go Run(ctx, &entity.Root{}, index, commands, nil, mqtt.Topics{}, stateChanges, nil, done)
 
 	cancel()
 
@@ -41,7 +41,7 @@ func TestRunReturnsWhenPollEventsClose(t *testing.T) {
 	stateChanges := make(chan sysfs.StateChange)
 	commands := make(chan sysfs.Command)
 	done := make(chan struct{})
-	go Run(ctx, index, commands, nil, mqtt.Topics{}, stateChanges, done)
+	go Run(ctx, &entity.Root{}, index, commands, nil, mqtt.Topics{}, stateChanges, nil, done)
 
 	close(stateChanges)
 
@@ -66,7 +66,7 @@ func TestDispatchPushButtonEventTogglesLightRelay(t *testing.T) {
 	commands := make(chan sysfs.Command, 1)
 
 	logs := captureLogs(t, func() {
-		dispatchEvent(t.Context(), index, commands, nil, mqtt.Topics{}, event.Event{
+		dispatchEvent(t.Context(), &entity.Root{}, index, commands, nil, mqtt.Topics{}, event.Event{
 			Kind: event.PushButtonPressedKind,
 			PushButton: &event.PushButton{
 				ButtonID: entity.PushButtonID("office_button"),
@@ -88,7 +88,7 @@ func TestDispatchPushButtonEventTogglesLightRelay(t *testing.T) {
 	assert.Equal(t, "1\n", string(data))
 }
 
-func TestHandleStateChangePublishesMappedInputAndButtonState(t *testing.T) {
+func TestHandleStateChangeDoesNotPublishRawInputOrButtonState(t *testing.T) {
 	index := registry.Build(&entity.Root{
 		DigitalInputs: []entity.DigitalInput{{ID: entity.DigitalInputID("office_button_input"), SysfsDevice: entity.SysfsDeviceID("di_3_16")}},
 		PushButtons:   []entity.PushButton{{ID: entity.PushButtonID("office_button"), Name: "Office button", Input: entity.DigitalInputID("office_button_input")}},
@@ -107,27 +107,17 @@ func TestHandleStateChangePublishesMappedInputAndButtonState(t *testing.T) {
 		NewValue: sysfs.On,
 		IsRising: true,
 	})
-	dispatchEvent(t.Context(), index, sysfsCommands, mqttCommands, topics, <-semanticEvents)
-	dispatchEvent(t.Context(), index, sysfsCommands, mqttCommands, topics, <-semanticEvents)
+	dispatchEvent(t.Context(), &entity.Root{}, index, sysfsCommands, mqttCommands, topics, <-semanticEvents)
+	dispatchEvent(t.Context(), &entity.Root{}, index, sysfsCommands, mqttCommands, topics, <-semanticEvents)
 
-	inputCommand := <-mqttCommands
-	assert.Equal(t, mqtt.PublishCommandKind, inputCommand.Kind)
-	assert.Equal(t, "nest/units/controller_1/digital_inputs/office_button_input/state", inputCommand.Publish.Topic)
-	assert.JSONEq(t, `{"input_id":"office_button_input","sysfs_device":"di_3_16","value":1}`, string(inputCommand.Publish.Payload))
-	assert.True(t, inputCommand.Publish.Retain)
-
-	buttonCommand := <-mqttCommands
-	assert.Equal(t, mqtt.PublishCommandKind, buttonCommand.Kind)
-	assert.Equal(t, "nest/units/controller_1/push_buttons/office_button/state", buttonCommand.Publish.Topic)
-	assert.JSONEq(t, `{"button_id":"office_button","name":"Office button","state":"pressed"}`, string(buttonCommand.Publish.Payload))
-	assert.False(t, buttonCommand.Publish.Retain)
+	assert.Empty(t, mqttCommands)
 
 	sysfsCommand := <-sysfsCommands
 	assert.Equal(t, sysfs.ToggleCommand, sysfsCommand.Kind)
 	assert.Equal(t, "ro_3_14", sysfsCommand.DeviceID)
 }
 
-func TestHandleStateChangePublishesMappedRelayAndLightState(t *testing.T) {
+func TestHandleStateChangePublishesMappedLightState(t *testing.T) {
 	index := registry.Build(&entity.Root{
 		Lights: []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
 		Relays: []entity.Relay{{ID: entity.RelayID("office_light_relay"), Name: "Office light relay", SysfsDevice: entity.SysfsDeviceID("ro_3_14")}},
@@ -142,20 +132,15 @@ func TestHandleStateChangePublishesMappedRelayAndLightState(t *testing.T) {
 		NewValue: sysfs.On,
 		IsRising: true,
 	})
-	dispatchEvent(t.Context(), index, nil, mqttCommands, topics, <-semanticEvents)
-	dispatchEvent(t.Context(), index, nil, mqttCommands, topics, <-semanticEvents)
-
-	relayCommand := <-mqttCommands
-	assert.Equal(t, mqtt.PublishCommandKind, relayCommand.Kind)
-	assert.Equal(t, "nest/units/controller_1/relays/office_light_relay/state", relayCommand.Publish.Topic)
-	assert.JSONEq(t, `{"relay_id":"office_light_relay","name":"Office light relay","sysfs_device":"ro_3_14","value":1}`, string(relayCommand.Publish.Payload))
-	assert.True(t, relayCommand.Publish.Retain)
+	dispatchEvent(t.Context(), &entity.Root{}, index, nil, mqttCommands, topics, <-semanticEvents)
+	dispatchEvent(t.Context(), &entity.Root{}, index, nil, mqttCommands, topics, <-semanticEvents)
 
 	lightCommand := <-mqttCommands
 	assert.Equal(t, mqtt.PublishCommandKind, lightCommand.Kind)
 	assert.Equal(t, "nest/units/controller_1/lights/office_light/state", lightCommand.Publish.Topic)
-	assert.JSONEq(t, `{"light_id":"office_light","name":"Office light","relay_id":"office_light_relay","value":1}`, string(lightCommand.Publish.Payload))
+	assert.JSONEq(t, `{"state":"ON"}`, string(lightCommand.Publish.Payload))
 	assert.True(t, lightCommand.Publish.Retain)
+	assert.Empty(t, mqttCommands)
 }
 
 func TestPublishMQTTDoesNotBlockWhenCommandChannelIsFull(t *testing.T) {
@@ -166,6 +151,60 @@ func TestPublishMQTTDoesNotBlockWhenCommandChannelIsFull(t *testing.T) {
 
 	assert.False(t, published)
 	assert.Len(t, commands, 1)
+}
+
+func TestNormalizeMQTTEventPublishesStartupCommandsOnConnect(t *testing.T) {
+	root := &entity.Root{
+		MQTT: entity.MQTT{
+			TopicPrefix: "nest",
+			UnitID:      "controller_1",
+		},
+		Lights: []entity.Light{{
+			ID:    entity.LightID("office_light"),
+			Name:  "Office light",
+			Relay: entity.RelayID("office_light_relay"),
+		}},
+	}
+	commands := make(chan mqtt.Command, 2)
+	semanticEvent, handled := semanticEventFromMQTTEvent(registry.Build(root), mqtt.Topics{}, mqtt.ConnectedEvent())
+	require.True(t, handled)
+
+	dispatchEvent(t.Context(), root, registry.Build(root), nil, commands, mqtt.Topics{}, semanticEvent)
+
+	require.Len(t, commands, 2)
+	assert.Equal(t, "homeassistant/device/nest_controller_1_unit/config", (<-commands).Publish.Topic)
+	assert.Equal(t, "nest/units/controller_1/availability", (<-commands).Publish.Topic)
+}
+
+func TestNormalizeMQTTEventIgnoresNonConnectEvents(t *testing.T) {
+	commands := make(chan mqtt.Command, 1)
+	semanticEvent, handled := semanticEventFromMQTTEvent(registry.Build(&entity.Root{}), mqtt.Topics{}, mqtt.PublishedEvent(mqtt.PublishMessage{Topic: "nest/topic"}))
+	require.True(t, handled)
+
+	dispatchEvent(t.Context(), &entity.Root{}, registry.Build(&entity.Root{}), nil, commands, mqtt.Topics{}, semanticEvent)
+
+	assert.Empty(t, commands)
+}
+
+func TestDispatchMQTTLightCommandTurnsLightOn(t *testing.T) {
+	index := registry.Build(&entity.Root{
+		Lights: []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
+		Relays: []entity.Relay{{ID: entity.RelayID("office_light_relay"), Name: "Office light relay", SysfsDevice: entity.SysfsDeviceID("ro_3_14")}},
+	})
+	commands := make(chan sysfs.Command, 1)
+
+	dispatchEvent(t.Context(), &entity.Root{}, index, commands, nil, mqtt.Topics{}, event.Event{
+		Kind: event.LightKind,
+		Light: &event.Light{
+			LightID: entity.LightID("office_light"),
+			Name:    "Office light",
+			Action:  entity.LightActionOn,
+		},
+	})
+
+	command := <-commands
+	assert.Equal(t, sysfs.OnCommand, command.Kind)
+	assert.Equal(t, "ro_3_14", command.DeviceID)
 }
 
 func TestHandleStateChangeLogsRawStateChangeForUnknownDevice(t *testing.T) {
@@ -202,8 +241,8 @@ func TestHandleStateChangeLogsPushButtonRelease(t *testing.T) {
 			NewValue: sysfs.Off,
 			IsRising: false,
 		})
-		dispatchEvent(t.Context(), index, nil, nil, mqtt.Topics{}, <-semanticEvents)
-		dispatchEvent(t.Context(), index, nil, nil, mqtt.Topics{}, <-semanticEvents)
+		dispatchEvent(t.Context(), &entity.Root{}, index, nil, nil, mqtt.Topics{}, <-semanticEvents)
+		dispatchEvent(t.Context(), &entity.Root{}, index, nil, nil, mqtt.Topics{}, <-semanticEvents)
 	})
 
 	assert.Contains(t, logs, "push button event")
