@@ -124,22 +124,22 @@ nest/units/local/lights/office_light/state {"state":"OFF"}
 
 ## Phase 6: Home Assistant MQTT Discovery Contract
 
-- [ ] Treat Home Assistant MQTT discovery as the primary MQTT integration contract
+- [x] Treat Home Assistant MQTT discovery as the primary MQTT integration contract
 - [ ] Keep the unit-level `nest` discovery document as optional diagnostic output, not as the Home Assistant-facing contract
 - [x] Define one Home Assistant device identity per physical `nest` controller unit
 - [x] Publish one retained Home Assistant device discovery payload per controller unit
 - [x] Define stable Home Assistant unique IDs derived from `unit_id` and entity IDs
 - [ ] Preserve current Home Assistant entity IDs where practical during migration
 - [x] Publish retained Home Assistant discovery components for configured lights
-- [ ] Advertise required Home Assistant light command topics before command handling is enabled, while documenting them as no-op placeholders
-- [ ] Publish only meaningful Home Assistant entities by default, not raw hardware diagnostics
-- [ ] Lock canonical JSON state payloads for each entity class
+- [x] Advertise required Home Assistant light command topics before command handling is enabled, while documenting them as no-op placeholders
+- [x] Publish only meaningful Home Assistant entities by default, not raw hardware diagnostics
+- [x] Lock canonical JSON state payloads for each entity class
 - [ ] Decide retained vs non-retained behavior per Home Assistant state topic class
 - [x] Handle reconnects and republish Home Assistant discovery and availability
 - [x] Add MQTT Last Will and graceful offline availability publishing
 - [ ] Add logging for publish failures and dropped messages
 - [ ] Decide whether dropped publish warnings need rate limiting or counters
-- [ ] Add tests for Home Assistant discovery topics and payloads
+- [x] Add tests for Home Assistant discovery topics and payloads
 
 Notes from the current Home Assistant migration context:
 
@@ -158,6 +158,7 @@ Notes from the current Home Assistant migration context:
 - Home Assistant discovery should be verified locally with a broker and disposable Home Assistant instance before depending on it for migration
 - MQTT Last Will and offline availability are useful, but should be part of contract hardening rather than the first passive publishing slice
 - Reconnect handling should republish retained discovery and availability so subscribers recover after broker interruptions
+- Reconnect republishing was verified locally against the disposable Home Assistant and Mosquitto stack
 - Dropped MQTT publish logging is useful for visibility, but may need rate limiting if frequent input changes happen while the broker is unavailable
 
 **Deliverable**: `nest` publishes Home Assistant-compatible MQTT discovery and state messages for migrated entities, while keeping local hardware control independent from Home Assistant.
