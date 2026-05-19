@@ -172,6 +172,11 @@ func semanticEventFromMQTTEvent(index *registry.Index, mqttTopics mqtt.Topics, m
 }
 
 func semanticLightEventFromMQTTMessage(index *registry.Index, mqttTopics mqtt.Topics, message mqtt.ReceivedMessage) (event.Event, bool) {
+	if message.Retained {
+		slog.Warn("ignoring retained mqtt light command", "topic", message.Topic)
+		return event.Event{}, false
+	}
+
 	lightID, ok := mqtt.ParseLightCommandTopic(mqttTopics, message.Topic)
 	if !ok {
 		slog.Warn("unhandled mqtt command topic", "topic", message.Topic)

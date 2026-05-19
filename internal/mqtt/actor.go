@@ -12,6 +12,7 @@ type Command struct {
 type ReceivedMessage struct {
 	Topic   string
 	Payload []byte
+	Retained bool
 }
 
 type EventKind string

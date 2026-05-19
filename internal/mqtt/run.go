@@ -107,8 +107,9 @@ func subscribeLightCommands(ctx context.Context, client client, topics Topics, e
 	topic := LightCommandSubscriptionTopic(topics)
 	token := client.Subscribe(topic, 0, func(_ paho.Client, message paho.Message) {
 		publishEvent(ctx, events, ReceivedEvent(ReceivedMessage{
-			Topic:   message.Topic(),
-			Payload: bytes.Clone(message.Payload()),
+			Topic:    message.Topic(),
+			Payload:  bytes.Clone(message.Payload()),
+			Retained: message.Retained(),
 		}))
 	})
 	if err := waitToken(ctx, token); err != nil {

@@ -17,6 +17,7 @@ var (
 	errMissingConfigPath = errors.New("missing config path")
 	digitalInputPattern  = regexp.MustCompile(`^di_\d+_\d+$`)
 	relayPattern         = regexp.MustCompile(`^ro_\d+_\d+$`)
+	idPattern            = regexp.MustCompile(`^[a-z0-9_]+$`)
 )
 
 type Root struct {
@@ -374,7 +375,8 @@ func validateID(field string, value string) error {
 	if err := validateRequiredField(field, value); err != nil {
 		return err
 	}
-	return nil
+
+	return validatePattern(field, value, idPattern, "must contain only lowercase letters, numbers, and underscores")
 }
 
 func validateDevice(field string, value string, pattern *regexp.Regexp, kind string) error {

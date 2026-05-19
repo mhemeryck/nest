@@ -131,3 +131,14 @@ func TestSemanticEventFromMQTTEventRejectsInvalidLightCommandPayload(t *testing.
 	assert.False(t, handled)
 	assert.Equal(t, event.Event{}, semanticEvent)
 }
+
+func TestSemanticEventFromMQTTEventRejectsRetainedLightCommand(t *testing.T) {
+	semanticEvent, handled := semanticEventFromMQTTEvent(
+		registry.Build(&entity.Root{Lights: []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light"}}}),
+		mqtt.NewTopics("nest", "controller_1"),
+		mqtt.ReceivedEvent(mqtt.ReceivedMessage{Topic: "nest/units/controller_1/lights/office_light/command", Payload: []byte("ON"), Retained: true}),
+	)
+
+	assert.False(t, handled)
+	assert.Equal(t, event.Event{}, semanticEvent)
+}

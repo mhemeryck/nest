@@ -55,7 +55,7 @@ func TestSubscribeLightCommands(t *testing.T) {
 
 	message := &fakeMessage{topic: "nest/units/controller_1/lights/office_light/command", payload: []byte("ON")}
 	client.handler(nil, message)
-	assert.Equal(t, ReceivedEvent(ReceivedMessage{Topic: message.topic, Payload: message.payload}), <-events)
+	assert.Equal(t, ReceivedEvent(ReceivedMessage{Topic: message.topic, Payload: message.payload, Retained: false}), <-events)
 }
 
 func TestSubscribeLightCommandsReturnsSubscribeError(t *testing.T) {
@@ -95,11 +95,12 @@ func (f fakeToken) Error() error { return f.err }
 type fakeMessage struct {
 	topic   string
 	payload []byte
+	retained bool
 }
 
 func (f *fakeMessage) Duplicate() bool   { return false }
 func (f *fakeMessage) Qos() byte         { return 0 }
-func (f *fakeMessage) Retained() bool    { return false }
+func (f *fakeMessage) Retained() bool    { return f.retained }
 func (f *fakeMessage) Topic() string     { return f.topic }
 func (f *fakeMessage) MessageID() uint16 { return 0 }
 func (f *fakeMessage) Payload() []byte   { return f.payload }

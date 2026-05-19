@@ -131,7 +131,7 @@ nest/units/local/lights/office_light/state {"state":"OFF"}
 - [x] Define stable Home Assistant unique IDs derived from `unit_id` and entity IDs
 - [x] Do not preserve current Home Assistant entity IDs during migration when it adds unnecessary complexity
 - [x] Publish retained Home Assistant discovery components for configured lights
-- [x] Advertise required Home Assistant light command topics before command handling is enabled, while documenting them as no-op placeholders
+- [x] Advertise required Home Assistant light command topics and handle `ON` and `OFF` light commands for migrated local lights
 - [x] Publish only meaningful Home Assistant entities by default, not raw hardware diagnostics
 - [x] Lock canonical JSON state payloads for each entity class
 - [x] Decide retained vs non-retained behavior per Home Assistant state topic class
@@ -160,9 +160,10 @@ Notes from the current Home Assistant migration context:
 - Reconnect handling should republish retained discovery and availability so subscribers recover after broker interruptions
 - Reconnect republishing was verified locally against the disposable Home Assistant and Mosquitto stack
 - Home Assistant discovery payloads, availability, and entity state payloads are retained so Home Assistant can recover current state after reconnects or restarts
+- Retained MQTT command messages must be ignored so stale broker state cannot replay hardware actions after reconnect
 - Dropped MQTT publish logging is useful for visibility, but may need rate limiting if frequent input changes happen while the broker is unavailable
 
-**Deliverable**: `nest` publishes Home Assistant-compatible MQTT discovery and state messages for migrated entities, while keeping local hardware control independent from Home Assistant.
+**Deliverable**: `nest` publishes Home Assistant-compatible MQTT discovery and state messages for migrated entities, and accepts minimal Home Assistant light commands without making local hardware control depend on Home Assistant.
 
 ## Phase 7: Input Semantics
 

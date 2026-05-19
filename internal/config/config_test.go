@@ -193,6 +193,24 @@ func TestValidate(t *testing.T) {
 			message: "push_buttons[0].id: must not have leading or trailing whitespace",
 		},
 		{
+			name: "rejects MQTT unit ids with unsupported characters",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				MQTT:   validMQTTConfigWithUnitID("controller-1"),
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+			},
+			message: `mqtt.unit_id: must contain only lowercase letters, numbers, and underscores "controller-1"`,
+		},
+		{
+			name: "rejects light ids with unsupported characters",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+				Lights: []LightConfig{{ID: "office-light", Name: "Office light", Relay: "relay"}},
+			},
+			message: `lights[0].id: must contain only lowercase letters, numbers, and underscores "office-light"`,
+		},
+		{
 			name: "rejects whitespace padded button input references",
 			file: Root{
 				Sysfs:         SysfsConfig{Root: "/tmp"},
@@ -348,6 +366,12 @@ func validMQTTConfigWithHost(host string) MQTTConfig {
 func validMQTTConfigWithUsername(username string) MQTTConfig {
 	mqtt := validMQTTConfig()
 	mqtt.Username = username
+	return mqtt
+}
+
+func validMQTTConfigWithUnitID(unitID string) MQTTConfig {
+	mqtt := validMQTTConfig()
+	mqtt.UnitID = unitID
 	return mqtt
 }
 
