@@ -12,7 +12,7 @@ import (
 )
 
 type client interface {
-	Publish(topic string, qos byte, retained bool, payload interface{}) paho.Token
+	Publish(topic string, qos byte, retained bool, payload any) paho.Token
 	Subscribe(topic string, qos byte, callback paho.MessageHandler) paho.Token
 }
 
