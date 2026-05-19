@@ -55,12 +55,24 @@ func TestSubscribeLightCommands(t *testing.T) {
 
 	message := &fakeMessage{topic: "nest/units/controller_1/lights/office_light/command", payload: []byte("ON")}
 	client.handler(nil, message)
-	assert.Equal(t, ReceivedEvent(ReceivedMessage{Topic: message.topic, Payload: message.payload, Retained: false}), <-events)
+	assert.Equal(t, ReceivedEvent(ReceivedMessage{Topic: message.topic, Payload: message.payload}), <-events)
 }
 
 func TestSubscribeLightCommandsReturnsSubscribeError(t *testing.T) {
 	err := subscribeLightCommands(t.Context(), &fakeClient{token: fakeToken{err: errors.New("subscribe failed")}}, NewTopics("nest", "controller_1"), make(chan Event, 1))
 	require.EqualError(t, err, "subscribe failed")
+}
+
+func TestSubscribeLightCommandsIgnoresRetainedMessages(t *testing.T) {
+	events := make(chan Event, 1)
+	client := &fakeClient{token: fakeToken{}}
+
+	err := subscribeLightCommands(t.Context(), client, NewTopics("nest", "controller_1"), events)
+	require.NoError(t, err)
+
+	client.handler(nil, &fakeMessage{topic: "nest/units/controller_1/lights/office_light/command", payload: []byte("ON"), retained: true})
+
+	assert.Empty(t, events)
 }
 
 type fakeClient struct {

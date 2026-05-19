@@ -106,10 +106,14 @@ func subscribeLightCommands(ctx context.Context, client client, topics Topics, e
 
 	topic := LightCommandSubscriptionTopic(topics)
 	token := client.Subscribe(topic, 0, func(_ paho.Client, message paho.Message) {
+		if message.Retained() {
+			slog.Warn("ignoring retained mqtt light command", "topic", message.Topic())
+			return
+		}
+
 		publishEvent(ctx, events, ReceivedEvent(ReceivedMessage{
-			Topic:    message.Topic(),
-			Payload:  bytes.Clone(message.Payload()),
-			Retained: message.Retained(),
+			Topic:   message.Topic(),
+			Payload: bytes.Clone(message.Payload()),
 		}))
 	})
 	if err := waitToken(ctx, token); err != nil {
