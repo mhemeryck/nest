@@ -43,12 +43,12 @@ Use this to validate device grouping, entity naming, unique ID behavior, availab
 Subscribe to the test command topic before toggling the light in Home Assistant:
 
 ```sh
-mosquitto_sub -h localhost -p 1883 -t 'nest/units/local/lights/office_light/set'
+mosquitto_sub -h localhost -p 1883 -t 'nest/units/local/lights/office_light/command'
 ```
 
 Home Assistant should publish `ON` or `OFF` to the command topic when the light is toggled.
-`nest` should not subscribe to or act on these command topics until MQTT commands are explicitly enabled later.
-Home Assistant requires MQTT light discovery payloads to include a `command_topic`, even when `nest` is currently using the topic as a no-op placeholder.
+Do not publish retained messages to command topics.
+`nest` ignores retained command messages so stale broker state cannot replay hardware actions after reconnect.
 
 ## Cleanup
 
