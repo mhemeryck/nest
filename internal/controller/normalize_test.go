@@ -5,6 +5,7 @@ import (
 
 	"github.com/mhemeryck/nest/internal/controller/event"
 	"github.com/mhemeryck/nest/internal/entity"
+	"github.com/mhemeryck/nest/internal/mqtt"
 	"github.com/mhemeryck/nest/internal/registry"
 	"github.com/mhemeryck/nest/internal/sysfs"
 	"github.com/stretchr/testify/assert"
@@ -101,4 +102,32 @@ func TestSemanticEventsFromRelayStateChangeIncludesLightState(t *testing.T) {
 	assert.Equal(t, entity.LightID("office_light"), events[1].LightState.LightID)
 	assert.Equal(t, entity.RelayID("office_light_relay"), events[1].LightState.RelayID)
 	assert.Equal(t, 1, events[1].LightState.Value)
+}
+
+func TestSemanticEventFromMQTTEventMapsLightCommandToLightEvent(t *testing.T) {
+	root := &entity.Root{
+		Lights: []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
+	}
+
+	semanticEvent, handled := semanticEventFromMQTTEvent(
+		registry.Build(root),
+		mqtt.NewTopics("nest", "controller_1"),
+		mqtt.ReceivedEvent(mqtt.ReceivedMessage{Topic: "nest/units/controller_1/lights/office_light/command", Payload: []byte(" on\n")}),
+	)
+
+	require.True(t, handled)
+	assert.Equal(t, event.LightKind, semanticEvent.Kind)
+	assert.Equal(t, entity.LightID("office_light"), semanticEvent.Light.LightID)
+	assert.Equal(t, entity.LightActionOn, semanticEvent.Light.Action)
+}
+
+func TestSemanticEventFromMQTTEventRejectsInvalidLightCommandPayload(t *testing.T) {
+	semanticEvent, handled := semanticEventFromMQTTEvent(
+		registry.Build(&entity.Root{Lights: []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light"}}}),
+		mqtt.NewTopics("nest", "controller_1"),
+		mqtt.ReceivedEvent(mqtt.ReceivedMessage{Topic: "nest/units/controller_1/lights/office_light/command", Payload: []byte("TOGGLE")}),
+	)
+
+	assert.False(t, handled)
+	assert.Equal(t, event.Event{}, semanticEvent)
 }

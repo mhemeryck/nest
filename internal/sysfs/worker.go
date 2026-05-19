@@ -63,32 +63,60 @@ func handleCommand(devicesByID map[string]*Device, cmd Command, ctx context.Cont
 
 	switch cmd.Kind {
 	case ToggleCommand:
-		oldValue, err := readValue(device.Path)
+		oldValue, err := readCurrentValue(device)
 		if err != nil {
-			slog.Error("sysfs read failed", "device_id", device.Identifier, "path", device.Path, "error", err)
 			return
 		}
-		device.Value = oldValue
 		newValue := On
 		if oldValue == On {
 			newValue = Off
 		}
-
-		if err := writeValue(device.Path, newValue); err != nil {
-			slog.Error("sysfs write failed", "device_id", device.Identifier, "path", device.Path, "error", err)
+		writeCommandValue(device, oldValue, newValue, ctx, states)
+	case OnCommand:
+		oldValue, err := readCurrentValue(device)
+		if err != nil {
 			return
 		}
-
-		device.Value = newValue
-		publishState(ctx, states, StateChange{
-			Device:   *device,
-			OldValue: oldValue,
-			NewValue: newValue,
-			IsRising: oldValue == Off && newValue == On,
-		})
+		writeCommandValue(device, oldValue, On, ctx, states)
+	case OffCommand:
+		oldValue, err := readCurrentValue(device)
+		if err != nil {
+			return
+		}
+		writeCommandValue(device, oldValue, Off, ctx, states)
 	default:
 		return
 	}
+}
+
+func readCurrentValue(device *Device) (Value, error) {
+	oldValue, err := readValue(device.Path)
+	if err != nil {
+		slog.Error("sysfs read failed", "device_id", device.Identifier, "path", device.Path, "error", err)
+		return Off, err
+	}
+
+	device.Value = oldValue
+	return oldValue, nil
+}
+
+func writeCommandValue(device *Device, oldValue Value, newValue Value, ctx context.Context, states chan<- StateChange) {
+	if err := writeValue(device.Path, newValue); err != nil {
+		slog.Error("sysfs write failed", "device_id", device.Identifier, "path", device.Path, "error", err)
+		return
+	}
+
+	device.Value = newValue
+	if oldValue == newValue {
+		return
+	}
+
+	publishState(ctx, states, StateChange{
+		Device:   *device,
+		OldValue: oldValue,
+		NewValue: newValue,
+		IsRising: oldValue == Off && newValue == On,
+	})
 }
 
 func publishState(ctx context.Context, states chan<- StateChange, state StateChange) bool {

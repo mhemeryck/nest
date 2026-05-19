@@ -1,9 +1,11 @@
 package controller
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/mhemeryck/nest/internal/controller/event"
 	"github.com/mhemeryck/nest/internal/entity"
@@ -26,7 +28,7 @@ func Run(
 	defer close(done)
 	semanticEvents := make(chan event.Event, 32)
 	normalizerDone := make(chan struct{})
-	go normalizeEvents(ctx, index, stateChanges, mqttEvents, semanticEvents, normalizerDone)
+	go normalizeEvents(ctx, index, mqttTopics, stateChanges, mqttEvents, semanticEvents, normalizerDone)
 
 	dispatchEvents(ctx, root, index, sysfsCommands, mqttCommands, mqttTopics, semanticEvents)
 	<-normalizerDone
@@ -35,6 +37,7 @@ func Run(
 func normalizeEvents(
 	ctx context.Context,
 	index *registry.Index,
+	mqttTopics mqtt.Topics,
 	stateChanges <-chan sysfs.StateChange,
 	mqttEvents <-chan mqtt.Event,
 	semanticEvents chan<- event.Event,
@@ -51,7 +54,7 @@ func normalizeEvents(
 		normalizerDone <- struct{}{}
 	}()
 	go func() {
-		normalizeMQTTEvents(normalizerCtx, mqttEvents, semanticEvents)
+		normalizeMQTTEvents(normalizerCtx, index, mqttTopics, mqttEvents, semanticEvents)
 		normalizerDone <- struct{}{}
 	}()
 
@@ -88,7 +91,7 @@ func normalizeStateChanges(
 	}
 }
 
-func normalizeMQTTEvents(ctx context.Context, mqttEvents <-chan mqtt.Event, semanticEvents chan<- event.Event) {
+func normalizeMQTTEvents(ctx context.Context, index *registry.Index, mqttTopics mqtt.Topics, mqttEvents <-chan mqtt.Event, semanticEvents chan<- event.Event) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -98,7 +101,10 @@ func normalizeMQTTEvents(ctx context.Context, mqttEvents <-chan mqtt.Event, sema
 				return
 			}
 
-			publishSemanticEvent(ctx, semanticEvents, semanticEventFromMQTTEvent(mqttEvent))
+			semanticEvent, handled := semanticEventFromMQTTEvent(index, mqttTopics, mqttEvent)
+			if handled {
+				publishSemanticEvent(ctx, semanticEvents, semanticEvent)
+			}
 		}
 	}
 }
@@ -143,7 +149,7 @@ func publishMQTTStartup(ctx context.Context, root *entity.Root, commands chan<- 
 	return nil
 }
 
-func semanticEventFromMQTTEvent(mqttEvent mqtt.Event) event.Event {
+func semanticEventFromMQTTEvent(index *registry.Index, mqttTopics mqtt.Topics, mqttEvent mqtt.Event) (event.Event, bool) {
 	semanticEvent := event.Event{MQTT: &event.MQTT{PublishTopic: mqttEvent.Publish.Topic, Error: mqttEvent.Error}}
 	switch mqttEvent.Kind {
 	case mqtt.ConnectedEventKind:
@@ -156,9 +162,53 @@ func semanticEventFromMQTTEvent(mqttEvent mqtt.Event) event.Event {
 		semanticEvent.Kind = event.MQTTPublishedKind
 	case mqtt.PublishFailedKind:
 		semanticEvent.Kind = event.MQTTPublishFailedKind
+	case mqtt.ReceivedEventKind:
+		return semanticLightEventFromMQTTMessage(index, mqttTopics, mqttEvent.Message)
+	default:
+		return event.Event{}, false
 	}
 
-	return semanticEvent
+	return semanticEvent, true
+}
+
+func semanticLightEventFromMQTTMessage(index *registry.Index, mqttTopics mqtt.Topics, message mqtt.ReceivedMessage) (event.Event, bool) {
+	lightID, ok := mqtt.ParseLightCommandTopic(mqttTopics, message.Topic)
+	if !ok {
+		slog.Warn("unhandled mqtt command topic", "topic", message.Topic)
+		return event.Event{}, false
+	}
+
+	action, ok := lightActionFromMQTTPayload(message.Payload)
+	if !ok {
+		slog.Warn("invalid mqtt light command payload", "topic", message.Topic, "payload", string(bytes.TrimSpace(message.Payload)))
+		return event.Event{}, false
+	}
+
+	light, ok := registry.LightByID(index, lightID)
+	if !ok {
+		slog.Error("mqtt command references unknown light", "topic", message.Topic, "light_id", lightID)
+		return event.Event{}, false
+	}
+
+	return event.Event{
+		Kind: event.LightKind,
+		Light: &event.Light{
+			LightID: light.ID,
+			Name:    light.Name,
+			Action:  action,
+		},
+	}, true
+}
+
+func lightActionFromMQTTPayload(payload []byte) (entity.LightAction, bool) {
+	switch strings.ToUpper(string(bytes.TrimSpace(payload))) {
+	case "ON":
+		return entity.LightActionOn, true
+	case "OFF":
+		return entity.LightActionOff, true
+	default:
+		return "", false
+	}
 }
 
 func normalizeStateChange(ctx context.Context, index *registry.Index, semanticEvents chan<- event.Event, stateChange sysfs.StateChange) {

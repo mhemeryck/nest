@@ -89,12 +89,16 @@ func logPushButtonEvent(eventKind event.Kind, pushButton event.PushButton) {
 }
 
 func dispatchLightEvent(ctx context.Context, index *registry.Index, sysfsCommands chan<- sysfs.Command, lightEvent event.Light) {
-	if lightEvent.Action != entity.LightActionToggle {
+	switch lightEvent.Action {
+	case entity.LightActionToggle:
+		handleLightToggle(ctx, index, sysfsCommands, lightEvent)
+	case entity.LightActionOn:
+		handleLightSet(ctx, index, sysfsCommands, lightEvent, sysfs.OnCommand)
+	case entity.LightActionOff:
+		handleLightSet(ctx, index, sysfsCommands, lightEvent, sysfs.OffCommand)
+	default:
 		slog.Error("unsupported light action", "action", lightEvent.Action)
-		return
 	}
-
-	handleLightToggle(ctx, index, sysfsCommands, lightEvent)
 }
 
 func logLightEvent(lightEvent event.Light) {

@@ -1,10 +1,14 @@
 package mqtt
 
 import (
+	"errors"
 	"testing"
+	"time"
 
+	paho "github.com/eclipse/paho.mqtt.golang"
 	"github.com/mhemeryck/nest/internal/entity"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBrokerURL(t *testing.T) {
@@ -23,7 +27,7 @@ func TestClientOptions(t *testing.T) {
 		Password:    "secret",
 		TopicPrefix: "nest",
 		UnitID:      "controller_1",
-	}, events)
+	}, NewTopics("nest", "controller_1"), events)
 
 	assert.Equal(t, "nest-controller-1", options.ClientID)
 	assert.Equal(t, "nest", options.Username)
@@ -40,3 +44,63 @@ func TestClientOptions(t *testing.T) {
 	options.OnConnect(nil)
 	assert.Equal(t, ConnectedEvent(), <-events)
 }
+
+func TestSubscribeLightCommands(t *testing.T) {
+	events := make(chan Event, 1)
+	client := &fakeClient{token: fakeToken{}}
+
+	err := subscribeLightCommands(t.Context(), client, NewTopics("nest", "controller_1"), events)
+	require.NoError(t, err)
+	assert.Equal(t, "nest/units/controller_1/lights/+/command", client.subscribedTopic)
+
+	message := &fakeMessage{topic: "nest/units/controller_1/lights/office_light/command", payload: []byte("ON")}
+	client.handler(nil, message)
+	assert.Equal(t, ReceivedEvent(ReceivedMessage{Topic: message.topic, Payload: message.payload}), <-events)
+}
+
+func TestSubscribeLightCommandsReturnsSubscribeError(t *testing.T) {
+	err := subscribeLightCommands(t.Context(), &fakeClient{token: fakeToken{err: errors.New("subscribe failed")}}, NewTopics("nest", "controller_1"), make(chan Event, 1))
+	require.EqualError(t, err, "subscribe failed")
+}
+
+type fakeClient struct {
+	token           fakeToken
+	subscribedTopic string
+	handler         paho.MessageHandler
+}
+
+func (f *fakeClient) Publish(string, byte, bool, interface{}) paho.Token {
+	return f.token
+}
+
+func (f *fakeClient) Subscribe(topic string, _ byte, callback paho.MessageHandler) paho.Token {
+	f.subscribedTopic = topic
+	f.handler = callback
+	return f.token
+}
+
+type fakeToken struct {
+	err error
+}
+
+func (f fakeToken) Wait() bool { return true }
+func (f fakeToken) WaitTimeout(_ time.Duration) bool { return true }
+func (f fakeToken) Done() <-chan struct{} {
+	ch := make(chan struct{})
+	close(ch)
+	return ch
+}
+func (f fakeToken) Error() error { return f.err }
+
+type fakeMessage struct {
+	topic   string
+	payload []byte
+}
+
+func (f *fakeMessage) Duplicate() bool   { return false }
+func (f *fakeMessage) Qos() byte         { return 0 }
+func (f *fakeMessage) Retained() bool    { return false }
+func (f *fakeMessage) Topic() string     { return f.topic }
+func (f *fakeMessage) MessageID() uint16 { return 0 }
+func (f *fakeMessage) Payload() []byte   { return f.payload }
+func (f *fakeMessage) Ack()              {}

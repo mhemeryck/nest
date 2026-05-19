@@ -9,6 +9,11 @@ type Command struct {
 	Publish PublishMessage
 }
 
+type ReceivedMessage struct {
+	Topic   string
+	Payload []byte
+}
+
 type EventKind string
 
 const (
@@ -17,11 +22,13 @@ const (
 	DisconnectedEventKind EventKind = "disconnected"
 	PublishedEventKind    EventKind = "published"
 	PublishFailedKind     EventKind = "publish_failed"
+	ReceivedEventKind     EventKind = "received"
 )
 
 type Event struct {
 	Kind    EventKind
 	Publish PublishMessage
+	Message ReceivedMessage
 	Error   string
 }
 
@@ -66,4 +73,11 @@ func PublishFailedEvent(message PublishMessage, err error) Event {
 	}
 
 	return event
+}
+
+func ReceivedEvent(message ReceivedMessage) Event {
+	return Event{
+		Kind:    ReceivedEventKind,
+		Message: message,
+	}
 }

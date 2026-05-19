@@ -15,7 +15,11 @@ type (
 	LightAction    string
 )
 
-const LightActionToggle LightAction = "toggle"
+const (
+	LightActionToggle LightAction = "toggle"
+	LightActionOn     LightAction = "on"
+	LightActionOff    LightAction = "off"
+)
 
 type Root struct {
 	SysfsRoot          string

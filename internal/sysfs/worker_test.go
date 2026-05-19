@@ -222,6 +222,38 @@ func TestHandleCommandLogsWriteFailure(t *testing.T) {
 	}
 }
 
+func TestHandleCommandTurnsRelayOn(t *testing.T) {
+	ctx := t.Context()
+	states := make(chan StateChange, 1)
+	device := &Device{Identifier: "ro_1_01", Path: filepath.Join(t.TempDir(), "ro_value"), Value: Off}
+	require.NoError(t, writeValue(device.Path, Off))
+
+	handleCommand(map[string]*Device{"ro_1_01": device}, Command{Kind: OnCommand, DeviceID: "ro_1_01"}, ctx, states)
+
+	event := <-states
+	assert.Equal(t, Off, event.OldValue)
+	assert.Equal(t, On, event.NewValue)
+	data, err := os.ReadFile(device.Path)
+	require.NoError(t, err)
+	assert.Equal(t, "1\n", string(data))
+}
+
+func TestHandleCommandTurnsRelayOff(t *testing.T) {
+	ctx := t.Context()
+	states := make(chan StateChange, 1)
+	device := &Device{Identifier: "ro_1_01", Path: filepath.Join(t.TempDir(), "ro_value"), Value: On}
+	require.NoError(t, writeValue(device.Path, On))
+
+	handleCommand(map[string]*Device{"ro_1_01": device}, Command{Kind: OffCommand, DeviceID: "ro_1_01"}, ctx, states)
+
+	event := <-states
+	assert.Equal(t, On, event.OldValue)
+	assert.Equal(t, Off, event.NewValue)
+	data, err := os.ReadFile(device.Path)
+	require.NoError(t, err)
+	assert.Equal(t, "0\n", string(data))
+}
+
 func TestPollWorkerSkipsBufferedCommandAfterCancellation(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "ro_value")

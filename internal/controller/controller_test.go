@@ -166,7 +166,8 @@ func TestNormalizeMQTTEventPublishesStartupCommandsOnConnect(t *testing.T) {
 		}},
 	}
 	commands := make(chan mqtt.Command, 2)
-	semanticEvent := semanticEventFromMQTTEvent(mqtt.ConnectedEvent())
+	semanticEvent, handled := semanticEventFromMQTTEvent(registry.Build(root), mqtt.Topics{}, mqtt.ConnectedEvent())
+	require.True(t, handled)
 
 	dispatchEvent(t.Context(), root, registry.Build(root), nil, commands, mqtt.Topics{}, semanticEvent)
 
@@ -177,11 +178,33 @@ func TestNormalizeMQTTEventPublishesStartupCommandsOnConnect(t *testing.T) {
 
 func TestNormalizeMQTTEventIgnoresNonConnectEvents(t *testing.T) {
 	commands := make(chan mqtt.Command, 1)
-	semanticEvent := semanticEventFromMQTTEvent(mqtt.PublishedEvent(mqtt.PublishMessage{Topic: "nest/topic"}))
+	semanticEvent, handled := semanticEventFromMQTTEvent(registry.Build(&entity.Root{}), mqtt.Topics{}, mqtt.PublishedEvent(mqtt.PublishMessage{Topic: "nest/topic"}))
+	require.True(t, handled)
 
 	dispatchEvent(t.Context(), &entity.Root{}, registry.Build(&entity.Root{}), nil, commands, mqtt.Topics{}, semanticEvent)
 
 	assert.Empty(t, commands)
+}
+
+func TestDispatchMQTTLightCommandTurnsLightOn(t *testing.T) {
+	index := registry.Build(&entity.Root{
+		Lights: []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
+		Relays: []entity.Relay{{ID: entity.RelayID("office_light_relay"), Name: "Office light relay", SysfsDevice: entity.SysfsDeviceID("ro_3_14")}},
+	})
+	commands := make(chan sysfs.Command, 1)
+
+	dispatchEvent(t.Context(), &entity.Root{}, index, commands, nil, mqtt.Topics{}, event.Event{
+		Kind: event.LightKind,
+		Light: &event.Light{
+			LightID: entity.LightID("office_light"),
+			Name:    "Office light",
+			Action:  entity.LightActionOn,
+		},
+	})
+
+	command := <-commands
+	assert.Equal(t, sysfs.OnCommand, command.Kind)
+	assert.Equal(t, "ro_3_14", command.DeviceID)
 }
 
 func TestHandleStateChangeLogsRawStateChangeForUnknownDevice(t *testing.T) {

@@ -42,6 +42,24 @@ func LightCommandTopic(topics Topics, lightID entity.LightID) string {
 	return joinTopic(topics, "units", topics.UnitID, "lights", string(lightID), "command")
 }
 
+func LightCommandSubscriptionTopic(topics Topics) string {
+	return joinTopic(topics, "units", topics.UnitID, "lights", "+", "command")
+}
+
+func ParseLightCommandTopic(topics Topics, topic string) (entity.LightID, bool) {
+	prefix := joinTopic(topics, "units", topics.UnitID, "lights") + "/"
+	if !strings.HasPrefix(topic, prefix) || !strings.HasSuffix(topic, "/command") {
+		return "", false
+	}
+
+	lightID := strings.TrimSuffix(strings.TrimPrefix(topic, prefix), "/command")
+	if lightID == "" || strings.Contains(lightID, "/") {
+		return "", false
+	}
+
+	return entity.LightID(lightID), true
+}
+
 func HomeAssistantDeviceDiscoveryTopic(topics Topics) string {
 	return strings.Join([]string{"homeassistant", "device", homeAssistantUniqueID(topics, "unit"), "config"}, "/")
 }

@@ -26,4 +26,5 @@ func TestActorEvents(t *testing.T) {
 	assert.Equal(t, Event{Kind: PublishedEventKind, Publish: message}, PublishedEvent(message))
 	assert.Equal(t, Event{Kind: PublishFailedKind, Publish: message, Error: "publish failed"}, PublishFailedEvent(message, errors.New("publish failed")))
 	assert.Equal(t, Event{Kind: PublishFailedKind, Publish: message}, PublishFailedEvent(message, nil))
+	assert.Equal(t, Event{Kind: ReceivedEventKind, Message: ReceivedMessage{Topic: "nest/topic", Payload: []byte("ON")}}, ReceivedEvent(ReceivedMessage{Topic: "nest/topic", Payload: []byte("ON")}))
 }
