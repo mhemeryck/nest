@@ -167,6 +167,8 @@ Notes from the current Home Assistant migration context:
 
 ## Phase 7: Distributed Light Control Model
 
+See `docs/distributed-light-model.md` for the current naming and routing direction.
+
 - [ ] Define input-unit to output-unit light mappings
 - [ ] Represent light bindings that can target local or remote relays
 - [ ] Keep command source, transport, and actuator execution separate
