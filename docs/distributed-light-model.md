@@ -150,6 +150,137 @@ sysfs observation
 The controller should not need separate event models for local and remote lights.
 The difference should emerge from resolution and routing.
 
+## Modbus Transport Direction
+
+The current distributed light model has to fit the existing hardware topology.
+Changing the hardware layout is out of scope for the initial migration.
+
+In particular:
+
+- we should not require a new dedicated Modbus master device
+- we should not require a central network-dependent command router
+- cross-unit light migration should still work on the existing RS-485 capable units
+
+### Core Observation
+
+Modbus RTU is not a symmetric peer-to-peer transport in the same way MQTT is.
+
+At the protocol level:
+
+- a master initiates requests
+- a slave responds to requests
+- a slave does not spontaneously publish events on the bus
+
+That means Modbus fits the actor model, but not as a symmetric actor role.
+
+### Actor Model Fit
+
+The Modbus integration should still use the same runtime boundary pattern as other actors:
+
+- one command channel into the actor
+- one event channel back out of the actor
+
+Internally, the Modbus actor can run in one of these roles:
+
+- master only
+- slave only
+- both later if a concrete use case requires it
+
+The controller-facing contract should stay the same regardless of the internal role.
+
+### Planned Role Split
+
+For the current migration path, units may take different Modbus roles depending on what they need to do.
+
+#### Master Role
+
+The master side is responsible for:
+
+- consuming resolved controller commands that target remote actuators
+- issuing Modbus RTU requests to remote units
+- reporting write failures, connection issues, and similar transport outcomes back to the controller
+
+#### Slave Role
+
+The slave side is responsible for:
+
+- exposing local relay or actuator control points over Modbus RTU
+- receiving writes from a master
+- turning those writes into local actuator effects or controller-visible observations
+
+### Semantic Model Versus Transport Role
+
+Units remain equal at the semantic level.
+Any unit may own local buttons, lights, relays, or covers.
+
+Units are not necessarily equal at the Modbus transport-role level.
+One unit may need to act as a Modbus master for a given deployment, while another acts as a slave.
+
+This distinction is important:
+
+- semantic ownership belongs in the domain model
+- master or slave behavior belongs in actor runtime configuration
+
+### Recommended Scope For Modbus
+
+For the initial migration, Modbus should stay relatively low-level.
+
+Recommended direction:
+
+- use Modbus primarily as a transport for remote actuator control
+- expose coil-level or actuator-level control points on the slave side
+- let the controller keep semantic command and routing decisions above Modbus
+
+This matches the current Python implementation more closely than trying to turn Modbus into a full semantic controller-to-controller bus.
+
+### Relationship To MQTT
+
+MQTT and Modbus should not be treated as interchangeable.
+
+MQTT is well suited for:
+
+- discovery
+- Home Assistant integration
+- semantic state publication
+- optional command transport when network dependence is acceptable
+
+Modbus is better suited for:
+
+- direct bus-based remote actuator control
+- deployments where the lighting path should not depend on the IP network
+
+For the current project direction, remote light migration should not depend on MQTT or the network.
+
+### Topology Direction
+
+We should design for the current distributed hardware rather than a hypothetical future central master box.
+
+That means:
+
+- some units may run a Modbus master role when they need to initiate remote control
+- some units may run a Modbus slave role when they expose local relay control to other units
+- a unit could support both later, but that is not required by the current migration plan
+
+We should avoid assuming that only one unit in the whole system can ever be the master unless a real deployment need forces that constraint.
+
+### Practical Interpretation Of The Existing Python
+
+The current Python script already reflects this asymmetric transport model.
+
+In client mode it:
+
+- listens for local events
+- maps those events to Modbus coil writes
+- sends requests as the Modbus initiator
+
+In server mode it:
+
+- exposes local Modbus control points
+- receives coil writes
+- maps them to local relay actions
+
+`nest` should preserve that transport shape while moving the higher-level logic into the controller and registry layers.
+
 ## Phase 7 Scope
 
 The immediate phase-7 objective is not to execute distributed commands yet.
@@ -170,3 +301,7 @@ Phase 8 can then add Modbus-specific addressing and execution as an actor concer
 - Should actuator references remain direct entity IDs or become a more explicit target type?
 - How much routing should be inferred from the unit prefix versus declared explicitly in config?
 - When cross-unit command routing exists, how should MQTT and Modbus be prioritized or selected?
+- What exact Modbus runtime configuration is needed to declare master versus slave mode?
+- Should the slave side emit controller-visible relay observations after incoming writes, or execute locally without publishing a transport-derived event?
+- How should resolved remote actuator targets map to slave address and coil address in phase 8?
+- When a unit supports both local and remote light control, what is the smallest clean runtime wiring for that mixed role?
