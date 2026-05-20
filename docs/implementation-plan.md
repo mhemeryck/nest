@@ -165,21 +165,7 @@ Notes from the current Home Assistant migration context:
 
 **Deliverable**: `nest` publishes Home Assistant-compatible MQTT discovery and state messages for migrated entities, and accepts minimal Home Assistant light commands without making local hardware control depend on Home Assistant.
 
-## Phase 7: Input Semantics
-
-- [ ] Debounce logic for inputs
-- [ ] Edge handling beyond rising-edge only
-- [ ] Press and release button event semantics
-- [ ] Multi-input triggers for the same light or relay target
-- [ ] Deterministic behavior for repeated physical button events
-
-Current status:
-Rising-edge to `pressed` push button events exists already.
-Debounce and richer button semantics still need to be added.
-
-**Deliverable**: Stable local input handling that can support real wall-switch behavior.
-
-## Phase 8: Distributed Light Control Model
+## Phase 7: Distributed Light Control Model
 
 - [ ] Define input-unit to output-unit light mappings
 - [ ] Represent light bindings that can target local or remote relays
@@ -190,7 +176,7 @@ Debounce and richer button semantics still need to be added.
 
 **Deliverable**: The existing multi-unit light topology can be represented in `nest` configuration and runtime indexes.
 
-## Phase 9: Modbus RTU Transport
+## Phase 8: Modbus RTU Transport
 
 - [ ] Serial port configuration
 - [ ] Modbus unit ID configuration
@@ -202,7 +188,7 @@ Debounce and richer button semantics still need to be added.
 
 **Deliverable**: `nest` can execute distributed light control across units via RS-485.
 
-## Phase 10: Light Control Migration
+## Phase 9: Light Control Migration
 
 - [ ] Start with one migrated light circuit
 - [ ] Enable relay writes only for selected migrated lights
@@ -211,6 +197,22 @@ Debounce and richer button semantics still need to be added.
 - [ ] Keep existing controller behavior available until each circuit is verified
 
 **Deliverable**: Existing distributed light control is migrated safely to `nest` before cover control begins.
+
+## Phase 10: Controller-Side Button Semantics
+
+- [ ] Verify whether hardware and sysfs behavior already provide sufficient debounce for deployed buttons
+- [x] Treat `pressed` and `released` as controller-owned semantic events derived from sysfs state changes
+- [ ] Add press duration tracking for button holds
+- [ ] Add semantic events such as `long_press` or `held_for` for actions like dimmer control
+- [ ] Define deterministic behavior for repeated physical button events and timer cancellation
+- [ ] Add multi-input trigger support when a concrete lighting or cover use case requires it
+
+Current status:
+Press and release button events already exist in controller normalization.
+Richer duration-based button semantics are still deferred.
+This phase is intentionally no longer on the critical path for Modbus-backed light migration.
+
+**Deliverable**: Controller-side button semantics support hold-aware actions such as dimming without pushing timing policy into sysfs.
 
 ## Phase 11: Local Cover Controller
 
@@ -250,7 +252,7 @@ Debounce and richer button semantics still need to be added.
 ## Phase 14: MQTT and Home Assistant Expansion
 
 - [ ] Refine topic structure as needed for Home Assistant integration
-- [ ] Add Home Assistant auto-discovery if it still fits the design
+- [ ] Expand Home Assistant discovery coverage when additional entity classes are ready
 - [ ] Finalize availability and state payloads
 - [ ] Document deployment and migration behavior
 
@@ -263,15 +265,15 @@ These should be decided before transport and entity complexity increase.
 - [ ] Testing strategy (mock sysfs vs real hardware)
 - [x] Config file shape and CLI interface design
 - [x] Local event model boundary between actor observations, semantic events, and actor commands
-- [ ] Local event semantics for buttons, toggles, and repeated presses
-- [ ] MQTT topic and autodiscovery schema
+- [ ] Controller-side button semantics for long press, hold, and repeated presses
+- [x] MQTT topic and autodiscovery schema centered on the Home Assistant discovery contract
 - [ ] Modbus topology and relay addressing model
 
 ## Open Questions
 
 - [ ] Cover support timing requirements
 - [ ] Output unit relay state publishing to MQTT
-- [ ] Final topic structure and HA-facing MQTT contract
+- [ ] Final topic structure refinements around the HA-facing MQTT contract
 - [ ] Whether command topics should be advertised for disabled entities
 - [ ] Whether Modbus output units execute semantic commands or expose coil-level relay control
 - [ ] Whether command topics or transport addresses should be parsed by the actor or resolved through registry mappings
