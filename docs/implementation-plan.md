@@ -169,14 +169,18 @@ Notes from the current Home Assistant migration context:
 
 See `docs/distributed-light-model.md` for the current naming and routing direction.
 
-- [ ] Define input-unit to output-unit light mappings
-- [ ] Represent light bindings that can target local or remote relays
-- [ ] Keep command source, transport, and actuator execution separate
-- [ ] Support deterministic light toggle behavior across units
-- [ ] Read or observe relay state before toggling when needed
-- [ ] Keep MQTT observability active during light migration
+- [ ] Replace the local flat config with the global `actors` / `units` / `bindings` tree
+- [ ] Add explicit runtime unit selection via positional CLI argument
+- [ ] Project the selected unit subtree into a local runtime view
+- [ ] Represent semantic entity IDs as derived global IDs from unit, entity type, and bare local ID
+- [ ] Separate semantic entities from actor-local sysfs and Modbus addresses
+- [ ] Reshape bindings around semantic `source` and `target` references
+- [ ] Build registry and index lookups from the unit-local projection
+- [ ] Keep local sysfs light execution working under the new model
+- [ ] Represent remote targets without executing them yet
+- [ ] Keep MQTT observability compatible with the new semantic model
 
-**Deliverable**: The existing multi-unit light topology can be represented in `nest` configuration and runtime indexes.
+**Deliverable**: The existing multi-unit light topology can be represented in the global config tree and projected into unit-local runtime indexes before Modbus execution is added.
 
 ## Phase 8: Modbus RTU Transport
 
