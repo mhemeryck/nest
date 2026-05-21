@@ -12,6 +12,7 @@ The longer-term goal is to let sysfs, MQTT, and Modbus act as transport actors b
 
 The domain model should use globally unique semantic entity IDs.
 Those IDs should be separate from actor-local transport addresses.
+The canonical configuration should describe the whole installation as one global tree.
 
 We will use a hardware-unit-rooted naming scheme rather than a house-location-rooted one.
 
@@ -38,6 +39,7 @@ There are three distinct layers.
 
 These identify domain entities.
 They are stable across transports and should be used by bindings, controller logic, MQTT discovery payload generation, and cross-unit references.
+In the global config tree, these IDs are derived from the owning unit, the entity section, and the local bare ID.
 
 Examples:
 
@@ -54,6 +56,7 @@ What thing is this?
 
 These identify how one actor talks to a local integration endpoint.
 They are not the primary domain identity.
+In the global config tree, these addresses live under unit-local actor sections such as `units.<unit>.actors.sysfs`.
 
 Examples:
 
@@ -82,7 +85,7 @@ Where does the command go next?
 ## Why This Split
 
 This avoids coupling the domain model to a single transport.
-It also avoids making light definitions depend on local relay ownership fields such as `output_unit`.
+It also avoids mixing transport ownership and addressing concerns directly into semantic entity definitions.
 
 That matters because:
 
@@ -96,6 +99,7 @@ The leading hardware-unit segment in the semantic ID indicates the owning unit n
 For example, `garage_io.light.driveway` belongs to the `garage_io` unit namespace.
 
 This is a naming convention first.
+The global config tree should make that ownership explicit structurally as well.
 We should avoid pushing too much routing logic into string parsing beyond the owning-unit prefix unless there is a concrete need.
 
 ## Config Direction
@@ -220,6 +224,7 @@ The surrounding section already supplies that meaning.
 
 The controller should continue to normalize actor observations into semantic events.
 It should also resolve semantic targets into transport-specific commands through registries or indexes.
+Those registries or indexes should be built from the global config tree or from a unit-local projection derived from it.
 
 That means future execution should conceptually look like this:
 
@@ -233,6 +238,9 @@ sysfs observation
 
 The controller should not need separate event models for local and remote lights.
 The difference should emerge from resolution and routing.
+
+Within one unit, local references should remain short and section-scoped.
+At runtime, those local references are resolved to fully qualified semantic IDs and actor-local addresses through the owning unit context.
 
 ## Modbus Transport Direction
 
@@ -296,6 +304,7 @@ The slave side is responsible for:
 
 Units remain equal at the semantic level.
 Any unit may own local buttons, lights, relays, or covers.
+That semantic ownership is described in the unit subtree and does not depend on the Modbus role used at runtime.
 
 Units are not necessarily equal at the Modbus transport-role level.
 One unit may need to act as a Modbus master for a given deployment, while another acts as a slave.
@@ -372,16 +381,16 @@ It is to introduce the model needed to represent them cleanly.
 
 Phase 7 should focus on:
 
-- adopting globally unique semantic IDs for local entities
-- separating semantic IDs from actor-local sysfs identifiers
+- adopting the global `actors` / `units` / `bindings` config tree
+- adopting globally unique semantic IDs derived from unit, entity type, and bare local ID
+- separating semantic IDs from actor-local sysfs and Modbus identifiers
 - reshaping bindings to target semantic entities cleanly
-- preparing registry or index resolution for future transport routing
+- preparing registry or index resolution for future transport routing and unit-local projection
 
 Phase 8 can then add Modbus-specific addressing and execution as an actor concern.
 
 ## Open Questions
 
-- What should the exact config schema look like after the semantic ID migration?
 - Should actuator references remain direct entity IDs or become a more explicit target type?
 - How much routing should be inferred from the unit prefix versus declared explicitly in config?
 - When cross-unit command routing exists, how should MQTT and Modbus be prioritized or selected?
