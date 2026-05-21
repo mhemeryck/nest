@@ -226,6 +226,16 @@ The controller should continue to normalize actor observations into semantic eve
 It should also resolve semantic targets into transport-specific commands through registries or indexes.
 Those registries or indexes should be built from the global config tree or from a unit-local projection derived from it.
 
+For now, each running `nest` process should be told explicitly which unit it is responsible for.
+The simplest initial approach is a positional CLI argument such as:
+
+```text
+nest <unit_id> --config config.yaml
+```
+
+That keeps unit selection explicit without introducing a separate bootstrap config or remote config dependency yet.
+Startup can then load the canonical global config, select `units.<unit_id>`, and build the local runtime projection from that unit subtree plus the relevant shared actor config and bindings.
+
 That means future execution should conceptually look like this:
 
 ```text
