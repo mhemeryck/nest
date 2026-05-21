@@ -16,6 +16,7 @@ import (
 
 type Options struct {
 	ConfigPath   string
+	UnitID       string
 	ValidateOnly bool
 }
 
@@ -30,7 +31,7 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	if opts.ValidateOnly {
-		slog.Info("config is valid", "path", opts.ConfigPath)
+		slog.Info("config is valid", "path", opts.ConfigPath, "unit_id", opts.UnitID)
 		return nil
 	}
 
