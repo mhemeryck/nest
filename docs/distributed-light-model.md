@@ -100,27 +100,98 @@ We should avoid pushing too much routing logic into string parsing beyond the ow
 
 ## Config Direction
 
-Configuration should eventually express both semantic IDs and actor-local addresses.
+Configuration should eventually express shared actor config, unit-local actor resources, and semantic entities in one global tree.
+
+Preferred top-level structure:
+
+```text
+actors
+units
+bindings
+```
+
+Where:
+
+- `actors` contains shared actor configuration when it is truly shared across units
+- `units` contains unit-local actor resources and semantic entities
+- `bindings` contains house-wide behavior and cross-unit relationships
+
+Per-unit actor participation should be explicit.
+We should avoid inheritance or implicit enablement rules.
+
+Within typed sections, local references should use bare IDs.
+The surrounding unit and section provide the namespace and type context.
 
 Illustrative direction:
 
 ```yaml
-unit_id: panel_1
+actors:
+  mqtt:
+    broker:
+      host: localhost
+      port: 1883
+      topic_prefix: nest
 
-digital_inputs:
-  - id: panel_1.button.entry_left
-    sysfs_device: di_3_16
+units:
+  panel_1:
+    actors:
+      mqtt:
+        enabled: true
+      sysfs:
+        digital_inputs:
+          - id: entry_left
+            device: di_3_16
+          - id: entry_right
+            device: di_3_17
+        relays:
+          - id: entry_ceiling
+            device: ro_3_14
+      modbus:
+        role: master
+        port: /dev/ttyNS0
+        baudrate: 19200
+        slaves:
+          garage_io:
+            unit_id: 1
 
-relays:
-  - id: panel_1.relay.entry
-    sysfs_device: ro_3_14
+    entities:
+      buttons:
+        - id: entry_left
+          input: entry_left
+        - id: entry_right
+          input: entry_right
+      lights:
+        - id: entry
+          actuator: entry_ceiling
 
-lights:
-  - id: panel_1.light.entry
-    actuator: panel_1.relay.entry
+  garage_io:
+    actors:
+      mqtt:
+        enabled: true
+      sysfs:
+        relays:
+          - id: driveway
+            device: ro_2_01
+      modbus:
+        role: slave
+        port: /dev/ttyNS0
+        baudrate: 19200
+        unit_id: 1
+        coils:
+          - id: driveway
+            address: 1
+            target: driveway
+
+    entities:
+      lights:
+        - id: driveway
+          actuator: driveway
 
 bindings:
   - source: panel_1.button.entry_left
+    target: panel_1.light.entry
+    action: toggle
+  - source: panel_1.button.entry_right
     target: garage_io.light.driveway
     action: toggle
 ```
@@ -128,9 +199,22 @@ bindings:
 This example is directional rather than final schema.
 It shows the intended layering:
 
-- semantic IDs are globally unique
+- shared actor configuration stays out of unit blocks when it is global
+- unit blocks own local actor resources and semantic entities
+- semantic IDs are globally unique after unit and section qualification
 - local hardware mapping stays explicit
 - bindings target semantic entities rather than raw transport addresses
+
+Derived fully qualified semantic IDs from the example include:
+
+- `panel_1.button.entry_left`
+- `panel_1.button.entry_right`
+- `panel_1.light.entry`
+- `garage_io.light.driveway`
+
+Local actor resource IDs remain local to their unit and actor section.
+For example, `panel_1` can refer to sysfs relay `entry_ceiling` without repeating `relay.` in the local ID.
+The surrounding section already supplies that meaning.
 
 ## Runtime Direction
 
