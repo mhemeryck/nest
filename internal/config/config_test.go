@@ -13,7 +13,7 @@ import (
 func TestLoad(t *testing.T) {
 	path := filepath.Join("..", "..", "test", "fixtures", "config.local.yaml")
 
-	file, err := LoadUnit(path, "controller_1")
+	file, err := Load(path, "controller_1")
 	require.NoError(t, err)
 
 	assert.Equal(t, "test/fixtures", file.Sysfs.Root)
@@ -29,21 +29,33 @@ func TestLoad(t *testing.T) {
 	assert.Equal(t, []string{"di_3_16", "ro_3_14"}, DeviceIDs(file))
 }
 
-func TestLoadUnitRejectsUnknownUnit(t *testing.T) {
+func TestLoadRejectsUnknownUnit(t *testing.T) {
 	path := filepath.Join("..", "..", "test", "fixtures", "config.local.yaml")
 
-	_, err := LoadUnit(path, "missing_unit")
+	_, err := Load(path, "missing_unit")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `unit_id: unknown unit "missing_unit"`)
 }
 
-func TestLoadAcceptsSysfsPollIntervals(t *testing.T) {
-	tmp := t.TempDir()
-	path := filepath.Join(tmp, "config.yaml")
-	writeTestFile(t, path, "sysfs:\n  root: /tmp\n  poll_intervals:\n    digital_input: 100ms\n    digital_output: 250ms\n    relay_output: 2s\ndigital_inputs:\n  - id: button_input\n    device: di_3_16\n")
-
-	file, err := Load(path)
+func TestProjectUnitAcceptsSysfsPollIntervals(t *testing.T) {
+	file, err := ProjectUnit(&GlobalRoot{
+		Units: map[string]UnitConfig{
+			"controller_1": {
+				Actors: UnitActorsConfig{
+					Sysfs: UnitSysfsConfig{
+						Root: "/tmp",
+						PollIntervals: PollIntervalsConfig{
+							DigitalInput:  100 * time.Millisecond,
+							DigitalOutput: 250 * time.Millisecond,
+							RelayOutput:   2 * time.Second,
+						},
+						DigitalInputs: []DigitalInputConfig{{ID: "button_input", Device: "di_3_16"}},
+					},
+				},
+			},
+		},
+	}, "controller_1")
 	require.NoError(t, err)
 
 	assert.Equal(t, 100*time.Millisecond, file.Sysfs.PollIntervals.DigitalInput)
@@ -54,9 +66,9 @@ func TestLoadAcceptsSysfsPollIntervals(t *testing.T) {
 func TestLoadRejectsUnknownFields(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "config.yaml")
-	writeTestFile(t, path, "sysfs:\n  root: /tmp\nunknown: true\n")
+	writeTestFile(t, path, "actors:\n  mqtt:\n    broker:\n      enabled: false\nunits: {}\nunknown: true\n")
 
-	_, err := Load(path)
+	_, err := Load(path, "controller_1")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "field unknown not found")
 }
@@ -64,9 +76,9 @@ func TestLoadRejectsUnknownFields(t *testing.T) {
 func TestLoadRejectsTrailingYAMLDocuments(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "config.yaml")
-	writeTestFile(t, path, "sysfs:\n  root: /tmp\ndigital_inputs:\n  - id: button_input\n    device: di_3_16\n---\nextra: true\n")
+	writeTestFile(t, path, "actors:\n  mqtt:\n    broker:\n      enabled: false\nunits: {}\n---\nextra: true\n")
 
-	_, err := Load(path)
+	_, err := Load(path, "controller_1")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "multiple YAML documents are not supported")
 }

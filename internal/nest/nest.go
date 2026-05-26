@@ -25,7 +25,7 @@ func Run(ctx context.Context, opts Options) error {
 	defer cancel()
 
 	// Load and validate external configuration before building runtime state.
-	configRoot, err := config.LoadUnit(opts.ConfigPath, opts.UnitID)
+	configRoot, err := config.Load(opts.ConfigPath, opts.UnitID)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
