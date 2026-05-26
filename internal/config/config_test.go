@@ -13,19 +13,29 @@ import (
 func TestLoad(t *testing.T) {
 	path := filepath.Join("..", "..", "test", "fixtures", "config.local.yaml")
 
-	file, err := Load(path)
+	file, err := LoadUnit(path, "controller_1")
 	require.NoError(t, err)
 
 	assert.Equal(t, "test/fixtures", file.Sysfs.Root)
 	assert.Equal(t, 100*time.Millisecond, file.Sysfs.PollIntervals.DigitalInput)
 	assert.Equal(t, 250*time.Millisecond, file.Sysfs.PollIntervals.DigitalOutput)
 	assert.Equal(t, time.Second, file.Sysfs.PollIntervals.RelayOutput)
+	assert.Equal(t, "controller_1", file.MQTT.UnitID)
 	assert.Len(t, file.DigitalInputs, 1)
 	assert.Len(t, file.PushButtons, 1)
 	assert.Len(t, file.Lights, 1)
 	assert.Len(t, file.Relays, 1)
 	assert.Len(t, file.Bindings, 1)
 	assert.Equal(t, []string{"di_3_16", "ro_3_14"}, DeviceIDs(file))
+}
+
+func TestLoadUnitRejectsUnknownUnit(t *testing.T) {
+	path := filepath.Join("..", "..", "test", "fixtures", "config.local.yaml")
+
+	_, err := LoadUnit(path, "missing_unit")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `unit_id: unknown unit "missing_unit"`)
 }
 
 func TestLoadAcceptsSysfsPollIntervals(t *testing.T) {

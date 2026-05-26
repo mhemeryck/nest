@@ -1,30 +1,41 @@
-sysfs:
-  root: test/fixtures
-  poll_intervals:
-    digital_input: 100ms
-    digital_output: 250ms
-    relay_output: 1s
+actors:
+  mqtt:
+    broker:
+      enabled: false
+      host: localhost
+      port: 1883
+      client_id: nest_controller_1
+      topic_prefix: nest
 
-digital_inputs:
-  - id: office_button_input
-    device: di_3_16
-
-push_buttons:
-  - id: office_button
-    name: Office light button
-    input: office_button_input
-
-relays:
-  - id: office_light_relay
-    name: Office light relay
-    device: ro_3_14
-
-lights:
-  - id: office_light
-    name: Office light
-    relay: office_light_relay
+units:
+  controller_1:
+    actors:
+      mqtt:
+        enabled: false
+      sysfs:
+        root: test/fixtures
+        poll_intervals:
+          digital_input: 100ms
+          digital_output: 250ms
+          relay_output: 1s
+        digital_inputs:
+          - id: office_button_input
+            device: di_3_16
+        relays:
+          - id: office_light_relay
+            name: Office light relay
+            device: ro_3_14
+    entities:
+      buttons:
+        - id: office_button
+          name: Office light button
+          input: office_button_input
+      lights:
+        - id: office_light
+          name: Office light
+          actuator: office_light_relay
 
 bindings:
-  - button: office_button
-    light: office_light
+  - source: controller_1.button.office_button
+    target: controller_1.light.office_light
     action: toggle

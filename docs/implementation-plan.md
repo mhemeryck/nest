@@ -169,9 +169,9 @@ Notes from the current Home Assistant migration context:
 
 See `docs/distributed-light-model.md` for the current naming and routing direction.
 
-- [ ] Replace the local flat config with the global `actors` / `units` / `bindings` tree
+- [x] Replace the local flat config with the global `actors` / `units` / `bindings` tree
 - [x] Add explicit runtime unit selection via positional CLI argument
-- [ ] Project the selected unit subtree into a local runtime view
+- [x] Project the selected unit subtree into a local runtime view
 - [ ] Represent semantic entity IDs as derived global IDs from unit, entity type, and bare local ID
 - [ ] Separate semantic entities from actor-local sysfs and Modbus addresses
 - [ ] Reshape bindings around semantic `source` and `target` references
