@@ -126,6 +126,24 @@ We should avoid inheritance or implicit enablement rules.
 Within typed sections, local references should use bare IDs.
 The surrounding unit and section provide the namespace and type context.
 
+Semantic entities should not point directly at actor-local addresses such as sysfs device IDs or Modbus coil addresses.
+Instead, entities should use explicit typed endpoint references when they need to bind to an actor-local resource.
+The shared endpoint reference shape is:
+
+```yaml
+actor: sysfs
+kind: relay
+id: entry_ceiling
+```
+
+The `actor` field names the unit-local actor section that owns the resource.
+The `kind` field names the resource kind within that actor.
+The `id` field is the bare resource ID inside that actor section.
+
+Entity fields decide the role and cardinality of those references.
+For example, a button has one `input`, a light has one `actuator`, and a cover will likely have separate `open_actuator` and `close_actuator` references.
+This keeps semantic entities explicit without encoding actor, kind, and resource structure in a string naming convention.
+
 Illustrative direction:
 
 ```yaml
@@ -161,12 +179,21 @@ units:
     entities:
       buttons:
         - id: entry_left
-          input: entry_left
+          input:
+            actor: sysfs
+            kind: digital_input
+            id: entry_left
         - id: entry_right
-          input: entry_right
+          input:
+            actor: sysfs
+            kind: digital_input
+            id: entry_right
       lights:
         - id: entry
-          actuator: entry_ceiling
+          actuator:
+            actor: sysfs
+            kind: relay
+            id: entry_ceiling
 
   garage_io:
     actors:
@@ -184,12 +211,18 @@ units:
         coils:
           - id: driveway
             address: 1
-            target: driveway
+            target:
+              actor: sysfs
+              kind: relay
+              id: driveway
 
     entities:
       lights:
         - id: driveway
-          actuator: driveway
+          actuator:
+            actor: sysfs
+            kind: relay
+            id: driveway
 
 bindings:
   - source: panel_1.button.entry_left
@@ -206,7 +239,8 @@ It shows the intended layering:
 - shared actor configuration stays out of unit blocks when it is global
 - unit blocks own local actor resources and semantic entities
 - semantic IDs are globally unique after unit and section qualification
-- local hardware mapping stays explicit
+- semantic entities reference actor-local resources through typed endpoint references
+- local hardware mapping stays explicit inside actor resource sections
 - bindings target semantic entities rather than raw transport addresses
 
 Derived fully qualified semantic IDs from the example include:
@@ -217,8 +251,25 @@ Derived fully qualified semantic IDs from the example include:
 - `garage_io.light.driveway`
 
 Local actor resource IDs remain local to their unit and actor section.
-For example, `panel_1` can refer to sysfs relay `entry_ceiling` without repeating `relay.` in the local ID.
-The surrounding section already supplies that meaning.
+For example, `panel_1` can refer to sysfs relay `entry_ceiling` through `{actor: sysfs, kind: relay, id: entry_ceiling}` without exposing the sysfs device address to the semantic light.
+The actor section still owns the final device address such as `ro_3_14`.
+
+This same endpoint reference shape should be reused for other semantic entities.
+For example, a future cover entity can use two typed actuator references:
+
+```yaml
+entities:
+  covers:
+    - id: main_window
+      open_actuator:
+        actor: sysfs
+        kind: relay
+        id: main_window_up
+      close_actuator:
+        actor: sysfs
+        kind: relay
+        id: main_window_down
+```
 
 ## Runtime Direction
 
@@ -394,6 +445,7 @@ Phase 7 should focus on:
 - adopting the global `actors` / `units` / `bindings` config tree
 - adopting globally unique semantic IDs derived from unit, entity type, and bare local ID
 - separating semantic IDs from actor-local sysfs and Modbus identifiers
+- representing entity-to-actor-resource links with explicit typed endpoint references
 - reshaping bindings to target semantic entities cleanly
 - preparing registry or index resolution for future transport routing and unit-local projection
 
@@ -401,7 +453,7 @@ Phase 8 can then add Modbus-specific addressing and execution as an actor concer
 
 ## Open Questions
 
-- Should actuator references remain direct entity IDs or become a more explicit target type?
+- Should typed endpoint references need additional fields beyond `actor`, `kind`, and `id` for non-sysfs actors?
 - How much routing should be inferred from the unit prefix versus declared explicitly in config?
 - When cross-unit command routing exists, how should MQTT and Modbus be prioritized or selected?
 - What exact Modbus runtime configuration is needed to declare master versus slave mode?
