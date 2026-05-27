@@ -3,20 +3,14 @@ package config
 import (
 	"errors"
 	"fmt"
-	"strings"
+
+	"github.com/mhemeryck/nest/internal/entity"
 )
 
 const (
 	endpointActorSysfs            = "sysfs"
 	endpointKindSysfsDigitalInput = "digital_input"
 	endpointKindSysfsRelay        = "relay"
-)
-
-type EntityType string
-
-const (
-	EntityTypeButton EntityType = "button"
-	EntityTypeLight  EntityType = "light"
 )
 
 type GlobalRoot struct {
@@ -116,11 +110,11 @@ func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
 	}
 
 	for _, binding := range global.Bindings {
-		if !isLocalSemanticID(unitID, EntityTypeButton, binding.Source) {
+		if !entity.IsIDForUnit(binding.Source, unitID, entity.TypeButton) {
 			continue
 		}
 
-		if !isLocalSemanticID(unitID, EntityTypeLight, binding.Target) {
+		if !entity.IsIDForUnit(binding.Target, unitID, entity.TypeLight) {
 			continue
 		}
 
@@ -147,7 +141,7 @@ func projectPushButtons(unitID string, buttons []UnitPushButtonConfig) ([]PushBu
 		errs = errors.Join(errs, err)
 
 		projected = append(projected, PushButtonConfig{
-			ID:    semanticID(unitID, EntityTypeButton, button.ID),
+			ID:    string(entity.NewID(unitID, entity.TypeButton, button.ID)),
 			Name:  button.Name,
 			Input: inputID,
 		})
@@ -169,7 +163,7 @@ func projectLights(unitID string, lights []UnitLightConfig) ([]LightConfig, erro
 		errs = errors.Join(errs, err)
 
 		projected = append(projected, LightConfig{
-			ID:    semanticID(unitID, EntityTypeLight, light.ID),
+			ID:    string(entity.NewID(unitID, entity.TypeLight, light.ID)),
 			Name:  light.Name,
 			Relay: relayID,
 		})
@@ -189,13 +183,4 @@ func projectEndpointRef(field string, endpoint EndpointRefConfig, actor string, 
 
 	errs = errors.Join(errs, validateID(field+".id", endpoint.ID))
 	return endpoint.ID, errs
-}
-
-func semanticID(unitID string, entityType EntityType, localID string) string {
-	return fmt.Sprintf("%s.%s.%s", unitID, entityType, localID)
-}
-
-func isLocalSemanticID(unitID string, entityType EntityType, value string) bool {
-	prefix := fmt.Sprintf("%s.%s.", unitID, entityType)
-	return strings.HasPrefix(value, prefix) && strings.TrimPrefix(value, prefix) != ""
 }

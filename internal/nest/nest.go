@@ -8,7 +8,6 @@ import (
 
 	"github.com/mhemeryck/nest/internal/config"
 	"github.com/mhemeryck/nest/internal/controller"
-	"github.com/mhemeryck/nest/internal/entity"
 	"github.com/mhemeryck/nest/internal/mqtt"
 	"github.com/mhemeryck/nest/internal/registry"
 	"github.com/mhemeryck/nest/internal/sysfs"
@@ -36,7 +35,7 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	// Translate config into domain entities and indexes used by controllers.
-	root := entity.FromConfig(configRoot)
+	root := config.ToEntityRoot(configRoot)
 	index := registry.Build(root)
 
 	// Resolve configured sysfs devices against the hardware tree before actors start.

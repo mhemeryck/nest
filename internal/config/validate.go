@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/mhemeryck/nest/internal/entity"
 )
 
 var (
@@ -122,7 +124,7 @@ func validatePushButtons(buttons []PushButtonConfig, knownInputIDs map[string]st
 
 		errs = errors.Join(
 			errs,
-			validateEntityID(prefix+".id", button.ID, EntityTypeButton),
+			validateEntityID(prefix+".id", button.ID, entity.TypeButton),
 			validateRequiredField(prefix+".name", button.Name),
 			inputErr,
 		)
@@ -183,7 +185,7 @@ func validateLights(lights []LightConfig, knownRelayIDs map[string]struct{}) (ma
 
 		errs = errors.Join(
 			errs,
-			validateEntityID(prefix+".id", light.ID, EntityTypeLight),
+			validateEntityID(prefix+".id", light.ID, entity.TypeLight),
 			validateRequiredField(prefix+".name", light.Name),
 			relayErr,
 		)
@@ -268,20 +270,16 @@ func validateID(field string, value string) error {
 	return validatePattern(field, value, idPattern, "must contain only lowercase letters, numbers, and underscores")
 }
 
-func validateEntityID(field string, value string, entityType EntityType) error {
+func validateEntityID(field string, value string, entityType entity.Type) error {
 	if err := validateRequiredField(field, value); err != nil {
 		return err
 	}
 
-	if idPattern.MatchString(value) || semanticIDPattern(entityType).MatchString(value) {
+	if entity.IsLocalID(value) || entity.IsID(value, entityType) {
 		return nil
 	}
 
 	return fmt.Errorf("%s: must be a local id or %s semantic id %q", field, entityType, value)
-}
-
-func semanticIDPattern(entityType EntityType) *regexp.Regexp {
-	return regexp.MustCompile(`^[a-z0-9_]+\.` + regexp.QuoteMeta(string(entityType)) + `\.[a-z0-9_]+$`)
 }
 
 func validateDevice(field string, value string, pattern *regexp.Regexp, kind string) error {
