@@ -29,11 +29,17 @@ units:
       buttons:
         - id: office_button
           name: Office light button
-          input: office_button_input
+          input:
+            actor: sysfs
+            kind: digital_input
+            id: office_button_input
       lights:
         - id: office_light
           name: Office light
-          actuator: office_light_relay
+          actuator:
+            actor: sysfs
+            kind: relay
+            id: office_light_relay
 
 bindings:
   - source: controller_1.button.office_button

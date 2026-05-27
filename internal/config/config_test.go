@@ -26,6 +26,8 @@ func TestLoad(t *testing.T) {
 	assert.Len(t, file.Lights, 1)
 	assert.Len(t, file.Relays, 1)
 	assert.Len(t, file.Bindings, 1)
+	assert.Equal(t, "office_button_input", file.PushButtons[0].Input)
+	assert.Equal(t, "office_light_relay", file.Lights[0].Relay)
 	assert.Equal(t, []string{"di_3_16", "ro_3_14"}, DeviceIDs(file))
 }
 
@@ -61,6 +63,80 @@ func TestProjectUnitAcceptsSysfsPollIntervals(t *testing.T) {
 	assert.Equal(t, 100*time.Millisecond, file.Sysfs.PollIntervals.DigitalInput)
 	assert.Equal(t, 250*time.Millisecond, file.Sysfs.PollIntervals.DigitalOutput)
 	assert.Equal(t, 2*time.Second, file.Sysfs.PollIntervals.RelayOutput)
+}
+
+func TestProjectUnitProjectsTypedEntityEndpoints(t *testing.T) {
+	file, err := ProjectUnit(&GlobalRoot{
+		Units: map[string]UnitConfig{
+			"controller_1": {
+				Actors: UnitActorsConfig{
+					Sysfs: UnitSysfsConfig{
+						DigitalInputs: []DigitalInputConfig{{ID: "button_input", Device: "di_3_16"}},
+						Relays:        []RelayConfig{{ID: "light_relay", Name: "Light relay", Device: "ro_3_14"}},
+					},
+				},
+				Entities: UnitEntitiesConfig{
+					Buttons: []UnitPushButtonConfig{{
+						ID:   "button",
+						Name: "Button",
+						Input: EndpointRefConfig{
+							Actor: "sysfs",
+							Kind:  "digital_input",
+							ID:    "button_input",
+						},
+					}},
+					Lights: []UnitLightConfig{{
+						ID:   "light",
+						Name: "Light",
+						Actuator: EndpointRefConfig{
+							Actor: "sysfs",
+							Kind:  "relay",
+							ID:    "light_relay",
+						},
+					}},
+				},
+			},
+		},
+	}, "controller_1")
+	require.NoError(t, err)
+
+	require.Len(t, file.PushButtons, 1)
+	require.Len(t, file.Lights, 1)
+	assert.Equal(t, "button_input", file.PushButtons[0].Input)
+	assert.Equal(t, "light_relay", file.Lights[0].Relay)
+}
+
+func TestProjectUnitRejectsUnsupportedEntityEndpoints(t *testing.T) {
+	_, err := ProjectUnit(&GlobalRoot{
+		Units: map[string]UnitConfig{
+			"controller_1": {
+				Entities: UnitEntitiesConfig{
+					Buttons: []UnitPushButtonConfig{{
+						ID:   "button",
+						Name: "Button",
+						Input: EndpointRefConfig{
+							Actor: "sysfs",
+							Kind:  "relay",
+							ID:    "button_input",
+						},
+					}},
+					Lights: []UnitLightConfig{{
+						ID:   "light",
+						Name: "Light",
+						Actuator: EndpointRefConfig{
+							Actor: "mqtt",
+							Kind:  "relay",
+							ID:    "light_relay",
+						},
+					}},
+				},
+			},
+		},
+	}, "controller_1")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `entities.buttons[0].input.kind: unsupported endpoint kind "relay", expected "digital_input"`)
+	assert.Contains(t, err.Error(), `entities.lights[0].actuator.actor: unsupported endpoint actor "mqtt", expected "sysfs"`)
 }
 
 func TestLoadRejectsUnknownFields(t *testing.T) {

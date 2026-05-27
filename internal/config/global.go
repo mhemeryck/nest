@@ -1,8 +1,15 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"strings"
+)
+
+const (
+	endpointActorSysfs            = "sysfs"
+	endpointKindSysfsDigitalInput = "digital_input"
+	endpointKindSysfsRelay        = "relay"
 )
 
 type GlobalRoot struct {
@@ -41,14 +48,32 @@ type UnitSysfsConfig struct {
 }
 
 type UnitEntitiesConfig struct {
-	Buttons []PushButtonConfig `yaml:"buttons"`
-	Lights  []LightConfig      `yaml:"lights"`
+	Buttons []UnitPushButtonConfig `yaml:"buttons"`
+	Lights  []UnitLightConfig      `yaml:"lights"`
 }
 
 type GlobalBindingConfig struct {
 	Source string `yaml:"source"`
 	Target string `yaml:"target"`
 	Action string `yaml:"action"`
+}
+
+type EndpointRefConfig struct {
+	Actor string `yaml:"actor"`
+	Kind  string `yaml:"kind"`
+	ID    string `yaml:"id"`
+}
+
+type UnitPushButtonConfig struct {
+	ID    string            `yaml:"id"`
+	Name  string            `yaml:"name"`
+	Input EndpointRefConfig `yaml:"input"`
+}
+
+type UnitLightConfig struct {
+	ID       string            `yaml:"id"`
+	Name     string            `yaml:"name"`
+	Actuator EndpointRefConfig `yaml:"actuator"`
 }
 
 func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
@@ -65,13 +90,10 @@ func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
 	mqtt.Enabled = unit.Actors.MQTT.Enabled
 	mqtt.UnitID = unitID
 
-	localLights := make([]LightConfig, 0, len(unit.Entities.Lights))
-	for _, light := range unit.Entities.Lights {
-		if light.Relay == "" {
-			light.Relay = light.Actuator
-		}
-		light.Actuator = ""
-		localLights = append(localLights, light)
+	localButtons, buttonErr := projectPushButtons(unit.Entities.Buttons)
+	localLights, lightErr := projectLights(unit.Entities.Lights)
+	if err := errors.Join(buttonErr, lightErr); err != nil {
+		return nil, err
 	}
 
 	local := &Root{
@@ -81,7 +103,7 @@ func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
 		},
 		MQTT:          mqtt,
 		DigitalInputs: append([]DigitalInputConfig(nil), unit.Actors.Sysfs.DigitalInputs...),
-		PushButtons:   append([]PushButtonConfig(nil), unit.Entities.Buttons...),
+		PushButtons:   localButtons,
 		Lights:        localLights,
 		Relays:        append([]RelayConfig(nil), unit.Actors.Sysfs.Relays...),
 	}
@@ -105,6 +127,63 @@ func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
 	}
 
 	return local, nil
+}
+
+func projectPushButtons(buttons []UnitPushButtonConfig) ([]PushButtonConfig, error) {
+	projected := make([]PushButtonConfig, 0, len(buttons))
+	var errs error
+	for i, button := range buttons {
+		inputID, err := projectEndpointRef(
+			fmt.Sprintf("entities.buttons[%d].input", i),
+			button.Input,
+			endpointActorSysfs,
+			endpointKindSysfsDigitalInput,
+		)
+		errs = errors.Join(errs, err)
+
+		projected = append(projected, PushButtonConfig{
+			ID:    button.ID,
+			Name:  button.Name,
+			Input: inputID,
+		})
+	}
+
+	return projected, errs
+}
+
+func projectLights(lights []UnitLightConfig) ([]LightConfig, error) {
+	projected := make([]LightConfig, 0, len(lights))
+	var errs error
+	for i, light := range lights {
+		relayID, err := projectEndpointRef(
+			fmt.Sprintf("entities.lights[%d].actuator", i),
+			light.Actuator,
+			endpointActorSysfs,
+			endpointKindSysfsRelay,
+		)
+		errs = errors.Join(errs, err)
+
+		projected = append(projected, LightConfig{
+			ID:    light.ID,
+			Name:  light.Name,
+			Relay: relayID,
+		})
+	}
+
+	return projected, errs
+}
+
+func projectEndpointRef(field string, endpoint EndpointRefConfig, actor string, kind string) (string, error) {
+	var errs error
+	if endpoint.Actor != actor {
+		errs = errors.Join(errs, fmt.Errorf("%s.actor: unsupported endpoint actor %q, expected %q", field, endpoint.Actor, actor))
+	}
+	if endpoint.Kind != kind {
+		errs = errors.Join(errs, fmt.Errorf("%s.kind: unsupported endpoint kind %q, expected %q", field, endpoint.Kind, kind))
+	}
+
+	errs = errors.Join(errs, validateID(field+".id", endpoint.ID))
+	return endpoint.ID, errs
 }
 
 func localSemanticID(unitID string, entityType string, value string) (string, bool) {

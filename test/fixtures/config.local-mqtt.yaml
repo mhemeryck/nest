@@ -34,17 +34,29 @@ units:
       buttons:
         - id: office_button
           name: Office light button
-          input: office_button_input
+          input:
+            actor: sysfs
+            kind: digital_input
+            id: office_button_input
         - id: hallway_button
           name: Hallway light button
-          input: hallway_button_input
+          input:
+            actor: sysfs
+            kind: digital_input
+            id: hallway_button_input
       lights:
         - id: office_light
           name: Office light
-          actuator: office_light_relay
+          actuator:
+            actor: sysfs
+            kind: relay
+            id: office_light_relay
         - id: hallway_light
           name: Hallway light
-          actuator: hallway_light_relay
+          actuator:
+            actor: sysfs
+            kind: relay
+            id: hallway_light_relay
 
 bindings:
   - source: local.button.office_button

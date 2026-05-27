@@ -52,10 +52,9 @@ type RelayConfig struct {
 }
 
 type LightConfig struct {
-	ID       string `yaml:"id"`
-	Name     string `yaml:"name"`
-	Relay    string `yaml:"relay"`
-	Actuator string `yaml:"actuator"`
+	ID    string `yaml:"id"`
+	Name  string `yaml:"name"`
+	Relay string `yaml:"relay"`
 }
 
 type BindingConfig struct {
