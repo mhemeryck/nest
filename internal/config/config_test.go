@@ -26,6 +26,10 @@ func TestLoad(t *testing.T) {
 	assert.Len(t, file.Lights, 1)
 	assert.Len(t, file.Relays, 1)
 	assert.Len(t, file.Bindings, 1)
+	assert.Equal(t, "controller_1.button.office_button", file.PushButtons[0].ID)
+	assert.Equal(t, "controller_1.light.office_light", file.Lights[0].ID)
+	assert.Equal(t, "controller_1.button.office_button", file.Bindings[0].Button)
+	assert.Equal(t, "controller_1.light.office_light", file.Bindings[0].Light)
 	assert.Equal(t, "office_button_input", file.PushButtons[0].Input)
 	assert.Equal(t, "office_light_relay", file.Lights[0].Relay)
 	assert.Equal(t, []string{"di_3_16", "ro_3_14"}, DeviceIDs(file))
@@ -102,6 +106,8 @@ func TestProjectUnitProjectsTypedEntityEndpoints(t *testing.T) {
 
 	require.Len(t, file.PushButtons, 1)
 	require.Len(t, file.Lights, 1)
+	assert.Equal(t, "controller_1.button.button", file.PushButtons[0].ID)
+	assert.Equal(t, "controller_1.light.light", file.Lights[0].ID)
 	assert.Equal(t, "button_input", file.PushButtons[0].Input)
 	assert.Equal(t, "light_relay", file.Lights[0].Relay)
 }
@@ -306,7 +312,7 @@ func TestValidate(t *testing.T) {
 				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
 				Lights: []LightConfig{{ID: "office-light", Name: "Office light", Relay: "relay"}},
 			},
-			message: `lights[0].id: must contain only lowercase letters, numbers, and underscores "office-light"`,
+			message: `lights[0].id: must be a local id or light semantic id "office-light"`,
 		},
 		{
 			name: "rejects whitespace padded button input references",

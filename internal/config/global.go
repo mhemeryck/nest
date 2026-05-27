@@ -12,6 +12,13 @@ const (
 	endpointKindSysfsRelay        = "relay"
 )
 
+type EntityType string
+
+const (
+	EntityTypeButton EntityType = "button"
+	EntityTypeLight  EntityType = "light"
+)
+
 type GlobalRoot struct {
 	Actors   GlobalActorsConfig    `yaml:"actors"`
 	Units    map[string]UnitConfig `yaml:"units"`
@@ -90,8 +97,8 @@ func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
 	mqtt.Enabled = unit.Actors.MQTT.Enabled
 	mqtt.UnitID = unitID
 
-	localButtons, buttonErr := projectPushButtons(unit.Entities.Buttons)
-	localLights, lightErr := projectLights(unit.Entities.Lights)
+	localButtons, buttonErr := projectPushButtons(unitID, unit.Entities.Buttons)
+	localLights, lightErr := projectLights(unitID, unit.Entities.Lights)
 	if err := errors.Join(buttonErr, lightErr); err != nil {
 		return nil, err
 	}
@@ -109,19 +116,17 @@ func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
 	}
 
 	for _, binding := range global.Bindings {
-		buttonID, ok := localSemanticID(unitID, "button", binding.Source)
-		if !ok {
+		if !isLocalSemanticID(unitID, EntityTypeButton, binding.Source) {
 			continue
 		}
 
-		lightID, ok := localSemanticID(unitID, "light", binding.Target)
-		if !ok {
+		if !isLocalSemanticID(unitID, EntityTypeLight, binding.Target) {
 			continue
 		}
 
 		local.Bindings = append(local.Bindings, BindingConfig{
-			Button: buttonID,
-			Light:  lightID,
+			Button: binding.Source,
+			Light:  binding.Target,
 			Action: binding.Action,
 		})
 	}
@@ -129,7 +134,7 @@ func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
 	return local, nil
 }
 
-func projectPushButtons(buttons []UnitPushButtonConfig) ([]PushButtonConfig, error) {
+func projectPushButtons(unitID string, buttons []UnitPushButtonConfig) ([]PushButtonConfig, error) {
 	projected := make([]PushButtonConfig, 0, len(buttons))
 	var errs error
 	for i, button := range buttons {
@@ -142,7 +147,7 @@ func projectPushButtons(buttons []UnitPushButtonConfig) ([]PushButtonConfig, err
 		errs = errors.Join(errs, err)
 
 		projected = append(projected, PushButtonConfig{
-			ID:    button.ID,
+			ID:    semanticID(unitID, EntityTypeButton, button.ID),
 			Name:  button.Name,
 			Input: inputID,
 		})
@@ -151,7 +156,7 @@ func projectPushButtons(buttons []UnitPushButtonConfig) ([]PushButtonConfig, err
 	return projected, errs
 }
 
-func projectLights(lights []UnitLightConfig) ([]LightConfig, error) {
+func projectLights(unitID string, lights []UnitLightConfig) ([]LightConfig, error) {
 	projected := make([]LightConfig, 0, len(lights))
 	var errs error
 	for i, light := range lights {
@@ -164,7 +169,7 @@ func projectLights(lights []UnitLightConfig) ([]LightConfig, error) {
 		errs = errors.Join(errs, err)
 
 		projected = append(projected, LightConfig{
-			ID:    light.ID,
+			ID:    semanticID(unitID, EntityTypeLight, light.ID),
 			Name:  light.Name,
 			Relay: relayID,
 		})
@@ -186,11 +191,11 @@ func projectEndpointRef(field string, endpoint EndpointRefConfig, actor string, 
 	return endpoint.ID, errs
 }
 
-func localSemanticID(unitID string, entityType string, value string) (string, bool) {
-	prefix := unitID + "." + entityType + "."
-	if !strings.HasPrefix(value, prefix) {
-		return "", false
-	}
+func semanticID(unitID string, entityType EntityType, localID string) string {
+	return fmt.Sprintf("%s.%s.%s", unitID, entityType, localID)
+}
 
-	return strings.TrimPrefix(value, prefix), true
+func isLocalSemanticID(unitID string, entityType EntityType, value string) bool {
+	prefix := fmt.Sprintf("%s.%s.", unitID, entityType)
+	return strings.HasPrefix(value, prefix) && strings.TrimPrefix(value, prefix) != ""
 }
