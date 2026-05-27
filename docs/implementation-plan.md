@@ -172,13 +172,29 @@ See `docs/distributed-light-model.md` for the current naming and routing directi
 - [x] Replace the local flat config with the global `actors` / `units` / `bindings` tree
 - [x] Add explicit runtime unit selection via positional CLI argument
 - [x] Project the selected unit subtree into a local runtime view
-- [ ] Represent semantic entity IDs as derived global IDs from unit, entity type, and bare local ID
-- [ ] Separate semantic entities from actor-local sysfs and Modbus addresses
-- [ ] Reshape bindings around semantic `source` and `target` references
+- [x] Represent semantic entity IDs as derived global IDs from unit, entity type, and bare local ID
+- [x] Separate semantic entities from actor-local sysfs addresses through typed endpoint references
+- [x] Reshape bindings around semantic `source` and `target` references for local light execution
 - [ ] Build registry and index lookups from the unit-local projection
 - [ ] Keep local sysfs light execution working under the new model
 - [ ] Represent remote targets without executing them yet
 - [ ] Keep MQTT observability compatible with the new semantic model
+
+Current status:
+
+- Global config loading and explicit CLI unit selection are implemented
+- Unit projection derives globally qualified semantic button and light IDs such as `controller_1.button.office_button`
+- Global entity config uses typed endpoint references such as `{actor: sysfs, kind: relay, id: office_light_relay}`
+- The projection still adapts into the existing local runtime config shape while runtime code catches up
+- Semantic ID construction and validation helpers live in `internal/entity`
+- Config-to-entity translation currently lives in `internal/config` to keep parsed YAML models and domain models separate
+- Local-only bindings are projected from semantic `source` and `target` references and remote targets are still skipped
+
+Next useful checks:
+
+- Exercise controller and registry behavior from the global config projection rather than hand-built bare-ID entity roots
+- Decide how MQTT topics and Home Assistant discovery should handle globally qualified semantic IDs versus local topic segments
+- Introduce remote target representation once local semantic IDs are proven through the runtime path
 
 **Deliverable**: The existing multi-unit light topology can be represented in the global config tree and projected into unit-local runtime indexes before Modbus execution is added.
 

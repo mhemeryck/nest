@@ -303,6 +303,9 @@ The difference should emerge from resolution and routing.
 Within one unit, local references should remain short and section-scoped.
 At runtime, those local references are resolved to fully qualified semantic IDs and actor-local addresses through the owning unit context.
 
+The implementation plan tracks current phase-7 progress.
+This document describes the intended model rather than active task status.
+
 ## Modbus Transport Direction
 
 The current distributed light model has to fit the existing hardware topology.
