@@ -106,7 +106,7 @@ func TestSemanticEventsFromRelayStateChangeIncludesLightState(t *testing.T) {
 
 func TestSemanticEventFromMQTTEventMapsLightCommandToLightEvent(t *testing.T) {
 	root := &entity.Root{
-		Lights: []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
+		Lights: []entity.Light{{ID: entity.LightID("controller_1.light.office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
 	}
 
 	semanticEvent, handled := semanticEventFromMQTTEvent(
@@ -117,7 +117,7 @@ func TestSemanticEventFromMQTTEventMapsLightCommandToLightEvent(t *testing.T) {
 
 	require.True(t, handled)
 	assert.Equal(t, event.LightKind, semanticEvent.Kind)
-	assert.Equal(t, entity.LightID("office_light"), semanticEvent.Light.LightID)
+	assert.Equal(t, entity.LightID("controller_1.light.office_light"), semanticEvent.Light.LightID)
 	assert.Equal(t, entity.LightActionOn, semanticEvent.Light.Action)
 }
 

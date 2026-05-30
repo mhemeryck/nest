@@ -18,6 +18,8 @@ func TestTopics(t *testing.T) {
 	assert.Equal(t, "nest/units/controller_1/relays/office_light_relay/state", RelayStateTopic(topics, entity.RelayID("office_light_relay")))
 	assert.Equal(t, "nest/units/controller_1/lights/office_light/state", LightStateTopic(topics, entity.LightID("office_light")))
 	assert.Equal(t, "nest/units/controller_1/lights/office_light/command", LightCommandTopic(topics, entity.LightID("office_light")))
+	assert.Equal(t, "nest/units/controller_1/lights/office_light/state", LightStateTopic(topics, entity.LightID("controller_1.light.office_light")))
+	assert.Equal(t, "nest/units/controller_1/lights/office_light/command", LightCommandTopic(topics, entity.LightID("controller_1.light.office_light")))
 	assert.Equal(t, "nest/units/controller_1/lights/+/command", LightCommandSubscriptionTopic(topics))
 	assert.Equal(t, "homeassistant/device/nest_controller_1_unit/config", HomeAssistantDeviceDiscoveryTopic(topics))
 }
@@ -33,8 +35,11 @@ func TestParseLightCommandTopic(t *testing.T) {
 
 	lightID, ok := ParseLightCommandTopic(topics, "nest/units/controller_1/lights/office_light/command")
 	assert.True(t, ok)
-	assert.Equal(t, entity.LightID("office_light"), lightID)
+	assert.Equal(t, entity.LightID("controller_1.light.office_light"), lightID)
 
 	_, ok = ParseLightCommandTopic(topics, "nest/units/controller_1/lights/office_light/state")
+	assert.False(t, ok)
+
+	_, ok = ParseLightCommandTopic(topics, "nest/units/controller_1/lights/office-light/command")
 	assert.False(t, ok)
 }

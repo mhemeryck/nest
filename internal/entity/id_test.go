@@ -27,3 +27,15 @@ func TestIsIDForUnit(t *testing.T) {
 	assert.False(t, IsIDForUnit("controller_2.light.office", "controller_1", TypeLight))
 	assert.False(t, IsIDForUnit("controller_1.button.office", "controller_1", TypeLight))
 }
+
+func TestLocalID(t *testing.T) {
+	localID, ok := LocalID("controller_1.light.office", TypeLight)
+	assert.True(t, ok)
+	assert.Equal(t, "office", localID)
+
+	_, ok = LocalID("controller_1.button.office", TypeLight)
+	assert.False(t, ok)
+
+	_, ok = LocalID("office", TypeLight)
+	assert.False(t, ok)
+}

@@ -239,6 +239,27 @@ func TestDispatchMQTTLightCommandTurnsLightOn(t *testing.T) {
 	assert.Equal(t, "ro_3_14", command.DeviceID)
 }
 
+func TestProjectedConfigMQTTLightCommandTurnsLightOn(t *testing.T) {
+	configRoot, err := config.Load(filepath.Join("..", "..", "test", "fixtures", "config.local.yaml"), "controller_1")
+	require.NoError(t, err)
+	root := config.ToEntityRoot(configRoot)
+	commands := make(chan sysfs.Command, 1)
+
+	semanticEvent, handled := semanticEventFromMQTTEvent(
+		registry.Build(root),
+		mqtt.NewTopics("nest", "controller_1"),
+		mqtt.ReceivedEvent(mqtt.ReceivedMessage{Topic: "nest/units/controller_1/lights/office_light/command", Payload: []byte("ON")}),
+	)
+	require.True(t, handled)
+	assert.Equal(t, entity.LightID("controller_1.light.office_light"), semanticEvent.Light.LightID)
+
+	dispatchEvent(t.Context(), root, registry.Build(root), commands, nil, mqtt.Topics{}, semanticEvent)
+
+	command := <-commands
+	assert.Equal(t, sysfs.OnCommand, command.Kind)
+	assert.Equal(t, "ro_3_14", command.DeviceID)
+}
+
 func TestHandleStateChangeLogsRawStateChangeForUnknownDevice(t *testing.T) {
 	index := registry.Build(&entity.Root{})
 	semanticEvents := make(chan event.Event, 1)

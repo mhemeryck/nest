@@ -3,6 +3,7 @@ package mqtt
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/mhemeryck/nest/internal/entity"
 )
@@ -45,7 +46,7 @@ func BuildHomeAssistantDeviceDiscovery(root *entity.Root, topics Topics) HomeAss
 	}
 
 	for _, light := range root.Lights {
-		doc.Components[string(light.ID)] = homeAssistantLightComponent(light, topics)
+		doc.Components[lightTopicSegment(light.ID)] = homeAssistantLightComponent(light, topics)
 	}
 
 	return doc
@@ -75,17 +76,27 @@ func HomeAssistantDeviceDiscoveryMessage(root *entity.Root, topics Topics) (Publ
 }
 
 func homeAssistantLightComponent(light entity.Light, topics Topics) HomeAssistantComponentDiscovery {
+	entityID := homeAssistantLightEntityID(light.ID)
 	return HomeAssistantComponentDiscovery{
 		Platform:           "light",
 		Name:               light.Name,
-		UniqueID:           homeAssistantUniqueID(topics, string(light.ID)),
-		DefaultEntityID:    fmt.Sprintf("light.%s_%s", topics.UnitID, light.ID),
+		UniqueID:           homeAssistantUniqueID(topics, entityID),
+		DefaultEntityID:    fmt.Sprintf("light.%s_%s", topics.UnitID, lightTopicSegment(light.ID)),
 		StateTopic:         LightStateTopic(topics, light.ID),
 		CommandTopic:       LightCommandTopic(topics, light.ID),
 		StateValueTemplate: "{{ value_json.state }}",
 		PayloadOn:          "ON",
 		PayloadOff:         "OFF",
 	}
+}
+
+func homeAssistantLightEntityID(lightID entity.LightID) string {
+	if entity.IsID(string(lightID), entity.TypeLight) {
+		parts := strings.Split(string(lightID), ".")
+		return strings.Join(parts[1:], "_")
+	}
+
+	return string(lightID)
 }
 
 func homeAssistantDevice(topics Topics) HomeAssistantDevice {

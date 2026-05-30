@@ -40,3 +40,12 @@ func IsIDForUnit(value string, unitID string, entityType Type) bool {
 		parts[1] == string(entityType) &&
 		IsLocalID(parts[2])
 }
+
+func LocalID(value string, entityType Type) (string, bool) {
+	parts := strings.Split(value, ".")
+	if len(parts) != 3 || !IsLocalID(parts[0]) || parts[1] != string(entityType) || !IsLocalID(parts[2]) {
+		return "", false
+	}
+
+	return parts[2], true
+}

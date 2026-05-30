@@ -178,7 +178,7 @@ See `docs/distributed-light-model.md` for the current naming and routing directi
 - [ ] Build registry and index lookups from the unit-local projection
 - [x] Keep local sysfs light execution working under the new model
 - [ ] Represent remote targets without executing them yet
-- [ ] Keep MQTT observability compatible with the new semantic model
+- [x] Keep MQTT observability compatible with the new semantic model
 
 Current status:
 
@@ -190,11 +190,11 @@ Current status:
 - Config-to-entity translation currently lives in `internal/config` to keep parsed YAML models and domain models separate
 - Local-only bindings are projected from semantic `source` and `target` references and remote targets are still skipped
 - Controller coverage now verifies that projected global config can drive local sysfs light execution with semantic button and light IDs
+- MQTT topics and Home Assistant discovery keep local entity topic segments while command handling maps those segments back to semantic light IDs
 
 Next useful checks:
 
 - Exercise controller and registry behavior from the global config projection rather than hand-built bare-ID entity roots
-- Decide how MQTT topics and Home Assistant discovery should handle globally qualified semantic IDs versus local topic segments
 - Introduce remote target representation once local semantic IDs are proven through the runtime path
 
 **Deliverable**: The existing multi-unit light topology can be represented in the global config tree and projected into unit-local runtime indexes before Modbus execution is added.

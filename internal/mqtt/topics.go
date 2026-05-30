@@ -35,11 +35,11 @@ func RelayStateTopic(topics Topics, relayID entity.RelayID) string {
 }
 
 func LightStateTopic(topics Topics, lightID entity.LightID) string {
-	return joinTopic(topics, "units", topics.UnitID, "lights", string(lightID), "state")
+	return joinTopic(topics, "units", topics.UnitID, "lights", lightTopicSegment(lightID), "state")
 }
 
 func LightCommandTopic(topics Topics, lightID entity.LightID) string {
-	return joinTopic(topics, "units", topics.UnitID, "lights", string(lightID), "command")
+	return joinTopic(topics, "units", topics.UnitID, "lights", lightTopicSegment(lightID), "command")
 }
 
 func LightCommandSubscriptionTopic(topics Topics) string {
@@ -52,12 +52,12 @@ func ParseLightCommandTopic(topics Topics, topic string) (entity.LightID, bool) 
 		return "", false
 	}
 
-	lightID := strings.TrimSuffix(strings.TrimPrefix(topic, prefix), "/command")
-	if lightID == "" || strings.Contains(lightID, "/") {
+	localID := strings.TrimSuffix(strings.TrimPrefix(topic, prefix), "/command")
+	if !entity.IsLocalID(localID) || strings.Contains(localID, "/") {
 		return "", false
 	}
 
-	return entity.LightID(lightID), true
+	return entity.LightID(entity.NewID(topics.UnitID, entity.TypeLight, localID)), true
 }
 
 func HomeAssistantDeviceDiscoveryTopic(topics Topics) string {
@@ -76,4 +76,12 @@ func joinTopic(topics Topics, parts ...string) string {
 
 func homeAssistantUniqueID(topics Topics, entityID string) string {
 	return strings.Join([]string{"nest", topics.UnitID, entityID}, "_")
+}
+
+func lightTopicSegment(lightID entity.LightID) string {
+	if localID, ok := entity.LocalID(string(lightID), entity.TypeLight); ok {
+		return localID
+	}
+
+	return string(lightID)
 }
