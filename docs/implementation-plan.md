@@ -176,7 +176,7 @@ See `docs/distributed-light-model.md` for the current naming and routing directi
 - [x] Separate semantic entities from actor-local sysfs addresses through typed endpoint references
 - [x] Reshape bindings around semantic `source` and `target` references for local light execution
 - [ ] Build registry and index lookups from the unit-local projection
-- [ ] Keep local sysfs light execution working under the new model
+- [x] Keep local sysfs light execution working under the new model
 - [ ] Represent remote targets without executing them yet
 - [ ] Keep MQTT observability compatible with the new semantic model
 
@@ -189,6 +189,7 @@ Current status:
 - Semantic ID construction and validation helpers live in `internal/entity`
 - Config-to-entity translation currently lives in `internal/config` to keep parsed YAML models and domain models separate
 - Local-only bindings are projected from semantic `source` and `target` references and remote targets are still skipped
+- Controller coverage now verifies that projected global config can drive local sysfs light execution with semantic button and light IDs
 
 Next useful checks:
 

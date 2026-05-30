@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mhemeryck/nest/internal/config"
 	"github.com/mhemeryck/nest/internal/controller/event"
 	"github.com/mhemeryck/nest/internal/entity"
 	"github.com/mhemeryck/nest/internal/mqtt"
@@ -112,6 +113,37 @@ func TestHandleStateChangeDoesNotPublishRawInputOrButtonState(t *testing.T) {
 
 	assert.Empty(t, mqttCommands)
 
+	sysfsCommand := <-sysfsCommands
+	assert.Equal(t, sysfs.ToggleCommand, sysfsCommand.Kind)
+	assert.Equal(t, "ro_3_14", sysfsCommand.DeviceID)
+}
+
+func TestProjectedConfigStateChangeTogglesLocalLight(t *testing.T) {
+	configRoot, err := config.Load(filepath.Join("..", "..", "test", "fixtures", "config.local.yaml"), "controller_1")
+	require.NoError(t, err)
+	root := config.ToEntityRoot(configRoot)
+	index := registry.Build(root)
+	sysfsCommands := make(chan sysfs.Command, 1)
+	mqttCommands := make(chan mqtt.Command, 2)
+	semanticEvents := make(chan event.Event, 2)
+
+	normalizeStateChange(t.Context(), index, semanticEvents, sysfs.StateChange{
+		Device:   sysfs.Device{Identifier: "di_3_16", Path: "/sys/di_3_16/di_value"},
+		OldValue: sysfs.Off,
+		NewValue: sysfs.On,
+		IsRising: true,
+	})
+	inputEvent := <-semanticEvents
+	buttonEvent := <-semanticEvents
+
+	assert.Equal(t, event.DigitalInputStateKind, inputEvent.Kind)
+	assert.Equal(t, event.PushButtonPressedKind, buttonEvent.Kind)
+	assert.Equal(t, entity.PushButtonID("controller_1.button.office_button"), buttonEvent.PushButton.ButtonID)
+
+	dispatchEvent(t.Context(), root, index, sysfsCommands, mqttCommands, mqtt.NewTopics("nest", "controller_1"), inputEvent)
+	dispatchEvent(t.Context(), root, index, sysfsCommands, mqttCommands, mqtt.NewTopics("nest", "controller_1"), buttonEvent)
+
+	assert.Empty(t, mqttCommands)
 	sysfsCommand := <-sysfsCommands
 	assert.Equal(t, sysfs.ToggleCommand, sysfsCommand.Kind)
 	assert.Equal(t, "ro_3_14", sysfsCommand.DeviceID)
