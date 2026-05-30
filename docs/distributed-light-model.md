@@ -369,7 +369,34 @@ The source event can be observed by multiple interested target units without the
 Some transports do not support symmetric event publication.
 Modbus RTU is the important example because a slave does not spontaneously publish events to the bus.
 
-For Modbus-backed remote control, the source-side unit may need to evaluate the binding and issue a concrete remote write through a Modbus master actor.
+For Modbus-backed remote control, the source-side unit may need to initiate the bus transaction through a Modbus master actor.
+That does not necessarily mean the source-side unit must resolve the final semantic action itself.
+
+There are two useful Modbus interpretations.
+
+#### Event Signal Writes
+
+The existing `modbusbackup` setup effectively uses Modbus writes as event delivery.
+The source-side unit observes an input event and writes a configured coil on the target-side slave.
+The target-side unit treats that incoming write as a trigger, reads its local output state, and applies the semantic action locally.
+
+```text
+panel_1 button event
+  -> panel_1 Modbus master writes event coil on garage_io
+  -> garage_io Modbus slave receives the write
+  -> garage_io treats the write as a source event or trigger
+  -> garage_io resolves toggle against local driveway state
+  -> garage_io executes the local actuator command
+```
+
+In this mode, the Modbus coil does not represent the final light state.
+It represents a source event or trigger delivered through a master-initiated transport.
+This preserves target-side state authority while fitting Modbus RTU's master/slave mechanics.
+
+#### Concrete Command Writes
+
+Modbus can also expose concrete actuator or state control points.
+In that mode, the source-side unit evaluates the binding and writes the resulting concrete value through the Modbus master actor.
 
 ```text
 panel_1 button event
@@ -388,7 +415,8 @@ Projection should decide which bindings and source events are relevant to a unit
 Actor capabilities should influence whether a binding is executed locally, through event replication, or through command routing.
 
 For MQTT, a likely direction is target-side execution from replicated semantic source events.
-For Modbus, a likely direction is source-side command routing because of the protocol's master/slave shape.
+For Modbus, the existing backup setup suggests a first direction where master writes deliver event signals to a target-side slave, and the target-side unit still resolves the action locally.
+Concrete Modbus command routing remains useful for transports or entities that expose actuator state directly.
 
 This means phase 7 should represent remote bindings without committing to one universal routing strategy.
 Later transport phases can implement the appropriate execution strategy per actor.

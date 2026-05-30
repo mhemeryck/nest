@@ -191,7 +191,7 @@ Current status:
 - Local-only bindings are projected from semantic `source` and `target` references and remote targets are still skipped
 - Controller coverage now verifies that projected global config can drive local sysfs light execution with semantic button and light IDs
 - MQTT topics and Home Assistant discovery keep local entity topic segments while command handling maps those segments back to semantic light IDs
-- Binding execution strategy is now documented as transport-dependent: MQTT may use replicated semantic source events with target-side execution, while Modbus likely needs source-side command routing
+- Binding execution strategy is now documented as transport-dependent: MQTT may use replicated semantic source events with target-side execution, while Modbus may deliver event signals through master writes or expose concrete command points depending on the actor model
 
 Next useful checks:
 
