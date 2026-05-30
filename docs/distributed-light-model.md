@@ -306,6 +306,93 @@ At runtime, those local references are resolved to fully qualified semantic IDs 
 The implementation plan tracks current phase-7 progress.
 This document describes the intended model rather than active task status.
 
+## Binding Execution Strategies
+
+Bindings describe semantic relationships between entities.
+They should not assume that the unit which observes the source also executes the target action.
+
+Example:
+
+```yaml
+bindings:
+  - source: panel_1.button.entry_right
+    target: garage_io.light.driveway
+    action: toggle
+```
+
+This means:
+
+```text
+when panel_1.button.entry_right triggers, apply toggle to garage_io.light.driveway
+```
+
+It does not by itself decide whether `panel_1` sends a command to `garage_io`, or whether `garage_io` observes the source event and executes the action locally.
+
+There are at least three execution strategies.
+
+### 1. Local Execution
+
+When source and target are owned by the same unit, the owning unit can evaluate and execute the binding locally.
+
+```text
+panel_1 button event
+  -> panel_1 binding evaluation
+  -> panel_1 light action
+  -> panel_1 local actor command
+```
+
+This is the current implemented path for local sysfs-backed lights.
+
+### 2. Pub/Sub Event Replication
+
+When a transport can publish semantic events to interested units, the source-owning unit can publish source events and the target-owning unit can evaluate bindings that target its local entities.
+
+MQTT fits this pattern well.
+
+```text
+panel_1 observes panel_1.button.entry_right pressed
+  -> panel_1 publishes the semantic button event
+  -> garage_io receives the source event because a binding targets garage_io.light.driveway
+  -> garage_io evaluates the binding
+  -> garage_io resolves toggle against local driveway state
+  -> garage_io executes the local actuator command
+```
+
+This avoids sending remote `TOGGLE` commands.
+The target-owning unit keeps authority over its own state and translates semantic actions such as `toggle` into concrete local effects.
+
+This also matches the way MQTT naturally works as a publish/subscribe bus.
+The source event can be observed by multiple interested target units without the source unit knowing every transport detail of every target.
+
+### 3. Command Routing
+
+Some transports do not support symmetric event publication.
+Modbus RTU is the important example because a slave does not spontaneously publish events to the bus.
+
+For Modbus-backed remote control, the source-side unit may need to evaluate the binding and issue a concrete remote write through a Modbus master actor.
+
+```text
+panel_1 button event
+  -> panel_1 binding evaluation
+  -> panel_1 resolves a remote target route
+  -> panel_1 Modbus master writes a remote actuator or coil
+```
+
+This route may require state knowledge on the source side if the semantic action is state-dependent.
+For example, resolving `toggle` into `ON` or `OFF` requires a current-enough view of the target state unless the target-side protocol explicitly supports semantic toggle actions.
+
+### Consequences
+
+Bindings should remain transport-independent semantic rules.
+Projection should decide which bindings and source events are relevant to a unit.
+Actor capabilities should influence whether a binding is executed locally, through event replication, or through command routing.
+
+For MQTT, a likely direction is target-side execution from replicated semantic source events.
+For Modbus, a likely direction is source-side command routing because of the protocol's master/slave shape.
+
+This means phase 7 should represent remote bindings without committing to one universal routing strategy.
+Later transport phases can implement the appropriate execution strategy per actor.
+
 ## Modbus Transport Direction
 
 The current distributed light model has to fit the existing hardware topology.
