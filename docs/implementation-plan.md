@@ -167,7 +167,7 @@ Notes from the current Home Assistant migration context:
 
 ## Phase 7: Distributed Light Control Model
 
-See `docs/distributed-light-model.md` for the current naming and routing direction.
+See [Distributed Light Model](distributed-light-model.md) for the current naming and routing direction.
 
 - [x] Replace the local flat config with the global `actors` / `units` / `bindings` tree
 - [x] Add explicit runtime unit selection via positional CLI argument
@@ -175,10 +175,14 @@ See `docs/distributed-light-model.md` for the current naming and routing directi
 - [x] Represent semantic entity IDs as derived global IDs from unit, entity type, and bare local ID
 - [x] Separate semantic entities from actor-local sysfs addresses through typed endpoint references
 - [x] Reshape bindings around semantic `source` and `target` references for local light execution
-- [ ] Build registry and index lookups from the unit-local projection
+- [ ] Build distributed binding indexes from the unit-local projection
 - [x] Keep local sysfs light execution working under the new model
-- [ ] Represent remote targets without executing them yet
 - [x] Keep MQTT observability compatible with the new semantic model
+- [ ] Represent remote bindings from both source-local and target-local perspectives
+- [ ] Publish semantic source events over MQTT for projected local sources
+- [ ] Subscribe to semantic source events needed by target-local bindings
+- [ ] Execute target-local bindings from replicated MQTT source events
+- [ ] Represent Modbus event-signal routes without executing them yet
 
 Current status:
 
@@ -196,10 +200,11 @@ Current status:
 Next useful checks:
 
 - Exercise controller and registry behavior from the global config projection rather than hand-built bare-ID entity roots
-- Introduce remote target representation once local semantic IDs are proven through the runtime path
-- Decide the first transport-specific execution strategy for remote bindings after remote target representation exists
+- Introduce remote binding projection once local semantic IDs are proven through the runtime path
+- Prove MQTT semantic event sharing from a source-owning unit to a target-owning unit
+- Keep Modbus event-signal representation separate from Modbus execution until the Modbus actor phase
 
-**Deliverable**: The existing multi-unit light topology can be represented in the global config tree and projected into unit-local runtime indexes before Modbus execution is added.
+**Deliverable**: The existing multi-unit light topology can be represented in the global config tree, projected into unit-local runtime indexes, and proven with MQTT-based semantic event sharing before Modbus execution is added.
 
 ## Phase 8: Modbus RTU Transport
 

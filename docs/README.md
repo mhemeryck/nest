@@ -23,13 +23,17 @@ codebase.
 - [Repositories](repos.md) - Overview of existing repositories, roles, and migration context
 - [Covers](covers.md) - Cover controller behavior, legacy approach, and planned `nest` implementation
 - [Sysfs](sysfs.md) - Unipi sysfs interface and how `nest` uses or plans to use it
+- [Home Automation Landscape](home-automation-landscape.md) - Broader protocol and system context behind `nest`'s transport model
+- [Distributed Light Model](distributed-light-model.md) - Phase 7 semantic entity, binding, and distributed execution model
 
 ## Reading Order
 
 1. Start with [architecture.md](architecture.md) for system context
 2. Review [repos.md](repos.md) to understand the current multi-repo landscape
 3. Read [design.md](design.md) for the intended consolidation direction
-4. Use [sysfs.md](sysfs.md) and [covers.md](covers.md) for subsystem details
+4. Read [home-automation-landscape.md](home-automation-landscape.md) for protocol and transport context
+5. Read [distributed-light-model.md](distributed-light-model.md) for the current distributed light control direction
+6. Use [sysfs.md](sysfs.md) and [covers.md](covers.md) for subsystem details
 
 ## Key Decisions
 

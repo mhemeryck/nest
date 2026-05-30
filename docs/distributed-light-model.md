@@ -4,6 +4,7 @@
 
 This note captures the naming and routing direction for distributed light control.
 It is the design reference for implementation plan phase 7.
+See [Home Automation Landscape](home-automation-landscape.md) for the broader system comparison that motivates the transport capability and binding execution strategy choices.
 
 The immediate goal is to let `nest` represent cross-unit light control cleanly before Modbus execution exists.
 The longer-term goal is to let sysfs, MQTT, and Modbus act as transport actors behind the same controller-level semantic model.
