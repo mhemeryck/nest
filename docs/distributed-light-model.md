@@ -304,6 +304,68 @@ The difference should emerge from resolution and routing.
 Within one unit, local references should remain short and section-scoped.
 At runtime, those local references are resolved to fully qualified semantic IDs and actor-local addresses through the owning unit context.
 
+### Cross-Unit Toggle Flow
+
+The global config describes the behavior once, but each running unit evaluates the part of that behavior relevant to itself.
+Actors and controller layers communicate through async channels.
+For a remote light toggle, the source-owning unit turns a local hardware observation into a semantic event, evaluates the source-local binding view, and sends a transport command.
+The target-owning unit receives the transport observation, turns it back into a semantic event, evaluates the target-local binding view, and resolves the derived semantic light action to local actuator output.
+
+```mermaid
+flowchart TD
+    classDef actor fill:#f7f7f7,stroke:#777,stroke-width:1px
+    classDef channel fill:#e8f3ff,stroke:#1f77b4,stroke-width:2px
+    classDef controller fill:#fff3d6,stroke:#c98500,stroke-width:2px
+    classDef semantic fill:#eaf7ea,stroke:#2f8f2f,stroke-width:2px
+    classDef command fill:#f4e8ff,stroke:#7a3db8,stroke-width:2px
+    classDef transport fill:#ffecec,stroke:#c43d3d,stroke-width:2px
+
+    subgraph c1["controller_1"]
+        di["actor observation<br/>sysfs digital input<br/>di_3_16 rising"]:::actor
+        state_changes["async channel<br/>stateChanges"]:::channel
+        normalize["controller layer<br/>normalizer"]:::controller
+        semantic1["async channel<br/>semanticEvents"]:::channel
+        button["semantic message<br/>controller_1.button.office_button pressed"]:::semantic
+        source_binding["controller layer<br/>source-local binding view<br/>target: controller_2.light.hall_light<br/>action: toggle"]:::controller
+        transport_commands["async channel<br/>transport commands"]:::channel
+        outbound["actor command<br/>publish or write source event"]:::command
+
+        di --> state_changes
+        state_changes --> normalize
+        normalize --> button
+        button --> semantic1
+        semantic1 --> source_binding
+        source_binding --> transport_commands
+        transport_commands --> outbound
+    end
+
+    transport["transport actor<br/>MQTT or Modbus"]:::transport
+
+    subgraph c2["controller_2"]
+        inbound["actor observation<br/>received source event"]:::actor
+        transport_events["async channel<br/>transport events"]:::channel
+        normalize_remote["controller layer<br/>normalizer"]:::controller
+        semantic2["async channel<br/>semanticEvents"]:::channel
+        remote_event["semantic message<br/>controller_1.button.office_button pressed"]:::semantic
+        target_binding["controller layer<br/>target-local binding view<br/>source matches remote event"]:::controller
+        light_action["semantic message<br/>controller_2.light.hall_light toggle"]:::semantic
+        sysfs_commands["async channel<br/>sysfs commands"]:::channel
+        relay["actor command<br/>sysfs relay ro_3_14 toggle"]:::command
+
+        inbound --> transport_events
+        transport_events --> normalize_remote
+        normalize_remote --> remote_event
+        remote_event --> semantic2
+        semantic2 --> target_binding
+        target_binding --> light_action
+        light_action --> sysfs_commands
+        sysfs_commands --> relay
+    end
+
+    outbound --> transport
+    transport --> inbound
+```
+
 The implementation plan tracks current phase-7 progress.
 This document describes the intended model rather than active task status.
 
