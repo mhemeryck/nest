@@ -79,25 +79,3 @@ func semanticEventsFromStateChange(index *registry.Index, stateChange sysfs.Stat
 
 	return nil, false
 }
-
-func lightEventsFromPushButton(index *registry.Index, pushButton event.PushButton) []event.Event {
-	bindings := registry.BindingsByButton(index, pushButton.ButtonID)
-	lightEvents := make([]event.Event, 0, len(bindings))
-	for _, binding := range bindings {
-		name := ""
-		if light, ok := registry.LightByID(index, binding.Light); ok {
-			name = light.Name
-		}
-
-		lightEvents = append(lightEvents, event.Event{
-			Kind: event.LightKind,
-			Light: &event.Light{
-				LightID: binding.Light,
-				Name:    name,
-				Action:  binding.Action,
-			},
-		})
-	}
-
-	return lightEvents
-}

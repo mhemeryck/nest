@@ -67,7 +67,7 @@ func TestDispatchPushButtonEventTogglesLightRelay(t *testing.T) {
 	commands := make(chan sysfs.Command, 1)
 
 	logs := captureLogs(t, func() {
-		dispatchEvent(t.Context(), &entity.Root{}, index, commands, nil, mqtt.Topics{}, event.Event{
+		dispatchQueuedTestEvents(t.Context(), &entity.Root{}, index, commands, nil, mqtt.Topics{}, event.Event{
 			Kind: event.PushButtonPressedKind,
 			PushButton: &event.PushButton{
 				ButtonID: entity.PushButtonID("office_button"),
@@ -89,6 +89,29 @@ func TestDispatchPushButtonEventTogglesLightRelay(t *testing.T) {
 	assert.Equal(t, "1\n", string(data))
 }
 
+func TestDispatchPushButtonEventDerivesLightEvent(t *testing.T) {
+	index := registry.Build(&entity.Root{
+		PushButtons: []entity.PushButton{{ID: entity.PushButtonID("office_button"), Name: "Office button", Input: entity.DigitalInputID("office_button_input")}},
+		Lights:      []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
+		Bindings:    []entity.Binding{{Button: entity.PushButtonID("office_button"), Light: entity.LightID("office_light"), Action: entity.LightActionToggle}},
+	})
+	sysfsCommands := make(chan sysfs.Command, 1)
+
+	derivedEvents := dispatchEvent(t.Context(), &entity.Root{}, index, sysfsCommands, nil, mqtt.Topics{}, event.Event{
+		Kind: event.PushButtonPressedKind,
+		PushButton: &event.PushButton{
+			ButtonID: entity.PushButtonID("office_button"),
+			Name:     "Office button",
+		},
+	})
+
+	require.Len(t, derivedEvents, 1)
+	assert.Equal(t, event.LightKind, derivedEvents[0].Kind)
+	assert.Equal(t, entity.LightID("office_light"), derivedEvents[0].Light.LightID)
+	assert.Equal(t, entity.LightActionToggle, derivedEvents[0].Light.Action)
+	assert.Empty(t, sysfsCommands)
+}
+
 func TestHandleStateChangeDoesNotPublishRawInputOrButtonState(t *testing.T) {
 	index := registry.Build(&entity.Root{
 		DigitalInputs: []entity.DigitalInput{{ID: entity.DigitalInputID("office_button_input"), SysfsDevice: entity.SysfsDeviceID("di_3_16")}},
@@ -108,8 +131,7 @@ func TestHandleStateChangeDoesNotPublishRawInputOrButtonState(t *testing.T) {
 		NewValue: sysfs.On,
 		IsRising: true,
 	})
-	dispatchEvent(t.Context(), &entity.Root{}, index, sysfsCommands, mqttCommands, topics, <-semanticEvents)
-	dispatchEvent(t.Context(), &entity.Root{}, index, sysfsCommands, mqttCommands, topics, <-semanticEvents)
+	dispatchQueuedTestEvents(t.Context(), &entity.Root{}, index, sysfsCommands, mqttCommands, topics, <-semanticEvents, <-semanticEvents)
 
 	assert.Empty(t, mqttCommands)
 
@@ -140,8 +162,7 @@ func TestProjectedConfigStateChangeTogglesLocalLight(t *testing.T) {
 	assert.Equal(t, event.PushButtonPressedKind, buttonEvent.Kind)
 	assert.Equal(t, entity.PushButtonID("controller_1.button.office_button"), buttonEvent.PushButton.ButtonID)
 
-	dispatchEvent(t.Context(), root, index, sysfsCommands, mqttCommands, mqtt.NewTopics("nest", "controller_1"), inputEvent)
-	dispatchEvent(t.Context(), root, index, sysfsCommands, mqttCommands, mqtt.NewTopics("nest", "controller_1"), buttonEvent)
+	dispatchQueuedTestEvents(t.Context(), root, index, sysfsCommands, mqttCommands, mqtt.NewTopics("nest", "controller_1"), inputEvent, buttonEvent)
 
 	assert.Empty(t, mqttCommands)
 	sysfsCommand := <-sysfsCommands
@@ -294,8 +315,7 @@ func TestHandleStateChangeLogsPushButtonRelease(t *testing.T) {
 			NewValue: sysfs.Off,
 			IsRising: false,
 		})
-		dispatchEvent(t.Context(), &entity.Root{}, index, nil, nil, mqtt.Topics{}, <-semanticEvents)
-		dispatchEvent(t.Context(), &entity.Root{}, index, nil, nil, mqtt.Topics{}, <-semanticEvents)
+		dispatchQueuedTestEvents(t.Context(), &entity.Root{}, index, nil, nil, mqtt.Topics{}, <-semanticEvents, <-semanticEvents)
 	})
 
 	assert.Contains(t, logs, "push button event")
@@ -350,4 +370,22 @@ func captureLogs(t *testing.T, fn func()) string {
 
 	require.NotEmpty(t, buffer.String())
 	return buffer.String()
+}
+
+func dispatchQueuedTestEvents(
+	ctx context.Context,
+	root *entity.Root,
+	index *registry.Index,
+	sysfsCommands chan<- sysfs.Command,
+	mqttCommands chan<- mqtt.Command,
+	mqttTopics mqtt.Topics,
+	events ...event.Event,
+) {
+	semanticEvents := make(chan event.Event, len(events))
+	for _, semanticEvent := range events {
+		semanticEvents <- semanticEvent
+	}
+	close(semanticEvents)
+
+	dispatchEvents(ctx, root, index, sysfsCommands, mqttCommands, mqttTopics, semanticEvents)
 }

@@ -118,18 +118,39 @@ func dispatchEvents(
 	mqttTopics mqtt.Topics,
 	semanticEvents <-chan event.Event,
 ) {
+	var dispatchQueue []event.Event
+	semanticEventsOpen := true
+
 	for {
+		if semanticEvent, remainingEvents, ok := popEvent(dispatchQueue); ok {
+			dispatchQueue = append(remainingEvents, dispatchEvent(ctx, root, index, sysfsCommands, mqttCommands, mqttTopics, semanticEvent)...)
+			continue
+		}
+
+		if !semanticEventsOpen {
+			return
+		}
+
 		select {
 		case <-ctx.Done():
 			return
 		case semanticEvent, ok := <-semanticEvents:
 			if !ok {
-				return
+				semanticEventsOpen = false
+				continue
 			}
 
-			dispatchEvent(ctx, root, index, sysfsCommands, mqttCommands, mqttTopics, semanticEvent)
+			dispatchQueue = append(dispatchQueue, semanticEvent)
 		}
 	}
+}
+
+func popEvent(events []event.Event) (event.Event, []event.Event, bool) {
+	if len(events) == 0 {
+		return event.Event{}, events, false
+	}
+
+	return events[0], events[1:], true
 }
 
 func publishMQTTStartup(ctx context.Context, root *entity.Root, commands chan<- mqtt.Command) error {
