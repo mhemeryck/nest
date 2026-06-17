@@ -356,6 +356,97 @@ flowchart LR
     controller <--> queue
 ```
 
+### Multi-Controller Boundary
+
+Each controller has its own local semantic event queue.
+Remote behavior is represented by projected binding views on both sides of the transport boundary.
+Binding and routing translation is controller policy, not an actor.
+It consumes semantic events from the queue and emits derived semantic events back into that queue.
+The central controller then turns those semantic events into actor commands when needed.
+
+```mermaid
+flowchart LR
+    classDef actor fill:#f7f7f7,stroke:#777,stroke-width:1px
+    classDef channel fill:#e8f3ff,stroke:#1f77b4,stroke-width:2px
+    classDef controller fill:#fff3d6,stroke:#c98500,stroke-width:2px
+    classDef semantic fill:#eaf7ea,stroke:#2f8f2f,stroke-width:2px
+    classDef binding fill:#fff8e8,stroke:#d08a00,stroke-width:2px
+    classDef transport fill:#ffecec,stroke:#c43d3d,stroke-width:2px
+
+    subgraph c1["controller_1 runtime"]
+        direction TB
+        subgraph c1_sysfs_boundary["sysfs boundary"]
+            direction TB
+            c1_sysfs["sysfs actor"]:::actor
+            c1_sysfs_events["observations channel"]:::channel
+            c1_sysfs_commands["commands channel"]:::channel
+        end
+
+        subgraph c1_transport_boundary["transport boundary"]
+            direction TB
+            c1_transport["transport actor"]:::transport
+            c1_transport_events["observations channel"]:::channel
+            c1_transport_commands["commands channel"]:::channel
+        end
+
+        subgraph c1_controller_boundary["controller boundary"]
+            direction TB
+            c1_controller["central controller"]:::controller
+            c1_queue[("semantic event queue")]:::semantic
+            c1_source["binding/routing policy<br/>source-local view<br/>local source, remote target"]:::binding
+        end
+
+        c1_sysfs --> c1_sysfs_events --> c1_controller
+        c1_controller --> c1_sysfs_commands --> c1_sysfs
+        c1_transport --> c1_transport_events --> c1_controller
+        c1_controller --> c1_transport_commands --> c1_transport
+        c1_controller <--> c1_queue
+        c1_queue --> c1_source
+        c1_source -- "emit remote-source event" --> c1_queue
+        c1_queue --> c1_controller
+    end
+
+    subgraph link["transport link"]
+        direction LR
+        wire["MQTT or Modbus"]:::transport
+    end
+
+    subgraph c2["controller_2 runtime"]
+        direction TB
+        subgraph c2_sysfs_boundary["sysfs boundary"]
+            direction TB
+            c2_sysfs["sysfs actor"]:::actor
+            c2_sysfs_events["observations channel"]:::channel
+            c2_sysfs_commands["commands channel"]:::channel
+        end
+
+        subgraph c2_transport_boundary["transport boundary"]
+            direction TB
+            c2_transport["transport actor"]:::transport
+            c2_transport_events["observations channel"]:::channel
+            c2_transport_commands["commands channel"]:::channel
+        end
+
+        subgraph c2_controller_boundary["controller boundary"]
+            direction TB
+            c2_controller["central controller"]:::controller
+            c2_queue[("semantic event queue")]:::semantic
+            c2_target["binding/routing policy<br/>target-local view<br/>remote source, local target"]:::binding
+        end
+
+        c2_sysfs --> c2_sysfs_events --> c2_controller
+        c2_controller --> c2_sysfs_commands --> c2_sysfs
+        c2_transport --> c2_transport_events --> c2_controller
+        c2_controller --> c2_transport_commands --> c2_transport
+        c2_controller <--> c2_queue
+        c2_queue --> c2_target
+        c2_target -- "emit light action" --> c2_queue
+        c2_queue --> c2_controller
+    end
+
+    c1_transport --> wire --> c2_transport
+```
+
 ### Cross-Unit Toggle Flow
 
 The global config describes the behavior once, but each running unit evaluates the part of that behavior relevant to itself.
