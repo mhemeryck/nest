@@ -304,6 +304,58 @@ The difference should emerge from resolution and routing.
 Within one unit, local references should remain short and section-scoped.
 At runtime, those local references are resolved to fully qualified semantic IDs and actor-local addresses through the owning unit context.
 
+### Controller Actor Boundary
+
+Each running `nest` process should keep actors connected only to the central controller.
+Actors exchange observations and commands with the controller through async channel pairs.
+The controller owns the local semantic event queue, where normalized observations and derived semantic events are dispatched.
+
+```mermaid
+flowchart LR
+    classDef actor fill:#f7f7f7,stroke:#777,stroke-width:1px
+    classDef channel fill:#e8f3ff,stroke:#1f77b4,stroke-width:2px
+    classDef controller fill:#fff3d6,stroke:#c98500,stroke-width:2px
+    classDef semantic fill:#eaf7ea,stroke:#2f8f2f,stroke-width:2px
+
+    subgraph sysfs_boundary["sysfs boundary"]
+        direction TB
+        sysfs["sysfs actor"]:::actor
+        sysfs_events["observations channel"]:::channel
+        sysfs_commands["commands channel"]:::channel
+    end
+
+    subgraph mqtt_boundary["mqtt boundary"]
+        direction TB
+        mqtt["mqtt actor"]:::actor
+        mqtt_events["observations channel"]:::channel
+        mqtt_commands["commands channel"]:::channel
+    end
+
+    subgraph modbus_boundary["modbus boundary"]
+        direction TB
+        modbus["modbus actor"]:::actor
+        modbus_events["observations channel"]:::channel
+        modbus_commands["commands channel"]:::channel
+    end
+
+    subgraph controller_boundary["controller boundary"]
+        direction TB
+        controller["central controller"]:::controller
+        queue[("semantic event queue")]:::semantic
+    end
+
+    sysfs --> sysfs_events --> controller
+    controller --> sysfs_commands --> sysfs
+
+    mqtt --> mqtt_events --> controller
+    controller --> mqtt_commands --> mqtt
+
+    modbus --> modbus_events --> controller
+    controller --> modbus_commands --> modbus
+
+    controller <--> queue
+```
+
 ### Cross-Unit Toggle Flow
 
 The global config describes the behavior once, but each running unit evaluates the part of that behavior relevant to itself.
