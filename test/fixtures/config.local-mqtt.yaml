@@ -57,6 +57,28 @@ units:
             actor: sysfs
             kind: relay
             id: hallway_light_relay
+  remote:
+    actors:
+      mqtt:
+        enabled: true
+      sysfs:
+        root: test/fixtures
+        poll_intervals:
+          digital_input: 100ms
+          digital_output: 250ms
+          relay_output: 1s
+        relays:
+          - id: remote_light_relay
+            name: Remote light relay
+            device: ro_3_12
+    entities:
+      lights:
+        - id: remote_light
+          name: Remote light
+          actuator:
+            actor: sysfs
+            kind: relay
+            id: remote_light_relay
 
 bindings:
   - source: local.button.office_button
@@ -64,4 +86,7 @@ bindings:
     action: toggle
   - source: local.button.hallway_button
     target: local.light.hallway_light
+    action: toggle
+  - source: local.button.office_button
+    target: remote.light.remote_light
     action: toggle

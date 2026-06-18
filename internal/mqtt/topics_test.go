@@ -21,6 +21,7 @@ func TestTopics(t *testing.T) {
 	assert.Equal(t, "nest/units/controller_1/lights/office_light/state", LightStateTopic(topics, entity.LightID("controller_1.light.office_light")))
 	assert.Equal(t, "nest/units/controller_1/lights/office_light/command", LightCommandTopic(topics, entity.LightID("controller_1.light.office_light")))
 	assert.Equal(t, "nest/units/controller_1/lights/+/command", LightCommandSubscriptionTopic(topics))
+	assert.Equal(t, "nest/units/controller_1/sources/controller_1.button.office_button/event", SemanticSourceEventTopic(topics, entity.ID("controller_1.button.office_button")))
 	assert.Equal(t, "homeassistant/device/nest_controller_1_unit/config", HomeAssistantDeviceDiscoveryTopic(topics))
 }
 

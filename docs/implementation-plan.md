@@ -179,7 +179,7 @@ See [Distributed Light Model](distributed-light-model.md) for the current naming
 - [x] Keep local sysfs light execution working under the new model
 - [x] Keep MQTT observability compatible with the new semantic model
 - [x] Represent remote bindings from both source-local and target-local perspectives
-- [ ] Publish semantic source events over MQTT for projected local sources
+- [x] Publish semantic source events over MQTT for projected local sources
 - [ ] Subscribe to semantic source events needed by target-local bindings
 - [ ] Execute target-local bindings from replicated MQTT source events
 - [ ] Represent Modbus event-signal routes without executing them yet
@@ -198,11 +198,11 @@ Current status:
 - Controller coverage now verifies that projected global config can drive local sysfs light execution with semantic button and light IDs
 - MQTT topics and Home Assistant discovery keep local entity topic segments while command handling maps those segments back to semantic light IDs
 - Binding execution strategy is now documented as transport-dependent: MQTT may use replicated semantic source events with target-side execution, while Modbus may deliver event signals through master writes or expose concrete command points depending on the actor model
+- Source-local remote bindings now publish non-retained MQTT semantic source events for button press and release events
 
 Next useful checks:
 
 - Exercise controller and registry behavior from the global config projection rather than hand-built bare-ID entity roots
-- Prove MQTT semantic source event publishing from a source-owning unit
 - Subscribe target-owning units to the semantic source events required by their projected target-local bindings
 - Execute target-local bindings from replicated MQTT semantic source events
 - Keep Modbus event-signal representation separate from Modbus execution until the Modbus actor phase

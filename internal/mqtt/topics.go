@@ -46,6 +46,10 @@ func LightCommandSubscriptionTopic(topics Topics) string {
 	return joinTopic(topics, "units", topics.UnitID, "lights", "+", "command")
 }
 
+func SemanticSourceEventTopic(topics Topics, sourceID entity.ID) string {
+	return joinTopic(topics, "units", topics.UnitID, "sources", string(sourceID), "event")
+}
+
 func ParseLightCommandTopic(topics Topics, topic string) (entity.LightID, bool) {
 	prefix := joinTopic(topics, "units", topics.UnitID, "lights") + "/"
 	if !strings.HasPrefix(topic, prefix) || !strings.HasSuffix(topic, "/command") {

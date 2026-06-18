@@ -29,3 +29,16 @@ func TestLightStateMessage(t *testing.T) {
 	assert.True(t, message.Retain)
 	assert.Equal(t, byte(0), message.QoS)
 }
+
+func TestSemanticSourceEventMessage(t *testing.T) {
+	message, err := SemanticSourceEventMessage(NewTopics("nest", "controller_1"), SemanticSourceEventObservation{
+		SourceID: entity.ID("controller_1.button.office_button"),
+		Event:    "pressed",
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "nest/units/controller_1/sources/controller_1.button.office_button/event", message.Topic)
+	assert.JSONEq(t, `{"source":"controller_1.button.office_button","event":"pressed"}`, string(message.Payload))
+	assert.False(t, message.Retain)
+	assert.Equal(t, byte(0), message.QoS)
+}

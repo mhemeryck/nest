@@ -170,6 +170,33 @@ func TestProjectedConfigStateChangeTogglesLocalLight(t *testing.T) {
 	assert.Equal(t, "ro_3_14", sysfsCommand.DeviceID)
 }
 
+func TestDispatchPushButtonEventPublishesRemoteSourceEvent(t *testing.T) {
+	root := &entity.Root{
+		PushButtons: []entity.PushButton{{ID: entity.PushButtonID("controller_1.button.office_button"), Name: "Office button", Input: entity.DigitalInputID("controller_1.digital_input.office_button_input")}},
+		RemoteSourceBindings: []entity.Binding{{
+			Source: entity.ID("controller_1.button.office_button"),
+			Target: entity.ID("controller_2.light.hall_light"),
+			Action: entity.ActionToggle,
+		}},
+	}
+	index := registry.Build(root)
+	mqttCommands := make(chan mqtt.Command, 1)
+
+	dispatchEvent(t.Context(), root, index, nil, mqttCommands, mqtt.NewTopics("nest", "controller_1"), event.Event{
+		Kind: event.PushButtonPressedKind,
+		PushButton: &event.PushButton{
+			ButtonID: entity.PushButtonID("controller_1.button.office_button"),
+			Name:     "Office button",
+		},
+	})
+
+	command := <-mqttCommands
+	assert.Equal(t, mqtt.PublishCommandKind, command.Kind)
+	assert.Equal(t, "nest/units/controller_1/sources/controller_1.button.office_button/event", command.Publish.Topic)
+	assert.JSONEq(t, `{"source":"controller_1.button.office_button","event":"pressed"}`, string(command.Publish.Payload))
+	assert.False(t, command.Publish.Retain)
+}
+
 func TestHandleStateChangePublishesMappedLightState(t *testing.T) {
 	index := registry.Build(&entity.Root{
 		Lights: []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},

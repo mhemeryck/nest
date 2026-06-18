@@ -23,7 +23,7 @@ func dispatchEvent(
 	logSemanticEvent(busEvent)
 	derivedEvents := bindingEventsFromEvent(index, busEvent)
 	dispatchSysfsCommand(ctx, index, sysfsCommands, busEvent)
-	dispatchMQTTCommand(ctx, root, mqttCommands, mqttTopics, busEvent)
+	dispatchMQTTCommand(ctx, root, index, mqttCommands, mqttTopics, busEvent)
 
 	return derivedEvents
 }
@@ -35,8 +35,10 @@ func dispatchSysfsCommand(ctx context.Context, index *registry.Index, commands c
 	}
 }
 
-func dispatchMQTTCommand(ctx context.Context, root *entity.Root, commands chan<- mqtt.Command, topics mqtt.Topics, busEvent event.Event) {
+func dispatchMQTTCommand(ctx context.Context, root *entity.Root, index *registry.Index, commands chan<- mqtt.Command, topics mqtt.Topics, busEvent event.Event) {
 	switch busEvent.Kind {
+	case event.PushButtonPressedKind, event.PushButtonReleasedKind:
+		publishPushButtonSourceEvent(ctx, index, commands, topics, busEvent.Kind, *busEvent.PushButton)
 	case event.LightStateKind:
 		publishLightState(ctx, commands, topics, *busEvent.LightState)
 	case event.MQTTConnectedKind:

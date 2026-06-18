@@ -35,6 +35,22 @@ func TestLoad(t *testing.T) {
 	assert.Equal(t, []string{"di_3_16", "ro_3_14"}, DeviceIDs(file))
 }
 
+func TestLoadLocalMQTTFixtureProjectsRemoteSourceBinding(t *testing.T) {
+	path := filepath.Join("..", "..", "test", "fixtures", "config.local-mqtt.yaml")
+
+	file, err := Load(path, "local")
+	require.NoError(t, err)
+
+	assert.Equal(t, "local", file.MQTT.UnitID)
+	assert.True(t, file.MQTT.Enabled)
+	require.Len(t, file.RemoteSourceBindings, 1)
+	assert.Equal(t, BindingConfig{
+		Source: "local.button.office_button",
+		Target: "remote.light.remote_light",
+		Action: BindingActionToggle,
+	}, file.RemoteSourceBindings[0])
+}
+
 func TestLoadRejectsUnknownUnit(t *testing.T) {
 	path := filepath.Join("..", "..", "test", "fixtures", "config.local.yaml")
 

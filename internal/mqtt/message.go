@@ -25,6 +25,11 @@ type LightObservation struct {
 	State   string `json:"state"`
 }
 
+type SemanticSourceEventObservation struct {
+	SourceID entity.ID
+	Event    string
+}
+
 func AvailabilityMessage(topics Topics, status AvailabilityStatus) PublishMessage {
 	return PublishMessage{
 		Topic:   AvailabilityTopic(topics),
@@ -46,6 +51,26 @@ func LightStateMessage(topics Topics, observation LightObservation) (PublishMess
 		Topic:   LightStateTopic(topics, observation.LightID),
 		Payload: payload,
 		Retain:  true,
+		QoS:     0,
+	}, nil
+}
+
+func SemanticSourceEventMessage(topics Topics, observation SemanticSourceEventObservation) (PublishMessage, error) {
+	payload, err := json.Marshal(struct {
+		Source string `json:"source"`
+		Event  string `json:"event"`
+	}{
+		Source: string(observation.SourceID),
+		Event:  observation.Event,
+	})
+	if err != nil {
+		return PublishMessage{}, err
+	}
+
+	return PublishMessage{
+		Topic:   SemanticSourceEventTopic(topics, observation.SourceID),
+		Payload: payload,
+		Retain:  false,
 		QoS:     0,
 	}, nil
 }
