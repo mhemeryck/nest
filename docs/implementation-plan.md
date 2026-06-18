@@ -175,10 +175,10 @@ See [Distributed Light Model](distributed-light-model.md) for the current naming
 - [x] Represent semantic entity IDs as derived global IDs from unit, entity type, and bare local ID
 - [x] Separate semantic entities from actor-local sysfs addresses through typed endpoint references
 - [x] Reshape bindings around semantic `source` and `target` references for local light execution
-- [ ] Build distributed binding indexes from the unit-local projection
+- [x] Build distributed binding indexes from the unit-local projection
 - [x] Keep local sysfs light execution working under the new model
 - [x] Keep MQTT observability compatible with the new semantic model
-- [ ] Represent remote bindings from both source-local and target-local perspectives
+- [x] Represent remote bindings from both source-local and target-local perspectives
 - [ ] Publish semantic source events over MQTT for projected local sources
 - [ ] Subscribe to semantic source events needed by target-local bindings
 - [ ] Execute target-local bindings from replicated MQTT source events
@@ -189,10 +189,12 @@ Current status:
 - Global config loading and explicit CLI unit selection are implemented
 - Unit projection derives globally qualified semantic button and light IDs such as `controller_1.button.office_button`
 - Global entity config uses typed endpoint references such as `{actor: sysfs, kind: relay, id: office_light_relay}`
-- The projection still adapts into the existing local runtime config shape while runtime code catches up
+- The projection still adapts entities and actor resources into the existing local runtime config shape while runtime code catches up
 - Semantic ID construction and validation helpers live in `internal/entity`
 - Config-to-entity translation currently lives in `internal/config` to keep parsed YAML models and domain models separate
-- Local-only bindings are projected from semantic `source` and `target` references and remote targets are still skipped
+- Local bindings use generic semantic `source` and `target` references and are indexed by semantic source ID
+- Cross-unit bindings are projected into source-local and target-local remote binding views
+- Remote binding views are represented on `entity.Root` and indexed by semantic source ID in the registry
 - Controller coverage now verifies that projected global config can drive local sysfs light execution with semantic button and light IDs
 - MQTT topics and Home Assistant discovery keep local entity topic segments while command handling maps those segments back to semantic light IDs
 - Binding execution strategy is now documented as transport-dependent: MQTT may use replicated semantic source events with target-side execution, while Modbus may deliver event signals through master writes or expose concrete command points depending on the actor model
@@ -200,8 +202,9 @@ Current status:
 Next useful checks:
 
 - Exercise controller and registry behavior from the global config projection rather than hand-built bare-ID entity roots
-- Introduce remote binding projection once local semantic IDs are proven through the runtime path
-- Prove MQTT semantic event sharing from a source-owning unit to a target-owning unit
+- Prove MQTT semantic source event publishing from a source-owning unit
+- Subscribe target-owning units to the semantic source events required by their projected target-local bindings
+- Execute target-local bindings from replicated MQTT semantic source events
 - Keep Modbus event-signal representation separate from Modbus execution until the Modbus actor phase
 
 **Deliverable**: The existing multi-unit light topology can be represented in the global config tree, projected into unit-local runtime indexes, and proven with MQTT-based semantic event sharing before Modbus execution is added.
