@@ -90,6 +90,7 @@ func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
 	mqtt := global.Actors.MQTT.Broker
 	mqtt.Enabled = unit.Actors.MQTT.Enabled
 	mqtt.UnitID = unitID
+	mqtt.ClientID = projectedMQTTClientID(mqtt.ClientID, unitID)
 
 	localButtons, buttonErr := projectPushButtons(unitID, unit.Entities.Buttons)
 	localLights, lightErr := projectLights(unitID, unit.Entities.Lights)
@@ -124,6 +125,14 @@ func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
 	}
 
 	return local, nil
+}
+
+func projectedMQTTClientID(clientID string, unitID string) string {
+	if clientID == "" {
+		return ""
+	}
+
+	return fmt.Sprintf("%s-%s", clientID, unitID)
 }
 
 func projectPushButtons(unitID string, buttons []UnitPushButtonConfig) ([]PushButtonConfig, error) {

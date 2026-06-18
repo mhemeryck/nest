@@ -197,6 +197,32 @@ func TestDispatchPushButtonEventPublishesRemoteSourceEvent(t *testing.T) {
 	assert.False(t, command.Publish.Retain)
 }
 
+func TestDispatchRemoteSourceEventTogglesTargetLocalLight(t *testing.T) {
+	index := registry.Build(&entity.Root{
+		Lights: []entity.Light{{ID: entity.LightID("controller_1.light.office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
+		Relays: []entity.Relay{{ID: entity.RelayID("office_light_relay"), Name: "Office light relay", SysfsDevice: entity.SysfsDeviceID("ro_3_14")}},
+		RemoteTargetBindings: []entity.Binding{{
+			Source: entity.ID("controller_2.button.hall_button"),
+			Target: entity.ID("controller_1.light.office_light"),
+			Action: entity.ActionToggle,
+		}},
+	})
+	sysfsCommands := make(chan sysfs.Command, 1)
+
+	derivedEvents := dispatchEvent(t.Context(), &entity.Root{}, index, sysfsCommands, nil, mqtt.Topics{}, event.Event{
+		Kind: event.PushButtonPressedKind,
+		PushButton: &event.PushButton{
+			ButtonID: entity.PushButtonID("controller_2.button.hall_button"),
+		},
+	})
+	require.Len(t, derivedEvents, 1)
+	dispatchEvent(t.Context(), &entity.Root{}, index, sysfsCommands, nil, mqtt.Topics{}, derivedEvents[0])
+
+	command := <-sysfsCommands
+	assert.Equal(t, sysfs.ToggleCommand, command.Kind)
+	assert.Equal(t, "ro_3_14", command.DeviceID)
+}
+
 func TestHandleStateChangePublishesMappedLightState(t *testing.T) {
 	index := registry.Build(&entity.Root{
 		Lights: []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},

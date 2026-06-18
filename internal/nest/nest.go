@@ -63,7 +63,7 @@ func Run(ctx context.Context, opts Options) error {
 	// Start optional transport actors before local control so startup state is published early.
 	mqttCommands, mqttEvents, mqttDone := mqttChannels(root)
 	if mqttCommands != nil {
-		go mqtt.Run(ctx, root.MQTT, mqttCommands, mqttEvents, mqttDone)
+		go mqtt.Run(ctx, root.MQTT, mqtt.SemanticSourceEventSubscriptionTopics(mqttTopics(root), root), mqttCommands, mqttEvents, mqttDone)
 	}
 
 	// Start hardware and controller actors with unidirectional command and observation channels.

@@ -1,6 +1,7 @@
 package mqtt
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/mhemeryck/nest/internal/entity"
@@ -47,7 +48,29 @@ func LightCommandSubscriptionTopic(topics Topics) string {
 }
 
 func SemanticSourceEventTopic(topics Topics, sourceID entity.ID) string {
-	return joinTopic(topics, "units", topics.UnitID, "sources", string(sourceID), "event")
+	unitID := topics.UnitID
+	if sourceUnitID, ok := semanticSourceUnitID(sourceID); ok {
+		unitID = sourceUnitID
+	}
+
+	return joinTopic(topics, "units", unitID, "sources", string(sourceID), "event")
+}
+
+func SemanticSourceEventSubscriptionTopics(topics Topics, root *entity.Root) []string {
+	seen := make(map[string]struct{}, len(root.RemoteTargetBindings))
+	subscriptions := make([]string, 0, len(root.RemoteTargetBindings))
+	for _, binding := range root.RemoteTargetBindings {
+		topic := SemanticSourceEventTopic(topics, binding.Source)
+		if _, ok := seen[topic]; ok {
+			continue
+		}
+
+		seen[topic] = struct{}{}
+		subscriptions = append(subscriptions, topic)
+	}
+	slices.Sort(subscriptions)
+
+	return subscriptions
 }
 
 func ParseLightCommandTopic(topics Topics, topic string) (entity.LightID, bool) {
@@ -88,4 +111,13 @@ func lightTopicSegment(lightID entity.LightID) string {
 	}
 
 	return string(lightID)
+}
+
+func semanticSourceUnitID(sourceID entity.ID) (string, bool) {
+	parts := strings.Split(string(sourceID), ".")
+	if len(parts) != 3 || !entity.IsLocalID(parts[0]) {
+		return "", false
+	}
+
+	return parts[0], true
 }

@@ -51,6 +51,22 @@ func TestLoadLocalMQTTFixtureProjectsRemoteSourceBinding(t *testing.T) {
 	}, file.RemoteSourceBindings[0])
 }
 
+func TestLoadLocalMQTTFixtureProjectsRemoteTargetBinding(t *testing.T) {
+	path := filepath.Join("..", "..", "test", "fixtures", "config.local-mqtt.yaml")
+
+	file, err := Load(path, "remote")
+	require.NoError(t, err)
+
+	assert.Equal(t, "remote", file.MQTT.UnitID)
+	assert.True(t, file.MQTT.Enabled)
+	require.Len(t, file.RemoteTargetBindings, 1)
+	assert.Equal(t, BindingConfig{
+		Source: "local.button.office_button",
+		Target: "remote.light.remote_light",
+		Action: BindingActionToggle,
+	}, file.RemoteTargetBindings[0])
+}
+
 func TestLoadRejectsUnknownUnit(t *testing.T) {
 	path := filepath.Join("..", "..", "test", "fixtures", "config.local.yaml")
 
@@ -126,6 +142,33 @@ func TestProjectUnitProjectsTypedEntityEndpoints(t *testing.T) {
 	assert.Equal(t, "controller_1.light.light", file.Lights[0].ID)
 	assert.Equal(t, "button_input", file.PushButtons[0].Input)
 	assert.Equal(t, "light_relay", file.Lights[0].Relay)
+}
+
+func TestProjectUnitDerivesUnitSpecificMQTTClientID(t *testing.T) {
+	file, err := ProjectUnit(&GlobalRoot{
+		Actors: GlobalActorsConfig{
+			MQTT: GlobalMQTTConfig{
+				Broker: MQTTConfig{
+					Enabled:     true,
+					Host:        "localhost",
+					Port:        1883,
+					ClientID:    "nest-local",
+					TopicPrefix: "nest",
+				},
+			},
+		},
+		Units: map[string]UnitConfig{
+			"remote": {
+				Actors: UnitActorsConfig{
+					MQTT: UnitMQTTConfig{Enabled: true},
+				},
+			},
+		},
+	}, "remote")
+	require.NoError(t, err)
+
+	assert.Equal(t, "remote", file.MQTT.UnitID)
+	assert.Equal(t, "nest-local-remote", file.MQTT.ClientID)
 }
 
 func TestProjectUnitProjectsRemoteBindingsByPerspective(t *testing.T) {

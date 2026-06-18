@@ -131,3 +131,26 @@ func TestSemanticEventFromMQTTEventRejectsInvalidLightCommandPayload(t *testing.
 	assert.False(t, handled)
 	assert.Equal(t, event.Event{}, semanticEvent)
 }
+
+func TestSemanticEventFromMQTTEventMapsSourceEventToPushButtonEvent(t *testing.T) {
+	root := &entity.Root{
+		RemoteTargetBindings: []entity.Binding{{
+			Source: entity.ID("controller_2.button.hall_button"),
+			Target: entity.ID("controller_1.light.office_light"),
+			Action: entity.ActionToggle,
+		}},
+	}
+
+	semanticEvent, handled := semanticEventFromMQTTEvent(
+		registry.Build(root),
+		mqtt.NewTopics("nest", "controller_1"),
+		mqtt.ReceivedEvent(mqtt.ReceivedMessage{
+			Topic:   "nest/units/controller_2/sources/controller_2.button.hall_button/event",
+			Payload: []byte(`{"source":"controller_2.button.hall_button","event":"pressed"}`),
+		}),
+	)
+
+	require.True(t, handled)
+	assert.Equal(t, event.PushButtonPressedKind, semanticEvent.Kind)
+	assert.Equal(t, entity.PushButtonID("controller_2.button.hall_button"), semanticEvent.PushButton.ButtonID)
+}

@@ -17,6 +17,7 @@ func bindingEventsFromEvent(index *registry.Index, busEvent event.Event) []event
 
 func lightEventsFromPushButton(index *registry.Index, pushButton event.PushButton) []event.Event {
 	bindings := registry.BindingsByButton(index, pushButton.ButtonID)
+	bindings = append(bindings, registry.RemoteTargetBindingsByButton(index, pushButton.ButtonID)...)
 	lightEvents := make([]event.Event, 0, len(bindings))
 	for _, binding := range bindings {
 		name := ""
