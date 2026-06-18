@@ -110,19 +110,17 @@ func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
 	}
 
 	for _, binding := range global.Bindings {
-		if !entity.IsIDForUnit(binding.Source, unitID, entity.TypeButton) {
-			continue
-		}
+		sourceLocal := entity.IsIDForUnit(binding.Source, unitID, entity.TypeButton)
+		targetLocal := entity.IsIDForUnit(binding.Target, unitID, entity.TypeLight)
 
-		if !entity.IsIDForUnit(binding.Target, unitID, entity.TypeLight) {
-			continue
+		switch {
+		case sourceLocal && targetLocal:
+			local.Bindings = append(local.Bindings, BindingConfig(binding))
+		case sourceLocal:
+			local.RemoteSourceBindings = append(local.RemoteSourceBindings, BindingConfig(binding))
+		case targetLocal:
+			local.RemoteTargetBindings = append(local.RemoteTargetBindings, BindingConfig(binding))
 		}
-
-		local.Bindings = append(local.Bindings, BindingConfig{
-			Button: binding.Source,
-			Light:  binding.Target,
-			Action: binding.Action,
-		})
 	}
 
 	return local, nil

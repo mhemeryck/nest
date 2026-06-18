@@ -48,8 +48,18 @@ func TestToEntityRoot(t *testing.T) {
 			Device: "ro_3_14",
 		}},
 		Bindings: []BindingConfig{{
-			Button: "office_button",
-			Light:  "office_light",
+			Source: "office_button",
+			Target: "office_light",
+			Action: "toggle",
+		}},
+		RemoteSourceBindings: []BindingConfig{{
+			Source: "controller_1.button.office_button",
+			Target: "controller_2.light.hall_light",
+			Action: "toggle",
+		}},
+		RemoteTargetBindings: []BindingConfig{{
+			Source: "controller_2.button.hall_button",
+			Target: "controller_1.light.office_light",
 			Action: "toggle",
 		}},
 	})
@@ -71,7 +81,9 @@ func TestToEntityRoot(t *testing.T) {
 	assert.Equal(t, []entity.PushButton{{ID: entity.PushButtonID("office_button"), Name: "Office button", Input: entity.DigitalInputID("office_button_input")}}, root.PushButtons)
 	assert.Equal(t, []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}}, root.Lights)
 	assert.Equal(t, []entity.Relay{{ID: entity.RelayID("office_light_relay"), Name: "Office light relay", SysfsDevice: entity.SysfsDeviceID("ro_3_14")}}, root.Relays)
-	assert.Equal(t, []entity.Binding{{Button: entity.PushButtonID("office_button"), Light: entity.LightID("office_light"), Action: entity.LightActionToggle}}, root.Bindings)
+	assert.Equal(t, []entity.Binding{{Source: entity.ID("office_button"), Target: entity.ID("office_light"), Action: entity.ActionToggle}}, root.Bindings)
+	assert.Equal(t, []entity.Binding{{Source: entity.ID("controller_1.button.office_button"), Target: entity.ID("controller_2.light.hall_light"), Action: entity.ActionToggle}}, root.RemoteSourceBindings)
+	assert.Equal(t, []entity.Binding{{Source: entity.ID("controller_2.button.hall_button"), Target: entity.ID("controller_1.light.office_light"), Action: entity.ActionToggle}}, root.RemoteTargetBindings)
 }
 
 func TestToEntityRootNil(t *testing.T) {

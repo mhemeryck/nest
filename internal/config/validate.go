@@ -37,6 +37,8 @@ func Validate(f *Root) error {
 		relayErr,
 		lightErr,
 		validateBindings(f.Bindings, knownButtonIDs, knownLightIDs),
+		validateRemoteBindings("remote_source_bindings", f.RemoteSourceBindings),
+		validateRemoteBindings("remote_target_bindings", f.RemoteTargetBindings),
 	)
 
 	return errs
@@ -207,18 +209,18 @@ func validateBindings(bindings []BindingConfig, knownButtonIDs map[string]struct
 
 	for i, binding := range bindings {
 		prefix := fmt.Sprintf("bindings[%d]", i)
-		var buttonErr error
-		if err := validateRequiredField(prefix+".button", binding.Button); err != nil {
-			buttonErr = err
-		} else if _, ok := knownButtonIDs[binding.Button]; !ok {
-			buttonErr = fmt.Errorf("%s.button: unknown push button %q", prefix, binding.Button)
+		var sourceErr error
+		if err := validateRequiredField(prefix+".source", binding.Source); err != nil {
+			sourceErr = err
+		} else if _, ok := knownButtonIDs[binding.Source]; !ok {
+			sourceErr = fmt.Errorf("%s.source: unknown push button %q", prefix, binding.Source)
 		}
 
-		var lightErr error
-		if err := validateRequiredField(prefix+".light", binding.Light); err != nil {
-			lightErr = err
-		} else if _, ok := knownLightIDs[binding.Light]; !ok {
-			lightErr = fmt.Errorf("%s.light: unknown light %q", prefix, binding.Light)
+		var targetErr error
+		if err := validateRequiredField(prefix+".target", binding.Target); err != nil {
+			targetErr = err
+		} else if _, ok := knownLightIDs[binding.Target]; !ok {
+			targetErr = fmt.Errorf("%s.target: unknown light %q", prefix, binding.Target)
 		}
 
 		actionErr := validateRequiredField(prefix+".action", binding.Action)
@@ -226,16 +228,16 @@ func validateBindings(bindings []BindingConfig, knownButtonIDs map[string]struct
 			actionErr = fmt.Errorf("%s.action: unsupported action %q", prefix, binding.Action)
 		}
 
-		if buttonErr == nil && lightErr == nil && actionErr == nil {
-			key := binding.Button + "\x00" + binding.Light + "\x00" + binding.Action
+		if sourceErr == nil && targetErr == nil && actionErr == nil {
+			key := binding.Source + "\x00" + binding.Target + "\x00" + binding.Action
 			if _, ok := seen[key]; ok {
 				errs = errors.Join(
 					errs,
 					fmt.Errorf(
-						"%s: duplicate binding button %q light %q action %q",
+						"%s: duplicate binding source %q target %q action %q",
 						prefix,
-						binding.Button,
-						binding.Light,
+						binding.Source,
+						binding.Target,
 						binding.Action,
 					),
 				)
@@ -244,7 +246,56 @@ func validateBindings(bindings []BindingConfig, knownButtonIDs map[string]struct
 			}
 		}
 
-		errs = errors.Join(errs, buttonErr, lightErr, actionErr)
+		errs = errors.Join(errs, sourceErr, targetErr, actionErr)
+	}
+
+	return errs
+}
+
+func validateRemoteBindings(field string, bindings []BindingConfig) error {
+	var errs error
+	seen := make(map[string]int, len(bindings))
+
+	for i, binding := range bindings {
+		prefix := fmt.Sprintf("%s[%d]", field, i)
+		var sourceErr error
+		if err := validateRequiredField(prefix+".source", binding.Source); err != nil {
+			sourceErr = err
+		} else if !entity.IsID(binding.Source, entity.TypeButton) {
+			sourceErr = fmt.Errorf("%s.source: must be a button semantic id %q", prefix, binding.Source)
+		}
+
+		var targetErr error
+		if err := validateRequiredField(prefix+".target", binding.Target); err != nil {
+			targetErr = err
+		} else if !entity.IsID(binding.Target, entity.TypeLight) {
+			targetErr = fmt.Errorf("%s.target: must be a light semantic id %q", prefix, binding.Target)
+		}
+
+		actionErr := validateRequiredField(prefix+".action", binding.Action)
+		if actionErr == nil && binding.Action != BindingActionToggle {
+			actionErr = fmt.Errorf("%s.action: unsupported action %q", prefix, binding.Action)
+		}
+
+		if sourceErr == nil && targetErr == nil && actionErr == nil {
+			key := binding.Source + "\x00" + binding.Target + "\x00" + binding.Action
+			if _, ok := seen[key]; ok {
+				errs = errors.Join(
+					errs,
+					fmt.Errorf(
+						"%s: duplicate remote binding source %q target %q action %q",
+						prefix,
+						binding.Source,
+						binding.Target,
+						binding.Action,
+					),
+				)
+			} else {
+				seen[key] = i
+			}
+		}
+
+		errs = errors.Join(errs, sourceErr, targetErr, actionErr)
 	}
 
 	return errs

@@ -10,6 +10,9 @@ type Root struct {
 	Lights        []LightConfig        `yaml:"lights"`
 	Relays        []RelayConfig        `yaml:"relays"`
 	Bindings      []BindingConfig      `yaml:"bindings"`
+
+	RemoteSourceBindings []BindingConfig `yaml:"remote_source_bindings"`
+	RemoteTargetBindings []BindingConfig `yaml:"remote_target_bindings"`
 }
 
 type SysfsConfig struct {
@@ -58,8 +61,8 @@ type LightConfig struct {
 }
 
 type BindingConfig struct {
-	Button string `yaml:"button"`
-	Light  string `yaml:"light"`
+	Source string `yaml:"source"`
+	Target string `yaml:"target"`
 	Action string `yaml:"action"`
 }
 

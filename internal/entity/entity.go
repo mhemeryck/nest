@@ -10,24 +10,28 @@ type (
 	PushButtonID   string
 	LightID        string
 	RelayID        string
+	Action         string
 	LightAction    string
 )
 
 const (
+	ActionToggle      Action      = "toggle"
 	LightActionToggle LightAction = "toggle"
 	LightActionOn     LightAction = "on"
 	LightActionOff    LightAction = "off"
 )
 
 type Root struct {
-	SysfsRoot          string
-	SysfsPollIntervals PollIntervals
-	MQTT               MQTT
-	DigitalInputs      []DigitalInput
-	PushButtons        []PushButton
-	Lights             []Light
-	Relays             []Relay
-	Bindings           []Binding
+	SysfsRoot            string
+	SysfsPollIntervals   PollIntervals
+	MQTT                 MQTT
+	DigitalInputs        []DigitalInput
+	PushButtons          []PushButton
+	Lights               []Light
+	Relays               []Relay
+	Bindings             []Binding
+	RemoteSourceBindings []Binding
+	RemoteTargetBindings []Binding
 }
 
 type PollIntervals struct {
@@ -71,7 +75,7 @@ type Light struct {
 }
 
 type Binding struct {
-	Button PushButtonID
-	Light  LightID
-	Action LightAction
+	Source ID
+	Target ID
+	Action Action
 }

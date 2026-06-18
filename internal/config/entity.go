@@ -16,6 +16,16 @@ func ToEntityRoot(root *Root) *entity.Root {
 		Lights:             make([]entity.Light, 0, len(root.Lights)),
 		Relays:             make([]entity.Relay, 0, len(root.Relays)),
 		Bindings:           make([]entity.Binding, 0, len(root.Bindings)),
+		RemoteSourceBindings: make(
+			[]entity.Binding,
+			0,
+			len(root.RemoteSourceBindings),
+		),
+		RemoteTargetBindings: make(
+			[]entity.Binding,
+			0,
+			len(root.RemoteTargetBindings),
+		),
 	}
 
 	for _, input := range root.DigitalInputs {
@@ -50,14 +60,26 @@ func ToEntityRoot(root *Root) *entity.Root {
 	}
 
 	for _, binding := range root.Bindings {
-		entities.Bindings = append(entities.Bindings, entity.Binding{
-			Button: entity.PushButtonID(binding.Button),
-			Light:  entity.LightID(binding.Light),
-			Action: entity.LightAction(binding.Action),
-		})
+		entities.Bindings = append(entities.Bindings, bindingFromConfig(binding))
+	}
+
+	for _, binding := range root.RemoteSourceBindings {
+		entities.RemoteSourceBindings = append(entities.RemoteSourceBindings, bindingFromConfig(binding))
+	}
+
+	for _, binding := range root.RemoteTargetBindings {
+		entities.RemoteTargetBindings = append(entities.RemoteTargetBindings, bindingFromConfig(binding))
 	}
 
 	return entities
+}
+
+func bindingFromConfig(binding BindingConfig) entity.Binding {
+	return entity.Binding{
+		Source: entity.ID(binding.Source),
+		Target: entity.ID(binding.Target),
+		Action: entity.Action(binding.Action),
+	}
 }
 
 func pollIntervalsFromConfig(intervals PollIntervalsConfig) entity.PollIntervals {

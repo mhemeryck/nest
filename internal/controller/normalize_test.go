@@ -68,7 +68,7 @@ func TestPushButtonEventsFromStateChangeMapsFallingEdgeToRelease(t *testing.T) {
 func TestLightEventsFromPushButton(t *testing.T) {
 	index := registry.Build(&entity.Root{
 		Lights:   []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
-		Bindings: []entity.Binding{{Button: entity.PushButtonID("office_button"), Light: entity.LightID("office_light"), Action: entity.LightActionToggle}},
+		Bindings: []entity.Binding{{Source: entity.ID("office_button"), Target: entity.ID("office_light"), Action: entity.ActionToggle}},
 	})
 
 	events := lightEventsFromPushButton(index, event.PushButton{ButtonID: entity.PushButtonID("office_button")})

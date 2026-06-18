@@ -28,8 +28,8 @@ func TestLoad(t *testing.T) {
 	assert.Len(t, file.Bindings, 1)
 	assert.Equal(t, "controller_1.button.office_button", file.PushButtons[0].ID)
 	assert.Equal(t, "controller_1.light.office_light", file.Lights[0].ID)
-	assert.Equal(t, "controller_1.button.office_button", file.Bindings[0].Button)
-	assert.Equal(t, "controller_1.light.office_light", file.Bindings[0].Light)
+	assert.Equal(t, "controller_1.button.office_button", file.Bindings[0].Source)
+	assert.Equal(t, "controller_1.light.office_light", file.Bindings[0].Target)
 	assert.Equal(t, "office_button_input", file.PushButtons[0].Input)
 	assert.Equal(t, "office_light_relay", file.Lights[0].Relay)
 	assert.Equal(t, []string{"di_3_16", "ro_3_14"}, DeviceIDs(file))
@@ -110,6 +110,72 @@ func TestProjectUnitProjectsTypedEntityEndpoints(t *testing.T) {
 	assert.Equal(t, "controller_1.light.light", file.Lights[0].ID)
 	assert.Equal(t, "button_input", file.PushButtons[0].Input)
 	assert.Equal(t, "light_relay", file.Lights[0].Relay)
+}
+
+func TestProjectUnitProjectsRemoteBindingsByPerspective(t *testing.T) {
+	global := &GlobalRoot{
+		Units: map[string]UnitConfig{
+			"controller_1": {
+				Actors: UnitActorsConfig{
+					Sysfs: UnitSysfsConfig{
+						DigitalInputs: []DigitalInputConfig{{ID: "office_button_input", Device: "di_3_16"}},
+					},
+				},
+				Entities: UnitEntitiesConfig{
+					Buttons: []UnitPushButtonConfig{{
+						ID:   "office_button",
+						Name: "Office button",
+						Input: EndpointRefConfig{
+							Actor: "sysfs",
+							Kind:  "digital_input",
+							ID:    "office_button_input",
+						},
+					}},
+				},
+			},
+			"controller_2": {
+				Actors: UnitActorsConfig{
+					Sysfs: UnitSysfsConfig{
+						Relays: []RelayConfig{{ID: "hall_light_relay", Name: "Hall light relay", Device: "ro_3_14"}},
+					},
+				},
+				Entities: UnitEntitiesConfig{
+					Lights: []UnitLightConfig{{
+						ID:   "hall_light",
+						Name: "Hall light",
+						Actuator: EndpointRefConfig{
+							Actor: "sysfs",
+							Kind:  "relay",
+							ID:    "hall_light_relay",
+						},
+					}},
+				},
+			},
+		},
+		Bindings: []GlobalBindingConfig{{
+			Source: "controller_1.button.office_button",
+			Target: "controller_2.light.hall_light",
+			Action: "toggle",
+		}},
+	}
+
+	sourceLocal, err := ProjectUnit(global, "controller_1")
+	require.NoError(t, err)
+	targetLocal, err := ProjectUnit(global, "controller_2")
+	require.NoError(t, err)
+
+	assert.Empty(t, sourceLocal.Bindings)
+	assert.Empty(t, targetLocal.Bindings)
+	assert.Equal(t, []BindingConfig{{
+		Source: "controller_1.button.office_button",
+		Target: "controller_2.light.hall_light",
+		Action: "toggle",
+	}}, sourceLocal.RemoteSourceBindings)
+	assert.Equal(t, []BindingConfig{{
+		Source: "controller_1.button.office_button",
+		Target: "controller_2.light.hall_light",
+		Action: "toggle",
+	}}, targetLocal.RemoteTargetBindings)
 }
 
 func TestProjectUnitRejectsUnsupportedEntityEndpoints(t *testing.T) {
@@ -364,9 +430,9 @@ func TestValidate(t *testing.T) {
 				Sysfs:    SysfsConfig{Root: "/tmp"},
 				Relays:   []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
 				Lights:   []LightConfig{{ID: "light", Name: "Light", Relay: "relay"}},
-				Bindings: []BindingConfig{{Button: "missing", Light: "light", Action: BindingActionToggle}},
+				Bindings: []BindingConfig{{Source: "missing", Target: "light", Action: BindingActionToggle}},
 			},
-			message: `bindings[0].button: unknown push button "missing"`,
+			message: `bindings[0].source: unknown push button "missing"`,
 		},
 		{
 			name: "requires bindings to reference known lights",
@@ -374,9 +440,9 @@ func TestValidate(t *testing.T) {
 				Sysfs:         SysfsConfig{Root: "/tmp"},
 				DigitalInputs: []DigitalInputConfig{{ID: "button_input", Device: "di_3_16"}},
 				PushButtons:   []PushButtonConfig{{ID: "button", Name: "Button", Input: "button_input"}},
-				Bindings:      []BindingConfig{{Button: "button", Light: "missing", Action: BindingActionToggle}},
+				Bindings:      []BindingConfig{{Source: "button", Target: "missing", Action: BindingActionToggle}},
 			},
-			message: `bindings[0].light: unknown light "missing"`,
+			message: `bindings[0].target: unknown light "missing"`,
 		},
 		{
 			name: "rejects unsupported binding actions",
@@ -386,9 +452,22 @@ func TestValidate(t *testing.T) {
 				PushButtons:   []PushButtonConfig{{ID: "button", Name: "Button", Input: "button_input"}},
 				Relays:        []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
 				Lights:        []LightConfig{{ID: "light", Name: "Light", Relay: "relay"}},
-				Bindings:      []BindingConfig{{Button: "button", Light: "light", Action: "press"}},
+				Bindings:      []BindingConfig{{Source: "button", Target: "light", Action: "press"}},
 			},
 			message: `bindings[0].action: unsupported action "press"`,
+		},
+		{
+			name: "rejects unsupported remote binding actions",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+				RemoteSourceBindings: []BindingConfig{{
+					Source: "controller_1.button.office_button",
+					Target: "controller_2.light.hall_light",
+					Action: "press",
+				}},
+			},
+			message: `remote_source_bindings[0].action: unsupported action "press"`,
 		},
 		{
 			name: "rejects duplicate bindings",
@@ -399,11 +478,11 @@ func TestValidate(t *testing.T) {
 				Relays:        []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
 				Lights:        []LightConfig{{ID: "light", Name: "Light", Relay: "relay"}},
 				Bindings: []BindingConfig{
-					{Button: "button", Light: "light", Action: BindingActionToggle},
-					{Button: "button", Light: "light", Action: BindingActionToggle},
+					{Source: "button", Target: "light", Action: BindingActionToggle},
+					{Source: "button", Target: "light", Action: BindingActionToggle},
 				},
 			},
-			message: `bindings[1]: duplicate binding button "button" light "light" action "toggle"`,
+			message: `bindings[1]: duplicate binding source "button" target "light" action "toggle"`,
 		},
 	}
 
@@ -433,7 +512,7 @@ func TestValidateAcceptsValidFile(t *testing.T) {
 			{ID: "office_light", Name: "Office light", Relay: "office_light_relay"},
 		},
 		Bindings: []BindingConfig{
-			{Button: "office_button", Light: "office_light", Action: BindingActionToggle},
+			{Source: "office_button", Target: "office_light", Action: BindingActionToggle},
 		},
 	}
 

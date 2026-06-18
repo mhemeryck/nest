@@ -2,6 +2,7 @@ package controller
 
 import (
 	"github.com/mhemeryck/nest/internal/controller/event"
+	"github.com/mhemeryck/nest/internal/entity"
 	"github.com/mhemeryck/nest/internal/registry"
 )
 
@@ -19,16 +20,17 @@ func lightEventsFromPushButton(index *registry.Index, pushButton event.PushButto
 	lightEvents := make([]event.Event, 0, len(bindings))
 	for _, binding := range bindings {
 		name := ""
-		if light, ok := registry.LightByID(index, binding.Light); ok {
+		lightID := entity.LightID(binding.Target)
+		if light, ok := registry.LightByID(index, lightID); ok {
 			name = light.Name
 		}
 
 		lightEvents = append(lightEvents, event.Event{
 			Kind: event.LightKind,
 			Light: &event.Light{
-				LightID: binding.Light,
+				LightID: lightID,
 				Name:    name,
-				Action:  binding.Action,
+				Action:  entity.LightAction(binding.Action),
 			},
 		})
 	}

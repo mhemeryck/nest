@@ -62,7 +62,7 @@ func TestDispatchPushButtonEventTogglesLightRelay(t *testing.T) {
 		PushButtons:   []entity.PushButton{{ID: entity.PushButtonID("office_button"), Name: "Office button", Input: entity.DigitalInputID("office_button_input")}},
 		Lights:        []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
 		Relays:        []entity.Relay{{ID: entity.RelayID("office_light_relay"), Name: "Office light relay", SysfsDevice: entity.SysfsDeviceID("ro_3_14")}},
-		Bindings:      []entity.Binding{{Button: entity.PushButtonID("office_button"), Light: entity.LightID("office_light"), Action: entity.LightActionToggle}},
+		Bindings:      []entity.Binding{{Source: entity.ID("office_button"), Target: entity.ID("office_light"), Action: entity.ActionToggle}},
 	})
 	commands := make(chan sysfs.Command, 1)
 
@@ -93,7 +93,7 @@ func TestDispatchPushButtonEventDerivesLightEvent(t *testing.T) {
 	index := registry.Build(&entity.Root{
 		PushButtons: []entity.PushButton{{ID: entity.PushButtonID("office_button"), Name: "Office button", Input: entity.DigitalInputID("office_button_input")}},
 		Lights:      []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
-		Bindings:    []entity.Binding{{Button: entity.PushButtonID("office_button"), Light: entity.LightID("office_light"), Action: entity.LightActionToggle}},
+		Bindings:    []entity.Binding{{Source: entity.ID("office_button"), Target: entity.ID("office_light"), Action: entity.ActionToggle}},
 	})
 	sysfsCommands := make(chan sysfs.Command, 1)
 
@@ -118,7 +118,7 @@ func TestHandleStateChangeDoesNotPublishRawInputOrButtonState(t *testing.T) {
 		PushButtons:   []entity.PushButton{{ID: entity.PushButtonID("office_button"), Name: "Office button", Input: entity.DigitalInputID("office_button_input")}},
 		Lights:        []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
 		Relays:        []entity.Relay{{ID: entity.RelayID("office_light_relay"), Name: "Office light relay", SysfsDevice: entity.SysfsDeviceID("ro_3_14")}},
-		Bindings:      []entity.Binding{{Button: entity.PushButtonID("office_button"), Light: entity.LightID("office_light"), Action: entity.LightActionToggle}},
+		Bindings:      []entity.Binding{{Source: entity.ID("office_button"), Target: entity.ID("office_light"), Action: entity.ActionToggle}},
 	})
 	sysfsCommands := make(chan sysfs.Command, 1)
 	mqttCommands := make(chan mqtt.Command, 2)
@@ -304,7 +304,7 @@ func TestHandleStateChangeLogsPushButtonRelease(t *testing.T) {
 		DigitalInputs: []entity.DigitalInput{{ID: entity.DigitalInputID("office_button_input"), SysfsDevice: entity.SysfsDeviceID("di_3_16")}},
 		PushButtons:   []entity.PushButton{{ID: entity.PushButtonID("office_button"), Name: "Office button", Input: entity.DigitalInputID("office_button_input")}},
 		Lights:        []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
-		Bindings:      []entity.Binding{{Button: entity.PushButtonID("office_button"), Light: entity.LightID("office_light"), Action: entity.LightActionToggle}},
+		Bindings:      []entity.Binding{{Source: entity.ID("office_button"), Target: entity.ID("office_light"), Action: entity.ActionToggle}},
 	})
 	semanticEvents := make(chan event.Event, 2)
 
@@ -331,7 +331,7 @@ func TestHandleStateChangeDoesNotBlockCommandSendAfterCancellation(t *testing.T)
 		PushButtons:   []entity.PushButton{{ID: entity.PushButtonID("office_button"), Name: "Office button", Input: entity.DigitalInputID("office_button_input")}},
 		Lights:        []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
 		Relays:        []entity.Relay{{ID: entity.RelayID("office_light_relay"), Name: "Office light relay", SysfsDevice: entity.SysfsDeviceID("ro_3_14")}},
-		Bindings:      []entity.Binding{{Button: entity.PushButtonID("office_button"), Light: entity.LightID("office_light"), Action: entity.LightActionToggle}},
+		Bindings:      []entity.Binding{{Source: entity.ID("office_button"), Target: entity.ID("office_light"), Action: entity.ActionToggle}},
 	})
 	semanticEvents := make(chan event.Event)
 	done := make(chan struct{})
