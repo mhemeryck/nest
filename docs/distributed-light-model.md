@@ -699,6 +699,43 @@ This distinction is important:
 - semantic ownership belongs in the domain model
 - master or slave behavior belongs in actor runtime configuration
 
+### Modbus Role Versus Semantic Direction
+
+Modbus master/slave roles describe bus transaction authority, not semantic ownership.
+A Modbus master initiates every bus request.
+A Modbus slave only responds to requests and exposes an address space.
+This means a slave can still be the semantic owner of a light, button, or state value, but it cannot publish that information independently on the bus.
+
+For `nest`, source and target remain semantic concepts.
+Source-local means the unit owns the semantic event source.
+Target-local means the unit owns the semantic behavior target.
+Modbus master means the unit initiates reads and writes on the RS-485 bus.
+Modbus slave means the unit exposes readable or writable points on the RS-485 bus.
+These concepts should not be collapsed into one naming layer.
+
+A practical deployment may have one unit in Modbus master mode and other units in Modbus slave mode.
+The master unit may still have local sysfs inputs, relays, and semantic entities.
+It should not need to be a dedicated transport-only node.
+
+The same fixed master/slave bus topology can still carry bidirectional semantic information.
+The master can write event signals or commands to slaves.
+The master can also poll slaves for state, events, or diagnostics.
+
+Initial abstract route classes are:
+
+| Route class        | Modbus transaction        | Semantic direction                                               |
+| ------------------ | ------------------------- | ---------------------------------------------------------------- |
+| Event signal write | master writes slave point | master-observed source event reaches slave-owned target behavior |
+| State poll         | master reads slave point  | slave-owned state becomes visible to the master                  |
+
+Phase 7 should represent these route classes abstractly.
+It should not decide serial settings, Modbus unit IDs, function codes, coil or register addresses, values, timing, or actor execution behavior.
+
+A unit-local Modbus actor config can therefore declare a mode and abstract points or routes.
+Master mode declares event-signal writes and state polls.
+Slave mode declares exposed event signals and state points.
+This keeps semantic bindings transport-independent while still testing whether the routing model fits Modbus RTU.
+
 ### Recommended Scope For Modbus
 
 For the initial migration, Modbus should stay relatively low-level.
@@ -771,6 +808,8 @@ Phase 7 should focus on:
 - separating semantic IDs from actor-local sysfs and Modbus identifiers
 - representing entity-to-actor-resource links with explicit typed endpoint references
 - reshaping bindings to target semantic entities cleanly
+- representing Modbus master/slave mode as unit-local actor configuration
+- representing abstract Modbus event-signal writes and state polls without execution
 - preparing registry or index resolution for future transport routing and unit-local projection
 
 Phase 8 can then add Modbus-specific addressing and execution as an actor concern.

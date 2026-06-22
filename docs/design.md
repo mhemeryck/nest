@@ -188,13 +188,13 @@ Hardware details such as sysfs device IDs, relay IDs, Modbus coils, and raw inpu
 For example, a relay-backed light state should look like:
 
 ```json
-{"state":"ON"}
+{ "state": "ON" }
 ```
 
 A future dimmable light can extend the same pattern without splitting one logical state update across several topics:
 
 ```json
-{"state":"ON","brightness":180}
+{ "state": "ON", "brightness": 180 }
 ```
 
 Diagnostic MQTT topics should only be introduced when there is a concrete debugging or migration need.

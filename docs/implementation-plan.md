@@ -182,7 +182,7 @@ See [Distributed Light Model](distributed-light-model.md) for the current naming
 - [x] Publish semantic source events over MQTT for projected local sources
 - [x] Subscribe to semantic source events needed by target-local bindings
 - [x] Execute target-local bindings from replicated MQTT source events
-- [ ] Represent Modbus event-signal routes without executing them yet
+- [ ] Represent abstract Modbus event-signal and state-poll routes without executing them yet
 
 Current status:
 
