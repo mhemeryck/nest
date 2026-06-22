@@ -721,6 +721,27 @@ The same fixed master/slave bus topology can still carry bidirectional semantic 
 The master can write event signals or commands to slaves.
 The master can also poll slaves for state, events, or diagnostics.
 
+An event signal is a command-like trigger endpoint exposed by a slave.
+It does not represent final light or relay state.
+It means that when the master writes the endpoint, the slave should treat the write as an incoming semantic trigger and apply the configured local behavior.
+For example, a written event signal may mean that a remote button event happened, and the target-owning slave should resolve the toggle against its own local light state.
+
+The slave-side declarations describe what the slave exposes.
+The master-side declarations describe what the master uses.
+
+Initial concepts are:
+
+| Concept            | Declared by | Used by                   | Bus operation       |
+| ------------------ | ----------- | ------------------------- | ------------------- |
+| Event signal       | Slave       | Master event-signal write | Master writes slave |
+| State point        | Slave       | Master state poll         | Master reads slave  |
+| Event-signal write | Master      | Slave event signal        | Master writes slave |
+| State poll         | Master      | Slave state point         | Master reads slave  |
+
+There is no direct slave-to-master write route.
+If a slave needs to make information available to the master, it exposes a readable point and the master polls it.
+A later event queue or event point would still follow the same pattern: the slave exposes it, and the master reads it.
+
 Initial abstract route classes are:
 
 | Route class        | Modbus transaction        | Semantic direction                                               |
