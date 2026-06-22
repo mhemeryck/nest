@@ -59,6 +59,7 @@ func Run(ctx context.Context, opts Options) error {
 	for _, device := range configuredDevices {
 		slog.Info("configured device", "identifier", device.Identifier, "path", device.Path)
 	}
+	logModbusConfig(root)
 
 	// Start optional transport actors before local control so startup state is published early.
 	mqttCommands, mqttEvents, mqttDone := mqttChannels(root)
