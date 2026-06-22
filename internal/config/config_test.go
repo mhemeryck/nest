@@ -237,6 +237,119 @@ func TestProjectUnitProjectsRemoteBindingsByPerspective(t *testing.T) {
 	}}, targetLocal.RemoteTargetBindings)
 }
 
+func TestProjectUnitProjectsUnitModbusConfig(t *testing.T) {
+	global := &GlobalRoot{
+		Units: map[string]UnitConfig{
+			"local": {
+				Actors: UnitActorsConfig{
+					Modbus: UnitModbusConfig{
+						Mode: ModbusModeMaster,
+						EventSignalWrites: []ModbusEventSignalWriteConfig{{
+							Unit:   "remote",
+							Signal: "office_button_toggle",
+							Source: "local.button.office_button",
+							Target: "remote.light.remote_light",
+							Action: BindingActionToggle,
+						}},
+						StatePolls: []ModbusStatePollConfig{{
+							Unit:   "remote",
+							Point:  "remote_light_state",
+							Entity: "remote.light.remote_light",
+						}},
+					},
+				},
+			},
+			"remote": {
+				Actors: UnitActorsConfig{
+					Modbus: UnitModbusConfig{
+						Mode: ModbusModeSlave,
+						EventSignals: []ModbusEventSignalConfig{{
+							ID:     "office_button_toggle",
+							Source: "local.button.office_button",
+							Target: "remote.light.remote_light",
+							Action: BindingActionToggle,
+						}},
+						StatePoints: []ModbusStatePointConfig{{
+							ID:     "remote_light_state",
+							Entity: "remote.light.remote_light",
+						}},
+					},
+				},
+			},
+		},
+	}
+
+	local, err := ProjectUnit(global, "local")
+	require.NoError(t, err)
+	remote, err := ProjectUnit(global, "remote")
+	require.NoError(t, err)
+
+	assert.Equal(t, ModbusModeMaster, local.Modbus.Mode)
+	assert.Equal(t, []ModbusEventSignalWriteConfig{{
+		Unit:   "remote",
+		Signal: "office_button_toggle",
+		Source: "local.button.office_button",
+		Target: "remote.light.remote_light",
+		Action: BindingActionToggle,
+	}}, local.Modbus.EventSignalWrites)
+	assert.Equal(t, []ModbusStatePollConfig{{
+		Unit:   "remote",
+		Point:  "remote_light_state",
+		Entity: "remote.light.remote_light",
+	}}, local.Modbus.StatePolls)
+	assert.Empty(t, local.Modbus.EventSignals)
+	assert.Empty(t, local.Modbus.StatePoints)
+
+	assert.Equal(t, ModbusModeSlave, remote.Modbus.Mode)
+	assert.Equal(t, []ModbusEventSignalConfig{{
+		ID:     "office_button_toggle",
+		Source: "local.button.office_button",
+		Target: "remote.light.remote_light",
+		Action: BindingActionToggle,
+	}}, remote.Modbus.EventSignals)
+	assert.Equal(t, []ModbusStatePointConfig{{
+		ID:     "remote_light_state",
+		Entity: "remote.light.remote_light",
+	}}, remote.Modbus.StatePoints)
+	assert.Empty(t, remote.Modbus.EventSignalWrites)
+	assert.Empty(t, remote.Modbus.StatePolls)
+}
+
+func TestProjectUnitRejectsUnknownModbusRouteEndpoints(t *testing.T) {
+	_, err := ProjectUnit(&GlobalRoot{
+		Units: map[string]UnitConfig{
+			"local": {
+				Actors: UnitActorsConfig{
+					Modbus: UnitModbusConfig{
+						Mode: ModbusModeMaster,
+						EventSignalWrites: []ModbusEventSignalWriteConfig{{
+							Unit:   "remote",
+							Signal: "missing_signal",
+							Source: "local.button.office_button",
+							Target: "remote.light.remote_light",
+							Action: BindingActionToggle,
+						}},
+						StatePolls: []ModbusStatePollConfig{{
+							Unit:   "remote",
+							Point:  "missing_point",
+							Entity: "remote.light.remote_light",
+						}},
+					},
+				},
+			},
+			"remote": {
+				Actors: UnitActorsConfig{
+					Modbus: UnitModbusConfig{Mode: ModbusModeSlave},
+				},
+			},
+		},
+	}, "local")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `units.local.actors.modbus.event_signal_writes[0].signal: unknown event signal "missing_signal" on unit "remote"`)
+	assert.Contains(t, err.Error(), `units.local.actors.modbus.state_polls[0].point: unknown state point "missing_point" on unit "remote"`)
+}
+
 func TestProjectUnitRejectsUnsupportedEntityEndpoints(t *testing.T) {
 	_, err := ProjectUnit(&GlobalRoot{
 		Units: map[string]UnitConfig{
@@ -542,6 +655,69 @@ func TestValidate(t *testing.T) {
 				},
 			},
 			message: `bindings[1]: duplicate binding source "button" target "light" action "toggle"`,
+		},
+		{
+			name: "rejects unsupported modbus mode",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+				Modbus: ModbusConfig{
+					Mode: "both",
+				},
+			},
+			message: `modbus.mode: unsupported mode "both"`,
+		},
+		{
+			name: "rejects slave modbus write routes",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+				Modbus: ModbusConfig{
+					Mode: ModbusModeSlave,
+					EventSignalWrites: []ModbusEventSignalWriteConfig{{
+						Unit:   "remote",
+						Signal: "office_button_toggle",
+						Source: "local.button.office_button",
+						Target: "remote.light.remote_light",
+						Action: BindingActionToggle,
+					}},
+				},
+			},
+			message: "modbus.event_signal_writes: requires master mode",
+		},
+		{
+			name: "rejects master modbus exposed signals",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+				Modbus: ModbusConfig{
+					Mode: ModbusModeMaster,
+					EventSignals: []ModbusEventSignalConfig{{
+						ID:     "office_button_toggle",
+						Source: "local.button.office_button",
+						Target: "remote.light.remote_light",
+						Action: BindingActionToggle,
+					}},
+				},
+			},
+			message: "modbus.event_signals: requires slave mode",
+		},
+		{
+			name: "rejects invalid modbus event signal source",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+				Modbus: ModbusConfig{
+					Mode: ModbusModeSlave,
+					EventSignals: []ModbusEventSignalConfig{{
+						ID:     "office_button_toggle",
+						Source: "local.light.office_light",
+						Target: "remote.light.remote_light",
+						Action: BindingActionToggle,
+					}},
+				},
+			},
+			message: `modbus.event_signals[0].source: must be a button semantic id "local.light.office_light"`,
 		},
 	}
 

@@ -11,6 +11,7 @@ func ToEntityRoot(root *Root) *entity.Root {
 		SysfsRoot:          root.Sysfs.Root,
 		SysfsPollIntervals: pollIntervalsFromConfig(root.Sysfs.PollIntervals),
 		MQTT:               mqttFromConfig(root.MQTT),
+		Modbus:             modbusFromConfig(root.Modbus),
 		DigitalInputs:      make([]entity.DigitalInput, 0, len(root.DigitalInputs)),
 		PushButtons:        make([]entity.PushButton, 0, len(root.PushButtons)),
 		Lights:             make([]entity.Light, 0, len(root.Lights)),
@@ -72,6 +73,52 @@ func ToEntityRoot(root *Root) *entity.Root {
 	}
 
 	return entities
+}
+
+func modbusFromConfig(modbus ModbusConfig) entity.Modbus {
+	converted := entity.Modbus{
+		Mode:              entity.ModbusMode(modbus.Mode),
+		EventSignals:      make([]entity.ModbusEventSignal, 0, len(modbus.EventSignals)),
+		StatePoints:       make([]entity.ModbusStatePoint, 0, len(modbus.StatePoints)),
+		EventSignalWrites: make([]entity.ModbusEventSignalWrite, 0, len(modbus.EventSignalWrites)),
+		StatePolls:        make([]entity.ModbusStatePoll, 0, len(modbus.StatePolls)),
+	}
+
+	for _, signal := range modbus.EventSignals {
+		converted.EventSignals = append(converted.EventSignals, entity.ModbusEventSignal{
+			ID:     entity.ModbusEventSignalID(signal.ID),
+			Source: entity.ID(signal.Source),
+			Target: entity.ID(signal.Target),
+			Action: entity.Action(signal.Action),
+		})
+	}
+
+	for _, point := range modbus.StatePoints {
+		converted.StatePoints = append(converted.StatePoints, entity.ModbusStatePoint{
+			ID:     entity.ModbusStatePointID(point.ID),
+			Entity: entity.ID(point.Entity),
+		})
+	}
+
+	for _, write := range modbus.EventSignalWrites {
+		converted.EventSignalWrites = append(converted.EventSignalWrites, entity.ModbusEventSignalWrite{
+			Unit:   write.Unit,
+			Signal: entity.ModbusEventSignalID(write.Signal),
+			Source: entity.ID(write.Source),
+			Target: entity.ID(write.Target),
+			Action: entity.Action(write.Action),
+		})
+	}
+
+	for _, poll := range modbus.StatePolls {
+		converted.StatePolls = append(converted.StatePolls, entity.ModbusStatePoll{
+			Unit:   poll.Unit,
+			Point:  entity.ModbusStatePointID(poll.Point),
+			Entity: entity.ID(poll.Entity),
+		})
+	}
+
+	return converted
 }
 
 func bindingFromConfig(binding BindingConfig) entity.Binding {

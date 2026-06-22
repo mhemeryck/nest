@@ -32,6 +32,7 @@ func Validate(f *Root) error {
 		errs,
 		validateSysfs(f.Sysfs),
 		validateMQTT(f.MQTT),
+		validateModbus(f.Modbus),
 		inputErr,
 		buttonErr,
 		relayErr,
@@ -42,6 +43,210 @@ func Validate(f *Root) error {
 	)
 
 	return errs
+}
+
+func validateModbus(modbus ModbusConfig) error {
+	var errs error
+
+	switch modbus.Mode {
+	case "", ModbusModeMaster, ModbusModeSlave:
+	default:
+		errs = errors.Join(errs, fmt.Errorf("modbus.mode: unsupported mode %q", modbus.Mode))
+	}
+
+	if modbus.Mode != ModbusModeSlave {
+		if len(modbus.EventSignals) > 0 {
+			errs = errors.Join(errs, fmt.Errorf("modbus.event_signals: requires slave mode"))
+		}
+		if len(modbus.StatePoints) > 0 {
+			errs = errors.Join(errs, fmt.Errorf("modbus.state_points: requires slave mode"))
+		}
+	}
+	if modbus.Mode != ModbusModeMaster {
+		if len(modbus.EventSignalWrites) > 0 {
+			errs = errors.Join(errs, fmt.Errorf("modbus.event_signal_writes: requires master mode"))
+		}
+		if len(modbus.StatePolls) > 0 {
+			errs = errors.Join(errs, fmt.Errorf("modbus.state_polls: requires master mode"))
+		}
+	}
+
+	errs = errors.Join(
+		errs,
+		validateModbusEventSignals(modbus.EventSignals),
+		validateModbusStatePoints(modbus.StatePoints),
+		validateModbusEventSignalWrites(modbus.EventSignalWrites),
+		validateModbusStatePolls(modbus.StatePolls),
+	)
+
+	return errs
+}
+
+func validateModbusEventSignals(signals []ModbusEventSignalConfig) error {
+	var errs error
+	ids := make([]string, 0, len(signals))
+	for i, signal := range signals {
+		prefix := fmt.Sprintf("modbus.event_signals[%d]", i)
+		errs = errors.Join(
+			errs,
+			validateID(prefix+".id", signal.ID),
+			validateButtonSemanticID(prefix+".source", signal.Source),
+			validateLightSemanticID(prefix+".target", signal.Target),
+			validateModbusBindingAction(prefix+".action", signal.Action),
+		)
+		ids = append(ids, signal.ID)
+	}
+
+	return errors.Join(errs, validateUniqueValues("modbus.event_signals", "id", "id", ids))
+}
+
+func validateModbusStatePoints(points []ModbusStatePointConfig) error {
+	var errs error
+	ids := make([]string, 0, len(points))
+	for i, point := range points {
+		prefix := fmt.Sprintf("modbus.state_points[%d]", i)
+		errs = errors.Join(
+			errs,
+			validateID(prefix+".id", point.ID),
+			validateLightSemanticID(prefix+".entity", point.Entity),
+		)
+		ids = append(ids, point.ID)
+	}
+
+	return errors.Join(errs, validateUniqueValues("modbus.state_points", "id", "id", ids))
+}
+
+func validateModbusEventSignalWrites(writes []ModbusEventSignalWriteConfig) error {
+	var errs error
+	seen := make(map[string]int, len(writes))
+	for i, write := range writes {
+		prefix := fmt.Sprintf("modbus.event_signal_writes[%d]", i)
+		errs = errors.Join(
+			errs,
+			validateID(prefix+".unit", write.Unit),
+			validateID(prefix+".signal", write.Signal),
+			validateButtonSemanticID(prefix+".source", write.Source),
+			validateLightSemanticID(prefix+".target", write.Target),
+			validateModbusBindingAction(prefix+".action", write.Action),
+		)
+
+		key := write.Unit + "\x00" + write.Signal + "\x00" + write.Source + "\x00" + write.Target + "\x00" + write.Action
+		if _, ok := seen[key]; ok {
+			errs = errors.Join(errs, fmt.Errorf("%s: duplicate event signal write", prefix))
+		} else {
+			seen[key] = i
+		}
+	}
+
+	return errs
+}
+
+func validateModbusStatePolls(polls []ModbusStatePollConfig) error {
+	var errs error
+	seen := make(map[string]int, len(polls))
+	for i, poll := range polls {
+		prefix := fmt.Sprintf("modbus.state_polls[%d]", i)
+		errs = errors.Join(
+			errs,
+			validateID(prefix+".unit", poll.Unit),
+			validateID(prefix+".point", poll.Point),
+			validateLightSemanticID(prefix+".entity", poll.Entity),
+		)
+
+		key := poll.Unit + "\x00" + poll.Point + "\x00" + poll.Entity
+		if _, ok := seen[key]; ok {
+			errs = errors.Join(errs, fmt.Errorf("%s: duplicate state poll", prefix))
+		} else {
+			seen[key] = i
+		}
+	}
+
+	return errs
+}
+
+func validateButtonSemanticID(field string, value string) error {
+	if err := validateRequiredField(field, value); err != nil {
+		return err
+	}
+	if !entity.IsID(value, entity.TypeButton) {
+		return fmt.Errorf("%s: must be a button semantic id %q", field, value)
+	}
+
+	return nil
+}
+
+func validateLightSemanticID(field string, value string) error {
+	if err := validateRequiredField(field, value); err != nil {
+		return err
+	}
+	if !entity.IsID(value, entity.TypeLight) {
+		return fmt.Errorf("%s: must be a light semantic id %q", field, value)
+	}
+
+	return nil
+}
+
+func validateModbusBindingAction(field string, action string) error {
+	if err := validateRequiredField(field, action); err != nil {
+		return err
+	}
+	if action != BindingActionToggle {
+		return fmt.Errorf("%s: unsupported action %q", field, action)
+	}
+
+	return nil
+}
+
+func validateGlobalModbus(global *GlobalRoot) error {
+	var errs error
+	for unitID, unit := range global.Units {
+		prefix := fmt.Sprintf("units.%s.actors.modbus", unitID)
+		for i, write := range unit.Actors.Modbus.EventSignalWrites {
+			routePrefix := fmt.Sprintf("%s.event_signal_writes[%d]", prefix, i)
+			target, ok := global.Units[write.Unit]
+			if !ok {
+				errs = errors.Join(errs, fmt.Errorf("%s.unit: unknown unit %q", routePrefix, write.Unit))
+				continue
+			}
+			if !modbusEventSignalExists(target.Actors.Modbus.EventSignals, write.Signal) {
+				errs = errors.Join(errs, fmt.Errorf("%s.signal: unknown event signal %q on unit %q", routePrefix, write.Signal, write.Unit))
+			}
+		}
+
+		for i, poll := range unit.Actors.Modbus.StatePolls {
+			routePrefix := fmt.Sprintf("%s.state_polls[%d]", prefix, i)
+			target, ok := global.Units[poll.Unit]
+			if !ok {
+				errs = errors.Join(errs, fmt.Errorf("%s.unit: unknown unit %q", routePrefix, poll.Unit))
+				continue
+			}
+			if !modbusStatePointExists(target.Actors.Modbus.StatePoints, poll.Point) {
+				errs = errors.Join(errs, fmt.Errorf("%s.point: unknown state point %q on unit %q", routePrefix, poll.Point, poll.Unit))
+			}
+		}
+	}
+
+	return errs
+}
+
+func modbusEventSignalExists(signals []ModbusEventSignalConfig, id string) bool {
+	for _, signal := range signals {
+		if signal.ID == id {
+			return true
+		}
+	}
+
+	return false
+}
+
+func modbusStatePointExists(points []ModbusStatePointConfig, id string) bool {
+	for _, point := range points {
+		if point.ID == id {
+			return true
+		}
+	}
+
+	return false
 }
 
 func validateSysfs(sysfs SysfsConfig) error {

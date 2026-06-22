@@ -5,6 +5,7 @@ import "time"
 type Root struct {
 	Sysfs         SysfsConfig          `yaml:"sysfs"`
 	MQTT          MQTTConfig           `yaml:"mqtt"`
+	Modbus        ModbusConfig         `yaml:"modbus"`
 	DigitalInputs []DigitalInputConfig `yaml:"digital_inputs"`
 	PushButtons   []PushButtonConfig   `yaml:"push_buttons"`
 	Lights        []LightConfig        `yaml:"lights"`
@@ -37,6 +38,40 @@ type MQTTConfig struct {
 	UnitID      string `yaml:"unit_id"`
 }
 
+type ModbusConfig struct {
+	Mode              string                         `yaml:"mode"`
+	EventSignals      []ModbusEventSignalConfig      `yaml:"event_signals"`
+	StatePoints       []ModbusStatePointConfig       `yaml:"state_points"`
+	EventSignalWrites []ModbusEventSignalWriteConfig `yaml:"event_signal_writes"`
+	StatePolls        []ModbusStatePollConfig        `yaml:"state_polls"`
+}
+
+type ModbusEventSignalConfig struct {
+	ID     string `yaml:"id"`
+	Source string `yaml:"source"`
+	Target string `yaml:"target"`
+	Action string `yaml:"action"`
+}
+
+type ModbusStatePointConfig struct {
+	ID     string `yaml:"id"`
+	Entity string `yaml:"entity"`
+}
+
+type ModbusEventSignalWriteConfig struct {
+	Unit   string `yaml:"unit"`
+	Signal string `yaml:"signal"`
+	Source string `yaml:"source"`
+	Target string `yaml:"target"`
+	Action string `yaml:"action"`
+}
+
+type ModbusStatePollConfig struct {
+	Unit   string `yaml:"unit"`
+	Point  string `yaml:"point"`
+	Entity string `yaml:"entity"`
+}
+
 type DigitalInputConfig struct {
 	ID     string `yaml:"id"`
 	Device string `yaml:"device"`
@@ -67,3 +102,8 @@ type BindingConfig struct {
 }
 
 const BindingActionToggle = "toggle"
+
+const (
+	ModbusModeMaster = "master"
+	ModbusModeSlave  = "slave"
+)

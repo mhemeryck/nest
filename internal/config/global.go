@@ -33,9 +33,12 @@ type UnitConfig struct {
 }
 
 type UnitActorsConfig struct {
-	MQTT  UnitMQTTConfig  `yaml:"mqtt"`
-	Sysfs UnitSysfsConfig `yaml:"sysfs"`
+	MQTT   UnitMQTTConfig   `yaml:"mqtt"`
+	Sysfs  UnitSysfsConfig  `yaml:"sysfs"`
+	Modbus UnitModbusConfig `yaml:"modbus"`
 }
+
+type UnitModbusConfig = ModbusConfig
 
 type UnitMQTTConfig struct {
 	Enabled bool `yaml:"enabled"`
@@ -86,6 +89,9 @@ func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
 	if !ok {
 		return nil, fmt.Errorf("unit_id: unknown unit %q", unitID)
 	}
+	if err := validateGlobalModbus(global); err != nil {
+		return nil, err
+	}
 
 	mqtt := global.Actors.MQTT.Broker
 	mqtt.Enabled = unit.Actors.MQTT.Enabled
@@ -104,6 +110,7 @@ func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
 			PollIntervals: unit.Actors.Sysfs.PollIntervals,
 		},
 		MQTT:          mqtt,
+		Modbus:        cloneModbusConfig(unit.Actors.Modbus),
 		DigitalInputs: append([]DigitalInputConfig(nil), unit.Actors.Sysfs.DigitalInputs...),
 		PushButtons:   localButtons,
 		Lights:        localLights,
@@ -125,6 +132,16 @@ func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
 	}
 
 	return local, nil
+}
+
+func cloneModbusConfig(modbus ModbusConfig) ModbusConfig {
+	return ModbusConfig{
+		Mode:              modbus.Mode,
+		EventSignals:      append([]ModbusEventSignalConfig(nil), modbus.EventSignals...),
+		StatePoints:       append([]ModbusStatePointConfig(nil), modbus.StatePoints...),
+		EventSignalWrites: append([]ModbusEventSignalWriteConfig(nil), modbus.EventSignalWrites...),
+		StatePolls:        append([]ModbusStatePollConfig(nil), modbus.StatePolls...),
+	}
 }
 
 func projectedMQTTClientID(clientID string, unitID string) string {

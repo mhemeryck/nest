@@ -62,6 +62,21 @@ func TestToEntityRoot(t *testing.T) {
 			Target: "controller_1.light.office_light",
 			Action: "toggle",
 		}},
+		Modbus: ModbusConfig{
+			Mode: ModbusModeMaster,
+			EventSignalWrites: []ModbusEventSignalWriteConfig{{
+				Unit:   "controller_2",
+				Signal: "hall_button_toggle",
+				Source: "controller_1.button.office_button",
+				Target: "controller_2.light.hall_light",
+				Action: "toggle",
+			}},
+			StatePolls: []ModbusStatePollConfig{{
+				Unit:   "controller_2",
+				Point:  "hall_light_state",
+				Entity: "controller_2.light.hall_light",
+			}},
+		},
 	})
 
 	require.NotNil(t, root)
@@ -84,6 +99,23 @@ func TestToEntityRoot(t *testing.T) {
 	assert.Equal(t, []entity.Binding{{Source: entity.ID("office_button"), Target: entity.ID("office_light"), Action: entity.ActionToggle}}, root.Bindings)
 	assert.Equal(t, []entity.Binding{{Source: entity.ID("controller_1.button.office_button"), Target: entity.ID("controller_2.light.hall_light"), Action: entity.ActionToggle}}, root.RemoteSourceBindings)
 	assert.Equal(t, []entity.Binding{{Source: entity.ID("controller_2.button.hall_button"), Target: entity.ID("controller_1.light.office_light"), Action: entity.ActionToggle}}, root.RemoteTargetBindings)
+	assert.Equal(t, entity.Modbus{
+		Mode:         entity.ModbusModeMaster,
+		EventSignals: []entity.ModbusEventSignal{},
+		StatePoints:  []entity.ModbusStatePoint{},
+		EventSignalWrites: []entity.ModbusEventSignalWrite{{
+			Unit:   "controller_2",
+			Signal: entity.ModbusEventSignalID("hall_button_toggle"),
+			Source: entity.ID("controller_1.button.office_button"),
+			Target: entity.ID("controller_2.light.hall_light"),
+			Action: entity.ActionToggle,
+		}},
+		StatePolls: []entity.ModbusStatePoll{{
+			Unit:   "controller_2",
+			Point:  entity.ModbusStatePointID("hall_light_state"),
+			Entity: entity.ID("controller_2.light.hall_light"),
+		}},
+	}, root.Modbus)
 }
 
 func TestToEntityRootNil(t *testing.T) {

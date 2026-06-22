@@ -5,13 +5,16 @@ import (
 )
 
 type (
-	SysfsDeviceID  string
-	DigitalInputID string
-	PushButtonID   string
-	LightID        string
-	RelayID        string
-	Action         string
-	LightAction    string
+	SysfsDeviceID       string
+	DigitalInputID      string
+	PushButtonID        string
+	LightID             string
+	RelayID             string
+	Action              string
+	LightAction         string
+	ModbusMode          string
+	ModbusEventSignalID string
+	ModbusStatePointID  string
 )
 
 const (
@@ -19,12 +22,15 @@ const (
 	LightActionToggle LightAction = "toggle"
 	LightActionOn     LightAction = "on"
 	LightActionOff    LightAction = "off"
+	ModbusModeMaster  ModbusMode  = "master"
+	ModbusModeSlave   ModbusMode  = "slave"
 )
 
 type Root struct {
 	SysfsRoot            string
 	SysfsPollIntervals   PollIntervals
 	MQTT                 MQTT
+	Modbus               Modbus
 	DigitalInputs        []DigitalInput
 	PushButtons          []PushButton
 	Lights               []Light
@@ -49,6 +55,40 @@ type MQTT struct {
 	Password    string
 	TopicPrefix string
 	UnitID      string
+}
+
+type Modbus struct {
+	Mode              ModbusMode
+	EventSignals      []ModbusEventSignal
+	StatePoints       []ModbusStatePoint
+	EventSignalWrites []ModbusEventSignalWrite
+	StatePolls        []ModbusStatePoll
+}
+
+type ModbusEventSignal struct {
+	ID     ModbusEventSignalID
+	Source ID
+	Target ID
+	Action Action
+}
+
+type ModbusStatePoint struct {
+	ID     ModbusStatePointID
+	Entity ID
+}
+
+type ModbusEventSignalWrite struct {
+	Unit   string
+	Signal ModbusEventSignalID
+	Source ID
+	Target ID
+	Action Action
+}
+
+type ModbusStatePoll struct {
+	Unit   string
+	Point  ModbusStatePointID
+	Entity ID
 }
 
 type DigitalInput struct {
