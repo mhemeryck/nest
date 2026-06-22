@@ -12,6 +12,18 @@ units:
     actors:
       mqtt:
         enabled: true
+      modbus:
+        mode: master
+        event_signal_writes:
+          - unit: remote
+            signal: office_button_toggle
+            source: local.button.office_button
+            target: remote.light.remote_light
+            action: toggle
+        state_polls:
+          - unit: remote
+            point: remote_light_state
+            entity: remote.light.remote_light
       sysfs:
         root: test/fixtures
         poll_intervals:
@@ -61,6 +73,16 @@ units:
     actors:
       mqtt:
         enabled: true
+      modbus:
+        mode: slave
+        event_signals:
+          - id: office_button_toggle
+            source: local.button.office_button
+            target: remote.light.remote_light
+            action: toggle
+        state_points:
+          - id: remote_light_state
+            entity: remote.light.remote_light
       sysfs:
         root: test/fixtures
         poll_intervals:
