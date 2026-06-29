@@ -19,41 +19,32 @@ func dispatchEvent(
 	mqttCommands chan<- mqtt.Command,
 	mqttTopics mqtt.Topics,
 	busEvent event.Event,
-) {
+) []event.Event {
 	logSemanticEvent(busEvent)
+	derivedEvents := bindingEventsFromEvent(index, busEvent)
 	dispatchSysfsCommand(ctx, index, sysfsCommands, busEvent)
-	dispatchMQTTCommand(ctx, root, mqttCommands, mqttTopics, busEvent)
+	dispatchMQTTCommand(ctx, root, index, mqttCommands, mqttTopics, busEvent)
+
+	return derivedEvents
 }
 
 func dispatchSysfsCommand(ctx context.Context, index *registry.Index, commands chan<- sysfs.Command, busEvent event.Event) {
 	switch busEvent.Kind {
-	case event.PushButtonPressedKind:
-		dispatchLightEventsFromPushButton(ctx, index, commands, *busEvent.PushButton)
 	case event.LightKind:
 		dispatchLightEvent(ctx, index, commands, *busEvent.Light)
 	}
 }
 
-func dispatchMQTTCommand(ctx context.Context, root *entity.Root, commands chan<- mqtt.Command, topics mqtt.Topics, busEvent event.Event) {
+func dispatchMQTTCommand(ctx context.Context, root *entity.Root, index *registry.Index, commands chan<- mqtt.Command, topics mqtt.Topics, busEvent event.Event) {
 	switch busEvent.Kind {
+	case event.PushButtonPressedKind, event.PushButtonReleasedKind:
+		publishPushButtonSourceEvent(ctx, index, commands, topics, busEvent.Kind, *busEvent.PushButton)
 	case event.LightStateKind:
 		publishLightState(ctx, commands, topics, *busEvent.LightState)
 	case event.MQTTConnectedKind:
 		if err := publishMQTTStartup(ctx, root, commands); err != nil {
 			slog.Error("mqtt startup publish failed", "error", err)
 		}
-	}
-}
-
-func dispatchLightEventsFromPushButton(
-	ctx context.Context,
-	index *registry.Index,
-	sysfsCommands chan<- sysfs.Command,
-	pushButton event.PushButton,
-) {
-	for _, lightEvent := range lightEventsFromPushButton(index, pushButton) {
-		logSemanticEvent(lightEvent)
-		dispatchSysfsCommand(ctx, index, sysfsCommands, lightEvent)
 	}
 }
 

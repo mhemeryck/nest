@@ -23,7 +23,13 @@ func TestBuild(t *testing.T) {
 			{ID: entity.RelayID("office_light_relay"), Name: "Office light relay", SysfsDevice: entity.SysfsDeviceID("ro_3_14")},
 		},
 		Bindings: []entity.Binding{
-			{Button: entity.PushButtonID("office_button"), Light: entity.LightID("office_light"), Action: entity.LightActionToggle},
+			{Source: entity.ID("office_button"), Target: entity.ID("office_light"), Action: entity.ActionToggle},
+		},
+		RemoteSourceBindings: []entity.Binding{
+			{Source: entity.ID("controller_1.button.office_button"), Target: entity.ID("controller_2.light.hall_light"), Action: entity.ActionToggle},
+		},
+		RemoteTargetBindings: []entity.Binding{
+			{Source: entity.ID("controller_2.button.hall_button"), Target: entity.ID("controller_1.light.office_light"), Action: entity.ActionToggle},
 		},
 	}
 
@@ -35,7 +41,9 @@ func TestBuild(t *testing.T) {
 	assert.Equal(t, root.PushButtons, index.PushButtonsByInputID[entity.DigitalInputID("office_button_input")])
 	assert.Equal(t, root.Lights[0], index.LightsByID[entity.LightID("office_light")])
 	assert.Equal(t, root.Lights, index.LightsByRelayID[entity.RelayID("office_light_relay")])
-	assert.Equal(t, root.Bindings, index.BindingsByButtonID[entity.PushButtonID("office_button")])
+	assert.Equal(t, root.Bindings, index.BindingsBySourceID[entity.ID("office_button")])
+	assert.Equal(t, root.RemoteSourceBindings, index.RemoteSourceBindingsBySourceID[entity.ID("controller_1.button.office_button")])
+	assert.Equal(t, root.RemoteTargetBindings, index.RemoteTargetBindingsBySourceID[entity.ID("controller_2.button.hall_button")])
 	assert.Equal(t, root.Relays[0], index.RelaysByID[entity.RelayID("office_light_relay")])
 	assert.Equal(t, root.Relays[0], index.RelaysByDevice[entity.SysfsDeviceID("ro_3_14")])
 	assert.Equal(t, []entity.SysfsDeviceID{"di_3_16", "ro_3_14"}, SysfsDeviceIDs(index))
@@ -56,7 +64,13 @@ func TestLookupHelpers(t *testing.T) {
 			{ID: entity.RelayID("office_light_relay"), Name: "Office light relay", SysfsDevice: entity.SysfsDeviceID("ro_3_14")},
 		},
 		Bindings: []entity.Binding{
-			{Button: entity.PushButtonID("office_button"), Light: entity.LightID("office_light"), Action: entity.LightActionToggle},
+			{Source: entity.ID("office_button"), Target: entity.ID("office_light"), Action: entity.ActionToggle},
+		},
+		RemoteSourceBindings: []entity.Binding{
+			{Source: entity.ID("controller_1.button.office_button"), Target: entity.ID("controller_2.light.hall_light"), Action: entity.ActionToggle},
+		},
+		RemoteTargetBindings: []entity.Binding{
+			{Source: entity.ID("controller_2.button.hall_button"), Target: entity.ID("controller_1.light.office_light"), Action: entity.ActionToggle},
 		},
 	}
 	index := Build(root)
@@ -67,6 +81,8 @@ func TestLookupHelpers(t *testing.T) {
 
 	assert.Equal(t, root.PushButtons, PushButtonsByInput(index, entity.DigitalInputID("office_button_input")))
 	assert.Equal(t, root.Bindings, BindingsByButton(index, entity.PushButtonID("office_button")))
+	assert.Equal(t, root.RemoteSourceBindings, RemoteSourceBindingsByButton(index, entity.PushButtonID("controller_1.button.office_button")))
+	assert.Equal(t, root.RemoteTargetBindings, RemoteTargetBindingsByButton(index, entity.PushButtonID("controller_2.button.hall_button")))
 
 	light, ok := LightByID(index, entity.LightID("office_light"))
 	require.True(t, ok)

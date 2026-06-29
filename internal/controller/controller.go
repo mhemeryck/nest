@@ -118,18 +118,39 @@ func dispatchEvents(
 	mqttTopics mqtt.Topics,
 	semanticEvents <-chan event.Event,
 ) {
+	var dispatchQueue []event.Event
+	semanticEventsOpen := true
+
 	for {
+		if semanticEvent, remainingEvents, ok := popEvent(dispatchQueue); ok {
+			dispatchQueue = append(remainingEvents, dispatchEvent(ctx, root, index, sysfsCommands, mqttCommands, mqttTopics, semanticEvent)...)
+			continue
+		}
+
+		if !semanticEventsOpen {
+			return
+		}
+
 		select {
 		case <-ctx.Done():
 			return
 		case semanticEvent, ok := <-semanticEvents:
 			if !ok {
-				return
+				semanticEventsOpen = false
+				continue
 			}
 
-			dispatchEvent(ctx, root, index, sysfsCommands, mqttCommands, mqttTopics, semanticEvent)
+			dispatchQueue = append(dispatchQueue, semanticEvent)
 		}
 	}
+}
+
+func popEvent(events []event.Event) (event.Event, []event.Event, bool) {
+	if len(events) == 0 {
+		return event.Event{}, events, false
+	}
+
+	return events[0], events[1:], true
 }
 
 func publishMQTTStartup(ctx context.Context, root *entity.Root, commands chan<- mqtt.Command) error {
@@ -163,7 +184,7 @@ func semanticEventFromMQTTEvent(index *registry.Index, mqttTopics mqtt.Topics, m
 	case mqtt.PublishFailedKind:
 		semanticEvent.Kind = event.MQTTPublishFailedKind
 	case mqtt.ReceivedEventKind:
-		return semanticLightEventFromMQTTMessage(index, mqttTopics, mqttEvent.Message)
+		return semanticEventFromMQTTMessage(index, mqttTopics, mqttEvent.Message)
 	default:
 		return event.Event{}, false
 	}
@@ -171,10 +192,17 @@ func semanticEventFromMQTTEvent(index *registry.Index, mqttTopics mqtt.Topics, m
 	return semanticEvent, true
 }
 
+func semanticEventFromMQTTMessage(index *registry.Index, mqttTopics mqtt.Topics, message mqtt.ReceivedMessage) (event.Event, bool) {
+	if semanticEvent, ok := semanticLightEventFromMQTTMessage(index, mqttTopics, message); ok {
+		return semanticEvent, true
+	}
+
+	return semanticSourceEventFromMQTTMessage(index, mqttTopics, message)
+}
+
 func semanticLightEventFromMQTTMessage(index *registry.Index, mqttTopics mqtt.Topics, message mqtt.ReceivedMessage) (event.Event, bool) {
 	lightID, ok := mqtt.ParseLightCommandTopic(mqttTopics, message.Topic)
 	if !ok {
-		slog.Warn("unhandled mqtt command topic", "topic", message.Topic)
 		return event.Event{}, false
 	}
 
@@ -198,6 +226,31 @@ func semanticLightEventFromMQTTMessage(index *registry.Index, mqttTopics mqtt.To
 			Action:  action,
 		},
 	}, true
+}
+
+func semanticSourceEventFromMQTTMessage(index *registry.Index, mqttTopics mqtt.Topics, message mqtt.ReceivedMessage) (event.Event, bool) {
+	sourceEvent, ok := mqtt.ParseSemanticSourceEventMessage(message, mqttTopics.Prefix)
+	if !ok {
+		slog.Warn("unhandled mqtt message topic", "topic", message.Topic)
+		return event.Event{}, false
+	}
+	if len(registry.RemoteTargetBindingsBySource(index, sourceEvent.SourceID)) == 0 {
+		slog.Warn("mqtt source event has no target-local binding", "source_id", sourceEvent.SourceID)
+		return event.Event{}, false
+	}
+
+	semanticEvent := event.Event{
+		PushButton: &event.PushButton{
+			ButtonID: entity.PushButtonID(sourceEvent.SourceID),
+		},
+	}
+	if sourceEvent.Event == "pressed" {
+		semanticEvent.Kind = event.PushButtonPressedKind
+	} else {
+		semanticEvent.Kind = event.PushButtonReleasedKind
+	}
+
+	return semanticEvent, true
 }
 
 func lightActionFromMQTTPayload(payload []byte) (entity.LightAction, bool) {

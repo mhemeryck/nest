@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mhemeryck/nest/internal/config"
 	"github.com/mhemeryck/nest/internal/controller/event"
 	"github.com/mhemeryck/nest/internal/entity"
 	"github.com/mhemeryck/nest/internal/mqtt"
@@ -61,12 +62,12 @@ func TestDispatchPushButtonEventTogglesLightRelay(t *testing.T) {
 		PushButtons:   []entity.PushButton{{ID: entity.PushButtonID("office_button"), Name: "Office button", Input: entity.DigitalInputID("office_button_input")}},
 		Lights:        []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
 		Relays:        []entity.Relay{{ID: entity.RelayID("office_light_relay"), Name: "Office light relay", SysfsDevice: entity.SysfsDeviceID("ro_3_14")}},
-		Bindings:      []entity.Binding{{Button: entity.PushButtonID("office_button"), Light: entity.LightID("office_light"), Action: entity.LightActionToggle}},
+		Bindings:      []entity.Binding{{Source: entity.ID("office_button"), Target: entity.ID("office_light"), Action: entity.ActionToggle}},
 	})
 	commands := make(chan sysfs.Command, 1)
 
 	logs := captureLogs(t, func() {
-		dispatchEvent(t.Context(), &entity.Root{}, index, commands, nil, mqtt.Topics{}, event.Event{
+		dispatchQueuedTestEvents(t.Context(), &entity.Root{}, index, commands, nil, mqtt.Topics{}, event.Event{
 			Kind: event.PushButtonPressedKind,
 			PushButton: &event.PushButton{
 				ButtonID: entity.PushButtonID("office_button"),
@@ -88,13 +89,36 @@ func TestDispatchPushButtonEventTogglesLightRelay(t *testing.T) {
 	assert.Equal(t, "1\n", string(data))
 }
 
+func TestDispatchPushButtonEventDerivesLightEvent(t *testing.T) {
+	index := registry.Build(&entity.Root{
+		PushButtons: []entity.PushButton{{ID: entity.PushButtonID("office_button"), Name: "Office button", Input: entity.DigitalInputID("office_button_input")}},
+		Lights:      []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
+		Bindings:    []entity.Binding{{Source: entity.ID("office_button"), Target: entity.ID("office_light"), Action: entity.ActionToggle}},
+	})
+	sysfsCommands := make(chan sysfs.Command, 1)
+
+	derivedEvents := dispatchEvent(t.Context(), &entity.Root{}, index, sysfsCommands, nil, mqtt.Topics{}, event.Event{
+		Kind: event.PushButtonPressedKind,
+		PushButton: &event.PushButton{
+			ButtonID: entity.PushButtonID("office_button"),
+			Name:     "Office button",
+		},
+	})
+
+	require.Len(t, derivedEvents, 1)
+	assert.Equal(t, event.LightKind, derivedEvents[0].Kind)
+	assert.Equal(t, entity.LightID("office_light"), derivedEvents[0].Light.LightID)
+	assert.Equal(t, entity.LightActionToggle, derivedEvents[0].Light.Action)
+	assert.Empty(t, sysfsCommands)
+}
+
 func TestHandleStateChangeDoesNotPublishRawInputOrButtonState(t *testing.T) {
 	index := registry.Build(&entity.Root{
 		DigitalInputs: []entity.DigitalInput{{ID: entity.DigitalInputID("office_button_input"), SysfsDevice: entity.SysfsDeviceID("di_3_16")}},
 		PushButtons:   []entity.PushButton{{ID: entity.PushButtonID("office_button"), Name: "Office button", Input: entity.DigitalInputID("office_button_input")}},
 		Lights:        []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
 		Relays:        []entity.Relay{{ID: entity.RelayID("office_light_relay"), Name: "Office light relay", SysfsDevice: entity.SysfsDeviceID("ro_3_14")}},
-		Bindings:      []entity.Binding{{Button: entity.PushButtonID("office_button"), Light: entity.LightID("office_light"), Action: entity.LightActionToggle}},
+		Bindings:      []entity.Binding{{Source: entity.ID("office_button"), Target: entity.ID("office_light"), Action: entity.ActionToggle}},
 	})
 	sysfsCommands := make(chan sysfs.Command, 1)
 	mqttCommands := make(chan mqtt.Command, 2)
@@ -107,14 +131,96 @@ func TestHandleStateChangeDoesNotPublishRawInputOrButtonState(t *testing.T) {
 		NewValue: sysfs.On,
 		IsRising: true,
 	})
-	dispatchEvent(t.Context(), &entity.Root{}, index, sysfsCommands, mqttCommands, topics, <-semanticEvents)
-	dispatchEvent(t.Context(), &entity.Root{}, index, sysfsCommands, mqttCommands, topics, <-semanticEvents)
+	dispatchQueuedTestEvents(t.Context(), &entity.Root{}, index, sysfsCommands, mqttCommands, topics, <-semanticEvents, <-semanticEvents)
 
 	assert.Empty(t, mqttCommands)
 
 	sysfsCommand := <-sysfsCommands
 	assert.Equal(t, sysfs.ToggleCommand, sysfsCommand.Kind)
 	assert.Equal(t, "ro_3_14", sysfsCommand.DeviceID)
+}
+
+func TestProjectedConfigStateChangeTogglesLocalLight(t *testing.T) {
+	configRoot, err := config.Load(filepath.Join("..", "..", "test", "fixtures", "config.local.yaml"), "controller_1")
+	require.NoError(t, err)
+	root := config.ToEntityRoot(configRoot)
+	index := registry.Build(root)
+	sysfsCommands := make(chan sysfs.Command, 1)
+	mqttCommands := make(chan mqtt.Command, 2)
+	semanticEvents := make(chan event.Event, 2)
+
+	normalizeStateChange(t.Context(), index, semanticEvents, sysfs.StateChange{
+		Device:   sysfs.Device{Identifier: "di_3_16", Path: "/sys/di_3_16/di_value"},
+		OldValue: sysfs.Off,
+		NewValue: sysfs.On,
+		IsRising: true,
+	})
+	inputEvent := <-semanticEvents
+	buttonEvent := <-semanticEvents
+
+	assert.Equal(t, event.DigitalInputStateKind, inputEvent.Kind)
+	assert.Equal(t, event.PushButtonPressedKind, buttonEvent.Kind)
+	assert.Equal(t, entity.PushButtonID("controller_1.button.office_button"), buttonEvent.PushButton.ButtonID)
+
+	dispatchQueuedTestEvents(t.Context(), root, index, sysfsCommands, mqttCommands, mqtt.NewTopics("nest", "controller_1"), inputEvent, buttonEvent)
+
+	assert.Empty(t, mqttCommands)
+	sysfsCommand := <-sysfsCommands
+	assert.Equal(t, sysfs.ToggleCommand, sysfsCommand.Kind)
+	assert.Equal(t, "ro_3_14", sysfsCommand.DeviceID)
+}
+
+func TestDispatchPushButtonEventPublishesRemoteSourceEvent(t *testing.T) {
+	root := &entity.Root{
+		PushButtons: []entity.PushButton{{ID: entity.PushButtonID("controller_1.button.office_button"), Name: "Office button", Input: entity.DigitalInputID("controller_1.digital_input.office_button_input")}},
+		RemoteSourceBindings: []entity.Binding{{
+			Source: entity.ID("controller_1.button.office_button"),
+			Target: entity.ID("controller_2.light.hall_light"),
+			Action: entity.ActionToggle,
+		}},
+	}
+	index := registry.Build(root)
+	mqttCommands := make(chan mqtt.Command, 1)
+
+	dispatchEvent(t.Context(), root, index, nil, mqttCommands, mqtt.NewTopics("nest", "controller_1"), event.Event{
+		Kind: event.PushButtonPressedKind,
+		PushButton: &event.PushButton{
+			ButtonID: entity.PushButtonID("controller_1.button.office_button"),
+			Name:     "Office button",
+		},
+	})
+
+	command := <-mqttCommands
+	assert.Equal(t, mqtt.PublishCommandKind, command.Kind)
+	assert.Equal(t, "nest/units/controller_1/sources/controller_1.button.office_button/event", command.Publish.Topic)
+	assert.JSONEq(t, `{"source":"controller_1.button.office_button","event":"pressed"}`, string(command.Publish.Payload))
+	assert.False(t, command.Publish.Retain)
+}
+
+func TestDispatchRemoteSourceEventTogglesTargetLocalLight(t *testing.T) {
+	index := registry.Build(&entity.Root{
+		Lights: []entity.Light{{ID: entity.LightID("controller_1.light.office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
+		Relays: []entity.Relay{{ID: entity.RelayID("office_light_relay"), Name: "Office light relay", SysfsDevice: entity.SysfsDeviceID("ro_3_14")}},
+		RemoteTargetBindings: []entity.Binding{{
+			Source: entity.ID("controller_2.button.hall_button"),
+			Target: entity.ID("controller_1.light.office_light"),
+			Action: entity.ActionToggle,
+		}},
+	})
+	sysfsCommands := make(chan sysfs.Command, 1)
+
+	derivedEvents := dispatchEvent(t.Context(), &entity.Root{}, index, sysfsCommands, nil, mqtt.Topics{}, event.Event{
+		Kind: event.PushButtonPressedKind,
+		PushButton: &event.PushButton{
+			ButtonID: entity.PushButtonID("controller_2.button.hall_button"),
+		},
+	})
+	require.Len(t, derivedEvents, 1)
+	dispatchEvent(t.Context(), &entity.Root{}, index, sysfsCommands, nil, mqtt.Topics{}, derivedEvents[0])
+
+	command := <-sysfsCommands
+	assert.Equal(t, sysfs.ToggleCommand, command.Kind)
+	assert.Equal(t, "ro_3_14", command.DeviceID)
 }
 
 func TestHandleStateChangePublishesMappedLightState(t *testing.T) {
@@ -207,6 +313,27 @@ func TestDispatchMQTTLightCommandTurnsLightOn(t *testing.T) {
 	assert.Equal(t, "ro_3_14", command.DeviceID)
 }
 
+func TestProjectedConfigMQTTLightCommandTurnsLightOn(t *testing.T) {
+	configRoot, err := config.Load(filepath.Join("..", "..", "test", "fixtures", "config.local.yaml"), "controller_1")
+	require.NoError(t, err)
+	root := config.ToEntityRoot(configRoot)
+	commands := make(chan sysfs.Command, 1)
+
+	semanticEvent, handled := semanticEventFromMQTTEvent(
+		registry.Build(root),
+		mqtt.NewTopics("nest", "controller_1"),
+		mqtt.ReceivedEvent(mqtt.ReceivedMessage{Topic: "nest/units/controller_1/lights/office_light/command", Payload: []byte("ON")}),
+	)
+	require.True(t, handled)
+	assert.Equal(t, entity.LightID("controller_1.light.office_light"), semanticEvent.Light.LightID)
+
+	dispatchEvent(t.Context(), root, registry.Build(root), commands, nil, mqtt.Topics{}, semanticEvent)
+
+	command := <-commands
+	assert.Equal(t, sysfs.OnCommand, command.Kind)
+	assert.Equal(t, "ro_3_14", command.DeviceID)
+}
+
 func TestHandleStateChangeLogsRawStateChangeForUnknownDevice(t *testing.T) {
 	index := registry.Build(&entity.Root{})
 	semanticEvents := make(chan event.Event, 1)
@@ -230,7 +357,7 @@ func TestHandleStateChangeLogsPushButtonRelease(t *testing.T) {
 		DigitalInputs: []entity.DigitalInput{{ID: entity.DigitalInputID("office_button_input"), SysfsDevice: entity.SysfsDeviceID("di_3_16")}},
 		PushButtons:   []entity.PushButton{{ID: entity.PushButtonID("office_button"), Name: "Office button", Input: entity.DigitalInputID("office_button_input")}},
 		Lights:        []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
-		Bindings:      []entity.Binding{{Button: entity.PushButtonID("office_button"), Light: entity.LightID("office_light"), Action: entity.LightActionToggle}},
+		Bindings:      []entity.Binding{{Source: entity.ID("office_button"), Target: entity.ID("office_light"), Action: entity.ActionToggle}},
 	})
 	semanticEvents := make(chan event.Event, 2)
 
@@ -241,8 +368,7 @@ func TestHandleStateChangeLogsPushButtonRelease(t *testing.T) {
 			NewValue: sysfs.Off,
 			IsRising: false,
 		})
-		dispatchEvent(t.Context(), &entity.Root{}, index, nil, nil, mqtt.Topics{}, <-semanticEvents)
-		dispatchEvent(t.Context(), &entity.Root{}, index, nil, nil, mqtt.Topics{}, <-semanticEvents)
+		dispatchQueuedTestEvents(t.Context(), &entity.Root{}, index, nil, nil, mqtt.Topics{}, <-semanticEvents, <-semanticEvents)
 	})
 
 	assert.Contains(t, logs, "push button event")
@@ -258,7 +384,7 @@ func TestHandleStateChangeDoesNotBlockCommandSendAfterCancellation(t *testing.T)
 		PushButtons:   []entity.PushButton{{ID: entity.PushButtonID("office_button"), Name: "Office button", Input: entity.DigitalInputID("office_button_input")}},
 		Lights:        []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
 		Relays:        []entity.Relay{{ID: entity.RelayID("office_light_relay"), Name: "Office light relay", SysfsDevice: entity.SysfsDeviceID("ro_3_14")}},
-		Bindings:      []entity.Binding{{Button: entity.PushButtonID("office_button"), Light: entity.LightID("office_light"), Action: entity.LightActionToggle}},
+		Bindings:      []entity.Binding{{Source: entity.ID("office_button"), Target: entity.ID("office_light"), Action: entity.ActionToggle}},
 	})
 	semanticEvents := make(chan event.Event)
 	done := make(chan struct{})
@@ -297,4 +423,22 @@ func captureLogs(t *testing.T, fn func()) string {
 
 	require.NotEmpty(t, buffer.String())
 	return buffer.String()
+}
+
+func dispatchQueuedTestEvents(
+	ctx context.Context,
+	root *entity.Root,
+	index *registry.Index,
+	sysfsCommands chan<- sysfs.Command,
+	mqttCommands chan<- mqtt.Command,
+	mqttTopics mqtt.Topics,
+	events ...event.Event,
+) {
+	semanticEvents := make(chan event.Event, len(events))
+	for _, semanticEvent := range events {
+		semanticEvents <- semanticEvent
+	}
+	close(semanticEvents)
+
+	dispatchEvents(ctx, root, index, sysfsCommands, mqttCommands, mqttTopics, semanticEvents)
 }

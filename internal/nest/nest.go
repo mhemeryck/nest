@@ -8,7 +8,6 @@ import (
 
 	"github.com/mhemeryck/nest/internal/config"
 	"github.com/mhemeryck/nest/internal/controller"
-	"github.com/mhemeryck/nest/internal/entity"
 	"github.com/mhemeryck/nest/internal/mqtt"
 	"github.com/mhemeryck/nest/internal/registry"
 	"github.com/mhemeryck/nest/internal/sysfs"
@@ -25,7 +24,7 @@ func Run(ctx context.Context, opts Options) error {
 	defer cancel()
 
 	// Load and validate external configuration before building runtime state.
-	configRoot, err := config.Load(opts.ConfigPath)
+	configRoot, err := config.Load(opts.ConfigPath, opts.UnitID)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
@@ -36,7 +35,7 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	// Translate config into domain entities and indexes used by controllers.
-	root := entity.FromConfig(configRoot)
+	root := config.ToEntityRoot(configRoot)
 	index := registry.Build(root)
 
 	// Resolve configured sysfs devices against the hardware tree before actors start.
@@ -60,11 +59,12 @@ func Run(ctx context.Context, opts Options) error {
 	for _, device := range configuredDevices {
 		slog.Info("configured device", "identifier", device.Identifier, "path", device.Path)
 	}
+	logModbusConfig(root)
 
 	// Start optional transport actors before local control so startup state is published early.
 	mqttCommands, mqttEvents, mqttDone := mqttChannels(root)
 	if mqttCommands != nil {
-		go mqtt.Run(ctx, root.MQTT, mqttCommands, mqttEvents, mqttDone)
+		go mqtt.Run(ctx, root.MQTT, mqtt.SemanticSourceEventSubscriptionTopics(mqttTopics(root), root), mqttCommands, mqttEvents, mqttDone)
 	}
 
 	// Start hardware and controller actors with unidirectional command and observation channels.

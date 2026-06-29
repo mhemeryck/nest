@@ -27,7 +27,7 @@ func TestClientOptions(t *testing.T) {
 		Password:    "secret",
 		TopicPrefix: "nest",
 		UnitID:      "controller_1",
-	}, NewTopics("nest", "controller_1"), events)
+	}, NewTopics("nest", "controller_1"), nil, events)
 
 	assert.Equal(t, "nest-controller-1", options.ClientID)
 	assert.Equal(t, "nest", options.Username)
@@ -75,10 +75,25 @@ func TestSubscribeLightCommandsIgnoresRetainedMessages(t *testing.T) {
 	assert.Empty(t, events)
 }
 
+func TestSubscribeSourceEvents(t *testing.T) {
+	events := make(chan Event, 1)
+	client := &fakeClient{token: fakeToken{}, handlers: make(map[string]paho.MessageHandler)}
+
+	err := subscribeSourceEvents(t.Context(), client, []string{"nest/units/controller_2/sources/controller_2.button.hall/event"}, events)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"nest/units/controller_2/sources/controller_2.button.hall/event"}, client.subscribedTopics)
+
+	message := &fakeMessage{topic: "nest/units/controller_2/sources/controller_2.button.hall/event", payload: []byte(`{"source":"controller_2.button.hall","event":"pressed"}`)}
+	client.handlers[message.topic](nil, message)
+	assert.Equal(t, ReceivedEvent(ReceivedMessage{Topic: message.topic, Payload: message.payload}), <-events)
+}
+
 type fakeClient struct {
-	token           fakeToken
-	subscribedTopic string
-	handler         paho.MessageHandler
+	token            fakeToken
+	subscribedTopic  string
+	subscribedTopics []string
+	handler          paho.MessageHandler
+	handlers         map[string]paho.MessageHandler
 }
 
 func (f *fakeClient) Publish(string, byte, bool, interface{}) paho.Token {
@@ -87,7 +102,11 @@ func (f *fakeClient) Publish(string, byte, bool, interface{}) paho.Token {
 
 func (f *fakeClient) Subscribe(topic string, _ byte, callback paho.MessageHandler) paho.Token {
 	f.subscribedTopic = topic
+	f.subscribedTopics = append(f.subscribedTopics, topic)
 	f.handler = callback
+	if f.handlers != nil {
+		f.handlers[topic] = callback
+	}
 	return f.token
 }
 
@@ -95,7 +114,7 @@ type fakeToken struct {
 	err error
 }
 
-func (f fakeToken) Wait() bool { return true }
+func (f fakeToken) Wait() bool                       { return true }
 func (f fakeToken) WaitTimeout(_ time.Duration) bool { return true }
 func (f fakeToken) Done() <-chan struct{} {
 	ch := make(chan struct{})
@@ -105,8 +124,8 @@ func (f fakeToken) Done() <-chan struct{} {
 func (f fakeToken) Error() error { return f.err }
 
 type fakeMessage struct {
-	topic   string
-	payload []byte
+	topic    string
+	payload  []byte
 	retained bool
 }
 

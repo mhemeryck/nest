@@ -7,26 +7,30 @@ import (
 )
 
 type Index struct {
-	DigitalInputsByDevice map[entity.SysfsDeviceID]entity.DigitalInput
-	PushButtonsByID       map[entity.PushButtonID]entity.PushButton
-	PushButtonsByInputID  map[entity.DigitalInputID][]entity.PushButton
-	LightsByID            map[entity.LightID]entity.Light
-	LightsByRelayID       map[entity.RelayID][]entity.Light
-	BindingsByButtonID    map[entity.PushButtonID][]entity.Binding
-	RelaysByID            map[entity.RelayID]entity.Relay
-	RelaysByDevice        map[entity.SysfsDeviceID]entity.Relay
+	DigitalInputsByDevice          map[entity.SysfsDeviceID]entity.DigitalInput
+	PushButtonsByID                map[entity.PushButtonID]entity.PushButton
+	PushButtonsByInputID           map[entity.DigitalInputID][]entity.PushButton
+	LightsByID                     map[entity.LightID]entity.Light
+	LightsByRelayID                map[entity.RelayID][]entity.Light
+	BindingsBySourceID             map[entity.ID][]entity.Binding
+	RemoteSourceBindingsBySourceID map[entity.ID][]entity.Binding
+	RemoteTargetBindingsBySourceID map[entity.ID][]entity.Binding
+	RelaysByID                     map[entity.RelayID]entity.Relay
+	RelaysByDevice                 map[entity.SysfsDeviceID]entity.Relay
 }
 
 func Build(root *entity.Root) *Index {
 	index := &Index{
-		DigitalInputsByDevice: make(map[entity.SysfsDeviceID]entity.DigitalInput, len(root.DigitalInputs)),
-		PushButtonsByID:       make(map[entity.PushButtonID]entity.PushButton, len(root.PushButtons)),
-		PushButtonsByInputID:  make(map[entity.DigitalInputID][]entity.PushButton),
-		LightsByID:            make(map[entity.LightID]entity.Light, len(root.Lights)),
-		LightsByRelayID:       make(map[entity.RelayID][]entity.Light),
-		BindingsByButtonID:    make(map[entity.PushButtonID][]entity.Binding),
-		RelaysByID:            make(map[entity.RelayID]entity.Relay, len(root.Relays)),
-		RelaysByDevice:        make(map[entity.SysfsDeviceID]entity.Relay, len(root.Relays)),
+		DigitalInputsByDevice:          make(map[entity.SysfsDeviceID]entity.DigitalInput, len(root.DigitalInputs)),
+		PushButtonsByID:                make(map[entity.PushButtonID]entity.PushButton, len(root.PushButtons)),
+		PushButtonsByInputID:           make(map[entity.DigitalInputID][]entity.PushButton),
+		LightsByID:                     make(map[entity.LightID]entity.Light, len(root.Lights)),
+		LightsByRelayID:                make(map[entity.RelayID][]entity.Light),
+		BindingsBySourceID:             make(map[entity.ID][]entity.Binding),
+		RemoteSourceBindingsBySourceID: make(map[entity.ID][]entity.Binding),
+		RemoteTargetBindingsBySourceID: make(map[entity.ID][]entity.Binding),
+		RelaysByID:                     make(map[entity.RelayID]entity.Relay, len(root.Relays)),
+		RelaysByDevice:                 make(map[entity.SysfsDeviceID]entity.Relay, len(root.Relays)),
 	}
 
 	for _, input := range root.DigitalInputs {
@@ -49,7 +53,15 @@ func Build(root *entity.Root) *Index {
 	}
 
 	for _, binding := range root.Bindings {
-		index.BindingsByButtonID[binding.Button] = append(index.BindingsByButtonID[binding.Button], binding)
+		index.BindingsBySourceID[binding.Source] = append(index.BindingsBySourceID[binding.Source], binding)
+	}
+
+	for _, binding := range root.RemoteSourceBindings {
+		index.RemoteSourceBindingsBySourceID[binding.Source] = append(index.RemoteSourceBindingsBySourceID[binding.Source], binding)
+	}
+
+	for _, binding := range root.RemoteTargetBindings {
+		index.RemoteTargetBindingsBySourceID[binding.Source] = append(index.RemoteTargetBindingsBySourceID[binding.Source], binding)
 	}
 
 	return index
@@ -79,7 +91,27 @@ func PushButtonsByInput(index *Index, inputID entity.DigitalInputID) []entity.Pu
 }
 
 func BindingsByButton(index *Index, buttonID entity.PushButtonID) []entity.Binding {
-	return index.BindingsByButtonID[buttonID]
+	return BindingsBySource(index, entity.ID(buttonID))
+}
+
+func BindingsBySource(index *Index, sourceID entity.ID) []entity.Binding {
+	return index.BindingsBySourceID[sourceID]
+}
+
+func RemoteSourceBindingsByButton(index *Index, buttonID entity.PushButtonID) []entity.Binding {
+	return RemoteSourceBindingsBySource(index, entity.ID(buttonID))
+}
+
+func RemoteSourceBindingsBySource(index *Index, sourceID entity.ID) []entity.Binding {
+	return index.RemoteSourceBindingsBySourceID[sourceID]
+}
+
+func RemoteTargetBindingsByButton(index *Index, buttonID entity.PushButtonID) []entity.Binding {
+	return RemoteTargetBindingsBySource(index, entity.ID(buttonID))
+}
+
+func RemoteTargetBindingsBySource(index *Index, sourceID entity.ID) []entity.Binding {
+	return index.RemoteTargetBindingsBySourceID[sourceID]
 }
 
 func LightByID(index *Index, lightID entity.LightID) (entity.Light, bool) {

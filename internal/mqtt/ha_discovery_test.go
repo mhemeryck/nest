@@ -64,6 +64,27 @@ func TestBuildHomeAssistantDeviceDiscovery(t *testing.T) {
 	}, doc.Components["office_light"])
 }
 
+func TestBuildHomeAssistantDeviceDiscoveryWithSemanticLightID(t *testing.T) {
+	root := testEntityRoot()
+	root.Lights[0].ID = entity.LightID("controller_1.light.office_light")
+	topics := NewTopics("nest", "controller_1")
+
+	doc := BuildHomeAssistantDeviceDiscovery(root, topics)
+
+	require.Contains(t, doc.Components, "office_light")
+	assert.Equal(t, HomeAssistantComponentDiscovery{
+		Platform:           "light",
+		Name:               "Office light",
+		UniqueID:           "nest_controller_1_light_office_light",
+		DefaultEntityID:    "light.controller_1_office_light",
+		StateTopic:         "nest/units/controller_1/lights/office_light/state",
+		CommandTopic:       "nest/units/controller_1/lights/office_light/command",
+		StateValueTemplate: "{{ value_json.state }}",
+		PayloadOn:          "ON",
+		PayloadOff:         "OFF",
+	}, doc.Components["office_light"])
+}
+
 func TestHomeAssistantDeviceDiscoveryPayload(t *testing.T) {
 	payload, err := HomeAssistantDeviceDiscoveryPayload(testEntityRoot(), NewTopics("nest", "controller_1"))
 	require.NoError(t, err)

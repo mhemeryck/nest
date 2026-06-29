@@ -29,3 +29,51 @@ func TestLightStateMessage(t *testing.T) {
 	assert.True(t, message.Retain)
 	assert.Equal(t, byte(0), message.QoS)
 }
+
+func TestSemanticSourceEventMessage(t *testing.T) {
+	message, err := SemanticSourceEventMessage(NewTopics("nest", "controller_1"), SemanticSourceEventObservation{
+		SourceID: entity.ID("controller_1.button.office_button"),
+		Event:    "pressed",
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "nest/units/controller_1/sources/controller_1.button.office_button/event", message.Topic)
+	assert.JSONEq(t, `{"source":"controller_1.button.office_button","event":"pressed"}`, string(message.Payload))
+	assert.False(t, message.Retain)
+	assert.Equal(t, byte(0), message.QoS)
+}
+
+func TestParseSemanticSourceEventMessage(t *testing.T) {
+	observation, ok := ParseSemanticSourceEventMessage(ReceivedMessage{
+		Topic:   "nest/units/controller_1/sources/controller_1.button.office_button/event",
+		Payload: []byte(`{"source":"controller_1.button.office_button","event":"pressed"}`),
+	}, "nest")
+
+	assert.True(t, ok)
+	assert.Equal(t, SemanticSourceEventObservation{
+		SourceID: entity.ID("controller_1.button.office_button"),
+		Event:    "pressed",
+	}, observation)
+}
+
+func TestParseSemanticSourceEventMessageWithMultiSegmentPrefix(t *testing.T) {
+	observation, ok := ParseSemanticSourceEventMessage(ReceivedMessage{
+		Topic:   "building/nest/units/controller_1/sources/controller_1.button.office_button/event",
+		Payload: []byte(`{"source":"controller_1.button.office_button","event":"pressed"}`),
+	}, "building/nest")
+
+	assert.True(t, ok)
+	assert.Equal(t, SemanticSourceEventObservation{
+		SourceID: entity.ID("controller_1.button.office_button"),
+		Event:    "pressed",
+	}, observation)
+}
+
+func TestParseSemanticSourceEventMessageRejectsMismatchedPayloadSource(t *testing.T) {
+	_, ok := ParseSemanticSourceEventMessage(ReceivedMessage{
+		Topic:   "nest/units/controller_1/sources/controller_1.button.office_button/event",
+		Payload: []byte(`{"source":"controller_1.button.other_button","event":"pressed"}`),
+	}, "nest")
+
+	assert.False(t, ok)
+}

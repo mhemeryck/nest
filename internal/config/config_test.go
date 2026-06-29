@@ -13,27 +13,87 @@ import (
 func TestLoad(t *testing.T) {
 	path := filepath.Join("..", "..", "test", "fixtures", "config.local.yaml")
 
-	file, err := Load(path)
+	file, err := Load(path, "controller_1")
 	require.NoError(t, err)
 
 	assert.Equal(t, "test/fixtures", file.Sysfs.Root)
 	assert.Equal(t, 100*time.Millisecond, file.Sysfs.PollIntervals.DigitalInput)
 	assert.Equal(t, 250*time.Millisecond, file.Sysfs.PollIntervals.DigitalOutput)
 	assert.Equal(t, time.Second, file.Sysfs.PollIntervals.RelayOutput)
+	assert.Equal(t, "controller_1", file.MQTT.UnitID)
 	assert.Len(t, file.DigitalInputs, 1)
 	assert.Len(t, file.PushButtons, 1)
 	assert.Len(t, file.Lights, 1)
 	assert.Len(t, file.Relays, 1)
 	assert.Len(t, file.Bindings, 1)
+	assert.Equal(t, "controller_1.button.office_button", file.PushButtons[0].ID)
+	assert.Equal(t, "controller_1.light.office_light", file.Lights[0].ID)
+	assert.Equal(t, "controller_1.button.office_button", file.Bindings[0].Source)
+	assert.Equal(t, "controller_1.light.office_light", file.Bindings[0].Target)
+	assert.Equal(t, "office_button_input", file.PushButtons[0].Input)
+	assert.Equal(t, "office_light_relay", file.Lights[0].Relay)
 	assert.Equal(t, []string{"di_3_16", "ro_3_14"}, DeviceIDs(file))
 }
 
-func TestLoadAcceptsSysfsPollIntervals(t *testing.T) {
-	tmp := t.TempDir()
-	path := filepath.Join(tmp, "config.yaml")
-	writeTestFile(t, path, "sysfs:\n  root: /tmp\n  poll_intervals:\n    digital_input: 100ms\n    digital_output: 250ms\n    relay_output: 2s\ndigital_inputs:\n  - id: button_input\n    device: di_3_16\n")
+func TestLoadLocalMQTTFixtureProjectsRemoteSourceBinding(t *testing.T) {
+	path := filepath.Join("..", "..", "test", "fixtures", "config.local-mqtt.yaml")
 
-	file, err := Load(path)
+	file, err := Load(path, "local")
+	require.NoError(t, err)
+
+	assert.Equal(t, "local", file.MQTT.UnitID)
+	assert.True(t, file.MQTT.Enabled)
+	require.Len(t, file.RemoteSourceBindings, 1)
+	assert.Equal(t, BindingConfig{
+		Source: "local.button.office_button",
+		Target: "remote.light.remote_light",
+		Action: BindingActionToggle,
+	}, file.RemoteSourceBindings[0])
+}
+
+func TestLoadLocalMQTTFixtureProjectsRemoteTargetBinding(t *testing.T) {
+	path := filepath.Join("..", "..", "test", "fixtures", "config.local-mqtt.yaml")
+
+	file, err := Load(path, "remote")
+	require.NoError(t, err)
+
+	assert.Equal(t, "remote", file.MQTT.UnitID)
+	assert.True(t, file.MQTT.Enabled)
+	require.Len(t, file.RemoteTargetBindings, 1)
+	assert.Equal(t, BindingConfig{
+		Source: "local.button.office_button",
+		Target: "remote.light.remote_light",
+		Action: BindingActionToggle,
+	}, file.RemoteTargetBindings[0])
+}
+
+func TestLoadRejectsUnknownUnit(t *testing.T) {
+	path := filepath.Join("..", "..", "test", "fixtures", "config.local.yaml")
+
+	_, err := Load(path, "missing_unit")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `unit_id: unknown unit "missing_unit"`)
+}
+
+func TestProjectUnitAcceptsSysfsPollIntervals(t *testing.T) {
+	file, err := ProjectUnit(&GlobalRoot{
+		Units: map[string]UnitConfig{
+			"controller_1": {
+				Actors: UnitActorsConfig{
+					Sysfs: UnitSysfsConfig{
+						Root: "/tmp",
+						PollIntervals: PollIntervalsConfig{
+							DigitalInput:  100 * time.Millisecond,
+							DigitalOutput: 250 * time.Millisecond,
+							RelayOutput:   2 * time.Second,
+						},
+						DigitalInputs: []DigitalInputConfig{{ID: "button_input", Device: "di_3_16"}},
+					},
+				},
+			},
+		},
+	}, "controller_1")
 	require.NoError(t, err)
 
 	assert.Equal(t, 100*time.Millisecond, file.Sysfs.PollIntervals.DigitalInput)
@@ -41,12 +101,335 @@ func TestLoadAcceptsSysfsPollIntervals(t *testing.T) {
 	assert.Equal(t, 2*time.Second, file.Sysfs.PollIntervals.RelayOutput)
 }
 
+func TestProjectUnitProjectsTypedEntityEndpoints(t *testing.T) {
+	file, err := ProjectUnit(&GlobalRoot{
+		Units: map[string]UnitConfig{
+			"controller_1": {
+				Actors: UnitActorsConfig{
+					Sysfs: UnitSysfsConfig{
+						DigitalInputs: []DigitalInputConfig{{ID: "button_input", Device: "di_3_16"}},
+						Relays:        []RelayConfig{{ID: "light_relay", Name: "Light relay", Device: "ro_3_14"}},
+					},
+				},
+				Entities: UnitEntitiesConfig{
+					Buttons: []UnitPushButtonConfig{{
+						ID:   "button",
+						Name: "Button",
+						Input: EndpointRefConfig{
+							Actor: "sysfs",
+							Kind:  "digital_input",
+							ID:    "button_input",
+						},
+					}},
+					Lights: []UnitLightConfig{{
+						ID:   "light",
+						Name: "Light",
+						Actuator: EndpointRefConfig{
+							Actor: "sysfs",
+							Kind:  "relay",
+							ID:    "light_relay",
+						},
+					}},
+				},
+			},
+		},
+	}, "controller_1")
+	require.NoError(t, err)
+
+	require.Len(t, file.PushButtons, 1)
+	require.Len(t, file.Lights, 1)
+	assert.Equal(t, "controller_1.button.button", file.PushButtons[0].ID)
+	assert.Equal(t, "controller_1.light.light", file.Lights[0].ID)
+	assert.Equal(t, "button_input", file.PushButtons[0].Input)
+	assert.Equal(t, "light_relay", file.Lights[0].Relay)
+}
+
+func TestProjectUnitDerivesUnitSpecificMQTTClientID(t *testing.T) {
+	file, err := ProjectUnit(&GlobalRoot{
+		Actors: GlobalActorsConfig{
+			MQTT: GlobalMQTTConfig{
+				Broker: MQTTConfig{
+					Enabled:     true,
+					Host:        "localhost",
+					Port:        1883,
+					ClientID:    "nest-local",
+					TopicPrefix: "nest",
+				},
+			},
+		},
+		Units: map[string]UnitConfig{
+			"remote": {
+				Actors: UnitActorsConfig{
+					MQTT: UnitMQTTConfig{Enabled: true},
+				},
+			},
+		},
+	}, "remote")
+	require.NoError(t, err)
+
+	assert.Equal(t, "remote", file.MQTT.UnitID)
+	assert.Equal(t, "nest-local-remote", file.MQTT.ClientID)
+}
+
+func TestProjectUnitProjectsRemoteBindingsByPerspective(t *testing.T) {
+	global := &GlobalRoot{
+		Units: map[string]UnitConfig{
+			"controller_1": {
+				Actors: UnitActorsConfig{
+					Sysfs: UnitSysfsConfig{
+						DigitalInputs: []DigitalInputConfig{{ID: "office_button_input", Device: "di_3_16"}},
+					},
+				},
+				Entities: UnitEntitiesConfig{
+					Buttons: []UnitPushButtonConfig{{
+						ID:   "office_button",
+						Name: "Office button",
+						Input: EndpointRefConfig{
+							Actor: "sysfs",
+							Kind:  "digital_input",
+							ID:    "office_button_input",
+						},
+					}},
+				},
+			},
+			"controller_2": {
+				Actors: UnitActorsConfig{
+					Sysfs: UnitSysfsConfig{
+						Relays: []RelayConfig{{ID: "hall_light_relay", Name: "Hall light relay", Device: "ro_3_14"}},
+					},
+				},
+				Entities: UnitEntitiesConfig{
+					Lights: []UnitLightConfig{{
+						ID:   "hall_light",
+						Name: "Hall light",
+						Actuator: EndpointRefConfig{
+							Actor: "sysfs",
+							Kind:  "relay",
+							ID:    "hall_light_relay",
+						},
+					}},
+				},
+			},
+		},
+		Bindings: []GlobalBindingConfig{{
+			Source: "controller_1.button.office_button",
+			Target: "controller_2.light.hall_light",
+			Action: "toggle",
+		}},
+	}
+
+	sourceLocal, err := ProjectUnit(global, "controller_1")
+	require.NoError(t, err)
+	targetLocal, err := ProjectUnit(global, "controller_2")
+	require.NoError(t, err)
+
+	assert.Empty(t, sourceLocal.Bindings)
+	assert.Empty(t, targetLocal.Bindings)
+	assert.Equal(t, []BindingConfig{{
+		Source: "controller_1.button.office_button",
+		Target: "controller_2.light.hall_light",
+		Action: "toggle",
+	}}, sourceLocal.RemoteSourceBindings)
+	assert.Equal(t, []BindingConfig{{
+		Source: "controller_1.button.office_button",
+		Target: "controller_2.light.hall_light",
+		Action: "toggle",
+	}}, targetLocal.RemoteTargetBindings)
+}
+
+func TestProjectUnitRejectsUnknownGlobalBindingEndpoints(t *testing.T) {
+	_, err := ProjectUnit(&GlobalRoot{
+		Units: map[string]UnitConfig{
+			"controller_1": {
+				Entities: UnitEntitiesConfig{
+					Buttons: []UnitPushButtonConfig{{
+						ID:   "office_button",
+						Name: "Office button",
+						Input: EndpointRefConfig{
+							Actor: "sysfs",
+							Kind:  "digital_input",
+							ID:    "office_button_input",
+						},
+					}},
+				},
+			},
+			"controller_2": {
+				Entities: UnitEntitiesConfig{
+					Lights: []UnitLightConfig{{
+						ID:   "hall_light",
+						Name: "Hall light",
+						Actuator: EndpointRefConfig{
+							Actor: "sysfs",
+							Kind:  "relay",
+							ID:    "hall_light_relay",
+						},
+					}},
+				},
+			},
+		},
+		Bindings: []GlobalBindingConfig{
+			{Source: "controller_1.button.missing_button", Target: "controller_2.light.hall_light", Action: "toggle"},
+			{Source: "controller_1.button.office_button", Target: "controller_2.light.missing_light", Action: "toggle"},
+		},
+	}, "controller_2")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `bindings[0].source: unknown button "controller_1.button.missing_button"`)
+	assert.Contains(t, err.Error(), `bindings[1].target: unknown light "controller_2.light.missing_light"`)
+}
+
+func TestProjectUnitProjectsUnitModbusConfig(t *testing.T) {
+	global := &GlobalRoot{
+		Units: map[string]UnitConfig{
+			"local": {
+				Actors: UnitActorsConfig{
+					Modbus: UnitModbusConfig{
+						Mode: ModbusModeMaster,
+						EventSignalWrites: []ModbusEventSignalWriteConfig{{
+							Unit:   "remote",
+							Signal: "office_button_toggle",
+							Source: "local.button.office_button",
+							Target: "remote.light.remote_light",
+							Action: BindingActionToggle,
+						}},
+						StatePolls: []ModbusStatePollConfig{{
+							Unit:   "remote",
+							Point:  "remote_light_state",
+							Entity: "remote.light.remote_light",
+						}},
+					},
+				},
+			},
+			"remote": {
+				Actors: UnitActorsConfig{
+					Modbus: UnitModbusConfig{
+						Mode: ModbusModeSlave,
+						EventSignals: []ModbusEventSignalConfig{{
+							ID:     "office_button_toggle",
+							Source: "local.button.office_button",
+							Target: "remote.light.remote_light",
+							Action: BindingActionToggle,
+						}},
+						StatePoints: []ModbusStatePointConfig{{
+							ID:     "remote_light_state",
+							Entity: "remote.light.remote_light",
+						}},
+					},
+				},
+			},
+		},
+	}
+
+	local, err := ProjectUnit(global, "local")
+	require.NoError(t, err)
+	remote, err := ProjectUnit(global, "remote")
+	require.NoError(t, err)
+
+	assert.Equal(t, ModbusModeMaster, local.Modbus.Mode)
+	assert.Equal(t, []ModbusEventSignalWriteConfig{{
+		Unit:   "remote",
+		Signal: "office_button_toggle",
+		Source: "local.button.office_button",
+		Target: "remote.light.remote_light",
+		Action: BindingActionToggle,
+	}}, local.Modbus.EventSignalWrites)
+	assert.Equal(t, []ModbusStatePollConfig{{
+		Unit:   "remote",
+		Point:  "remote_light_state",
+		Entity: "remote.light.remote_light",
+	}}, local.Modbus.StatePolls)
+	assert.Empty(t, local.Modbus.EventSignals)
+	assert.Empty(t, local.Modbus.StatePoints)
+
+	assert.Equal(t, ModbusModeSlave, remote.Modbus.Mode)
+	assert.Equal(t, []ModbusEventSignalConfig{{
+		ID:     "office_button_toggle",
+		Source: "local.button.office_button",
+		Target: "remote.light.remote_light",
+		Action: BindingActionToggle,
+	}}, remote.Modbus.EventSignals)
+	assert.Equal(t, []ModbusStatePointConfig{{
+		ID:     "remote_light_state",
+		Entity: "remote.light.remote_light",
+	}}, remote.Modbus.StatePoints)
+	assert.Empty(t, remote.Modbus.EventSignalWrites)
+	assert.Empty(t, remote.Modbus.StatePolls)
+}
+
+func TestProjectUnitRejectsUnknownModbusRouteEndpoints(t *testing.T) {
+	_, err := ProjectUnit(&GlobalRoot{
+		Units: map[string]UnitConfig{
+			"local": {
+				Actors: UnitActorsConfig{
+					Modbus: UnitModbusConfig{
+						Mode: ModbusModeMaster,
+						EventSignalWrites: []ModbusEventSignalWriteConfig{{
+							Unit:   "remote",
+							Signal: "missing_signal",
+							Source: "local.button.office_button",
+							Target: "remote.light.remote_light",
+							Action: BindingActionToggle,
+						}},
+						StatePolls: []ModbusStatePollConfig{{
+							Unit:   "remote",
+							Point:  "missing_point",
+							Entity: "remote.light.remote_light",
+						}},
+					},
+				},
+			},
+			"remote": {
+				Actors: UnitActorsConfig{
+					Modbus: UnitModbusConfig{Mode: ModbusModeSlave},
+				},
+			},
+		},
+	}, "local")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `units.local.actors.modbus.event_signal_writes[0].signal: unknown event signal "missing_signal" on unit "remote"`)
+	assert.Contains(t, err.Error(), `units.local.actors.modbus.state_polls[0].point: unknown state point "missing_point" on unit "remote"`)
+}
+
+func TestProjectUnitRejectsUnsupportedEntityEndpoints(t *testing.T) {
+	_, err := ProjectUnit(&GlobalRoot{
+		Units: map[string]UnitConfig{
+			"controller_1": {
+				Entities: UnitEntitiesConfig{
+					Buttons: []UnitPushButtonConfig{{
+						ID:   "button",
+						Name: "Button",
+						Input: EndpointRefConfig{
+							Actor: "sysfs",
+							Kind:  "relay",
+							ID:    "button_input",
+						},
+					}},
+					Lights: []UnitLightConfig{{
+						ID:   "light",
+						Name: "Light",
+						Actuator: EndpointRefConfig{
+							Actor: "mqtt",
+							Kind:  "relay",
+							ID:    "light_relay",
+						},
+					}},
+				},
+			},
+		},
+	}, "controller_1")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `entities.buttons[0].input.kind: unsupported endpoint kind "relay", expected "digital_input"`)
+	assert.Contains(t, err.Error(), `entities.lights[0].actuator.actor: unsupported endpoint actor "mqtt", expected "sysfs"`)
+}
+
 func TestLoadRejectsUnknownFields(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "config.yaml")
-	writeTestFile(t, path, "sysfs:\n  root: /tmp\nunknown: true\n")
+	writeTestFile(t, path, "actors:\n  mqtt:\n    broker:\n      enabled: false\nunits: {}\nunknown: true\n")
 
-	_, err := Load(path)
+	_, err := Load(path, "controller_1")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "field unknown not found")
 }
@@ -54,9 +437,9 @@ func TestLoadRejectsUnknownFields(t *testing.T) {
 func TestLoadRejectsTrailingYAMLDocuments(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "config.yaml")
-	writeTestFile(t, path, "sysfs:\n  root: /tmp\ndigital_inputs:\n  - id: button_input\n    device: di_3_16\n---\nextra: true\n")
+	writeTestFile(t, path, "actors:\n  mqtt:\n    broker:\n      enabled: false\nunits: {}\n---\nextra: true\n")
 
-	_, err := Load(path)
+	_, err := Load(path, "controller_1")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "multiple YAML documents are not supported")
 }
@@ -208,7 +591,7 @@ func TestValidate(t *testing.T) {
 				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
 				Lights: []LightConfig{{ID: "office-light", Name: "Office light", Relay: "relay"}},
 			},
-			message: `lights[0].id: must contain only lowercase letters, numbers, and underscores "office-light"`,
+			message: `lights[0].id: must be a local id or light semantic id "office-light"`,
 		},
 		{
 			name: "rejects whitespace padded button input references",
@@ -260,9 +643,9 @@ func TestValidate(t *testing.T) {
 				Sysfs:    SysfsConfig{Root: "/tmp"},
 				Relays:   []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
 				Lights:   []LightConfig{{ID: "light", Name: "Light", Relay: "relay"}},
-				Bindings: []BindingConfig{{Button: "missing", Light: "light", Action: BindingActionToggle}},
+				Bindings: []BindingConfig{{Source: "missing", Target: "light", Action: BindingActionToggle}},
 			},
-			message: `bindings[0].button: unknown push button "missing"`,
+			message: `bindings[0].source: unknown push button "missing"`,
 		},
 		{
 			name: "requires bindings to reference known lights",
@@ -270,9 +653,9 @@ func TestValidate(t *testing.T) {
 				Sysfs:         SysfsConfig{Root: "/tmp"},
 				DigitalInputs: []DigitalInputConfig{{ID: "button_input", Device: "di_3_16"}},
 				PushButtons:   []PushButtonConfig{{ID: "button", Name: "Button", Input: "button_input"}},
-				Bindings:      []BindingConfig{{Button: "button", Light: "missing", Action: BindingActionToggle}},
+				Bindings:      []BindingConfig{{Source: "button", Target: "missing", Action: BindingActionToggle}},
 			},
-			message: `bindings[0].light: unknown light "missing"`,
+			message: `bindings[0].target: unknown light "missing"`,
 		},
 		{
 			name: "rejects unsupported binding actions",
@@ -282,9 +665,22 @@ func TestValidate(t *testing.T) {
 				PushButtons:   []PushButtonConfig{{ID: "button", Name: "Button", Input: "button_input"}},
 				Relays:        []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
 				Lights:        []LightConfig{{ID: "light", Name: "Light", Relay: "relay"}},
-				Bindings:      []BindingConfig{{Button: "button", Light: "light", Action: "press"}},
+				Bindings:      []BindingConfig{{Source: "button", Target: "light", Action: "press"}},
 			},
 			message: `bindings[0].action: unsupported action "press"`,
+		},
+		{
+			name: "rejects unsupported remote binding actions",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+				RemoteSourceBindings: []BindingConfig{{
+					Source: "controller_1.button.office_button",
+					Target: "controller_2.light.hall_light",
+					Action: "press",
+				}},
+			},
+			message: `remote_source_bindings[0].action: unsupported action "press"`,
 		},
 		{
 			name: "rejects duplicate bindings",
@@ -295,11 +691,74 @@ func TestValidate(t *testing.T) {
 				Relays:        []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
 				Lights:        []LightConfig{{ID: "light", Name: "Light", Relay: "relay"}},
 				Bindings: []BindingConfig{
-					{Button: "button", Light: "light", Action: BindingActionToggle},
-					{Button: "button", Light: "light", Action: BindingActionToggle},
+					{Source: "button", Target: "light", Action: BindingActionToggle},
+					{Source: "button", Target: "light", Action: BindingActionToggle},
 				},
 			},
-			message: `bindings[1]: duplicate binding button "button" light "light" action "toggle"`,
+			message: `bindings[1]: duplicate binding source "button" target "light" action "toggle"`,
+		},
+		{
+			name: "rejects unsupported modbus mode",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+				Modbus: ModbusConfig{
+					Mode: "both",
+				},
+			},
+			message: `modbus.mode: unsupported mode "both"`,
+		},
+		{
+			name: "rejects slave modbus write routes",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+				Modbus: ModbusConfig{
+					Mode: ModbusModeSlave,
+					EventSignalWrites: []ModbusEventSignalWriteConfig{{
+						Unit:   "remote",
+						Signal: "office_button_toggle",
+						Source: "local.button.office_button",
+						Target: "remote.light.remote_light",
+						Action: BindingActionToggle,
+					}},
+				},
+			},
+			message: "modbus.event_signal_writes: requires master mode",
+		},
+		{
+			name: "rejects master modbus exposed signals",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+				Modbus: ModbusConfig{
+					Mode: ModbusModeMaster,
+					EventSignals: []ModbusEventSignalConfig{{
+						ID:     "office_button_toggle",
+						Source: "local.button.office_button",
+						Target: "remote.light.remote_light",
+						Action: BindingActionToggle,
+					}},
+				},
+			},
+			message: "modbus.event_signals: requires slave mode",
+		},
+		{
+			name: "rejects invalid modbus event signal source",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+				Modbus: ModbusConfig{
+					Mode: ModbusModeSlave,
+					EventSignals: []ModbusEventSignalConfig{{
+						ID:     "office_button_toggle",
+						Source: "local.light.office_light",
+						Target: "remote.light.remote_light",
+						Action: BindingActionToggle,
+					}},
+				},
+			},
+			message: `modbus.event_signals[0].source: must be a button semantic id "local.light.office_light"`,
 		},
 	}
 
@@ -329,7 +788,7 @@ func TestValidateAcceptsValidFile(t *testing.T) {
 			{ID: "office_light", Name: "Office light", Relay: "office_light_relay"},
 		},
 		Bindings: []BindingConfig{
-			{Button: "office_button", Light: "office_light", Action: BindingActionToggle},
+			{Source: "office_button", Target: "office_light", Action: BindingActionToggle},
 		},
 	}
 

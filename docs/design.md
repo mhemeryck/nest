@@ -21,6 +21,51 @@ nest instance (per Unipi)
 └── (optional) HA integration
 ```
 
+## Package Layers
+
+```mermaid
+flowchart TD
+    cmd["cmd/nest<br/>CLI, signals, exit status"]
+    nest["internal/nest<br/>application wiring"]
+    config["internal/config<br/>YAML parsing, validation, unit projection"]
+    entity["internal/entity<br/>semantic domain model and typed IDs"]
+    registry["internal/registry<br/>in-memory lookup indexes"]
+    controller["internal/controller<br/>semantic event queue and policy"]
+    actors["actor packages<br/>sysfs / mqtt / future modbus"]
+    external["external systems<br/>sysfs hardware / MQTT broker / RS-485"]
+
+    cmd --> nest
+    nest --> config
+    config --> entity
+    entity --> registry
+    nest --> registry
+    nest --> controller
+    registry --> controller
+    controller <--> actors
+    actors <--> external
+```
+
+`cmd/nest` is the process entrypoint.
+It should stay limited to CLI parsing, signal setup, fatal logging, and process exit status.
+
+`internal/nest` wires the application together.
+It loads configuration, builds domain entities and registries, starts actors, and coordinates shutdown.
+
+`internal/config` owns the external YAML shape.
+It parses configuration, validates fields, projects the global configuration into a unit-local runtime view, and translates that view into domain entities.
+
+`internal/entity` owns the semantic domain model and typed IDs.
+It should not contain YAML tags, actor channels, live clients, or controller execution policy.
+
+`internal/registry` is the runtime in-memory lookup layer built from domain entities.
+It maps semantic IDs and actor-facing identifiers to entities and relationships, but it should not decide behavior or own actor runtime state.
+
+`internal/controller` owns semantic event dispatch and runtime policy.
+It normalizes actor observations into semantic events, evaluates bindings, and emits actor commands.
+
+Actor packages own protocol or hardware IO.
+They expose actor-specific observations and commands and should not translate directly to other actors.
+
 ## Key Design Decisions
 
 ### Per-Unit Configs
@@ -143,13 +188,13 @@ Hardware details such as sysfs device IDs, relay IDs, Modbus coils, and raw inpu
 For example, a relay-backed light state should look like:
 
 ```json
-{"state":"ON"}
+{ "state": "ON" }
 ```
 
 A future dimmable light can extend the same pattern without splitting one logical state update across several topics:
 
 ```json
-{"state":"ON","brightness":180}
+{ "state": "ON", "brightness": 180 }
 ```
 
 Diagnostic MQTT topics should only be introduced when there is a concrete debugging or migration need.

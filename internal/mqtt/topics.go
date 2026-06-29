@@ -1,6 +1,7 @@
 package mqtt
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/mhemeryck/nest/internal/entity"
@@ -35,15 +36,41 @@ func RelayStateTopic(topics Topics, relayID entity.RelayID) string {
 }
 
 func LightStateTopic(topics Topics, lightID entity.LightID) string {
-	return joinTopic(topics, "units", topics.UnitID, "lights", string(lightID), "state")
+	return joinTopic(topics, "units", topics.UnitID, "lights", lightTopicSegment(lightID), "state")
 }
 
 func LightCommandTopic(topics Topics, lightID entity.LightID) string {
-	return joinTopic(topics, "units", topics.UnitID, "lights", string(lightID), "command")
+	return joinTopic(topics, "units", topics.UnitID, "lights", lightTopicSegment(lightID), "command")
 }
 
 func LightCommandSubscriptionTopic(topics Topics) string {
 	return joinTopic(topics, "units", topics.UnitID, "lights", "+", "command")
+}
+
+func SemanticSourceEventTopic(topics Topics, sourceID entity.ID) string {
+	unitID := topics.UnitID
+	if sourceUnitID, ok := semanticSourceUnitID(sourceID); ok {
+		unitID = sourceUnitID
+	}
+
+	return joinTopic(topics, "units", unitID, "sources", string(sourceID), "event")
+}
+
+func SemanticSourceEventSubscriptionTopics(topics Topics, root *entity.Root) []string {
+	seen := make(map[string]struct{}, len(root.RemoteTargetBindings))
+	subscriptions := make([]string, 0, len(root.RemoteTargetBindings))
+	for _, binding := range root.RemoteTargetBindings {
+		topic := SemanticSourceEventTopic(topics, binding.Source)
+		if _, ok := seen[topic]; ok {
+			continue
+		}
+
+		seen[topic] = struct{}{}
+		subscriptions = append(subscriptions, topic)
+	}
+	slices.Sort(subscriptions)
+
+	return subscriptions
 }
 
 func ParseLightCommandTopic(topics Topics, topic string) (entity.LightID, bool) {
@@ -52,12 +79,12 @@ func ParseLightCommandTopic(topics Topics, topic string) (entity.LightID, bool) 
 		return "", false
 	}
 
-	lightID := strings.TrimSuffix(strings.TrimPrefix(topic, prefix), "/command")
-	if lightID == "" || strings.Contains(lightID, "/") {
+	localID := strings.TrimSuffix(strings.TrimPrefix(topic, prefix), "/command")
+	if !entity.IsLocalID(localID) || strings.Contains(localID, "/") {
 		return "", false
 	}
 
-	return entity.LightID(lightID), true
+	return entity.LightID(entity.NewID(topics.UnitID, entity.TypeLight, localID)), true
 }
 
 func HomeAssistantDeviceDiscoveryTopic(topics Topics) string {
@@ -76,4 +103,21 @@ func joinTopic(topics Topics, parts ...string) string {
 
 func homeAssistantUniqueID(topics Topics, entityID string) string {
 	return strings.Join([]string{"nest", topics.UnitID, entityID}, "_")
+}
+
+func lightTopicSegment(lightID entity.LightID) string {
+	if localID, ok := entity.LocalID(string(lightID), entity.TypeLight); ok {
+		return localID
+	}
+
+	return string(lightID)
+}
+
+func semanticSourceUnitID(sourceID entity.ID) (string, bool) {
+	parts := strings.Split(string(sourceID), ".")
+	if len(parts) != 3 || !entity.IsLocalID(parts[0]) {
+		return "", false
+	}
+
+	return parts[0], true
 }

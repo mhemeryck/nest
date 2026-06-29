@@ -250,19 +250,19 @@ Adding `validate` early is still useful because it gives a clean way to test con
 This is the smallest package split that proved worth introducing.
 
 1. `internal/config`
-Reads YAML and validates config.
+   Reads YAML and validates config.
 2. `internal/entity`
-Defines the typed local domain model.
+   Defines the typed local domain model.
 3. `internal/sysfs`
-Continues to own device discovery and low-level reads and writes.
+   Continues to own device discovery and low-level reads and writes.
 4. `internal/event`
-Defines shared event types and the in-process event bus.
+   Defines shared event types and the in-process event bus.
 5. `internal/registry`
-Builds startup lookup maps from entities.
+   Builds startup lookup maps from entities.
 6. `internal/controller`
-Owns local event dispatch and automation execution.
+   Owns local event dispatch and automation execution.
 7. `cmd/nest`
-Owns CLI parsing and process wiring.
+   Owns CLI parsing and process wiring.
 
 Phase 2 turned out to justify a dedicated controller package once local bindings were added.
 
