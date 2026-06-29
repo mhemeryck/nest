@@ -237,6 +237,47 @@ func TestProjectUnitProjectsRemoteBindingsByPerspective(t *testing.T) {
 	}}, targetLocal.RemoteTargetBindings)
 }
 
+func TestProjectUnitRejectsUnknownGlobalBindingEndpoints(t *testing.T) {
+	_, err := ProjectUnit(&GlobalRoot{
+		Units: map[string]UnitConfig{
+			"controller_1": {
+				Entities: UnitEntitiesConfig{
+					Buttons: []UnitPushButtonConfig{{
+						ID:   "office_button",
+						Name: "Office button",
+						Input: EndpointRefConfig{
+							Actor: "sysfs",
+							Kind:  "digital_input",
+							ID:    "office_button_input",
+						},
+					}},
+				},
+			},
+			"controller_2": {
+				Entities: UnitEntitiesConfig{
+					Lights: []UnitLightConfig{{
+						ID:   "hall_light",
+						Name: "Hall light",
+						Actuator: EndpointRefConfig{
+							Actor: "sysfs",
+							Kind:  "relay",
+							ID:    "hall_light_relay",
+						},
+					}},
+				},
+			},
+		},
+		Bindings: []GlobalBindingConfig{
+			{Source: "controller_1.button.missing_button", Target: "controller_2.light.hall_light", Action: "toggle"},
+			{Source: "controller_1.button.office_button", Target: "controller_2.light.missing_light", Action: "toggle"},
+		},
+	}, "controller_2")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `bindings[0].source: unknown button "controller_1.button.missing_button"`)
+	assert.Contains(t, err.Error(), `bindings[1].target: unknown light "controller_2.light.missing_light"`)
+}
+
 func TestProjectUnitProjectsUnitModbusConfig(t *testing.T) {
 	global := &GlobalRoot{
 		Units: map[string]UnitConfig{

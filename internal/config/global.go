@@ -89,7 +89,7 @@ func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
 	if !ok {
 		return nil, fmt.Errorf("unit_id: unknown unit %q", unitID)
 	}
-	if err := validateGlobalModbus(global); err != nil {
+	if err := errors.Join(validateGlobalBindings(global), validateGlobalModbus(global)); err != nil {
 		return nil, err
 	}
 

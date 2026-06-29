@@ -197,6 +197,72 @@ func validateModbusBindingAction(field string, action string) error {
 	return nil
 }
 
+func validateGlobalBindings(global *GlobalRoot) error {
+	var errs error
+	seen := make(map[string]int, len(global.Bindings))
+	for i, binding := range global.Bindings {
+		prefix := fmt.Sprintf("bindings[%d]", i)
+		sourceErr := validateGlobalBindingEndpoint(global, prefix+".source", binding.Source, entity.TypeButton)
+		targetErr := validateGlobalBindingEndpoint(global, prefix+".target", binding.Target, entity.TypeLight)
+		actionErr := validateModbusBindingAction(prefix+".action", binding.Action)
+
+		if sourceErr == nil && targetErr == nil && actionErr == nil {
+			key := binding.Source + "\x00" + binding.Target + "\x00" + binding.Action
+			if _, ok := seen[key]; ok {
+				errs = errors.Join(
+					errs,
+					fmt.Errorf(
+						"%s: duplicate binding source %q target %q action %q",
+						prefix,
+						binding.Source,
+						binding.Target,
+						binding.Action,
+					),
+				)
+			} else {
+				seen[key] = i
+			}
+		}
+
+		errs = errors.Join(errs, sourceErr, targetErr, actionErr)
+	}
+
+	return errs
+}
+
+func validateGlobalBindingEndpoint(global *GlobalRoot, field string, value string, entityType entity.Type) error {
+	if err := validateRequiredField(field, value); err != nil {
+		return err
+	}
+	if !entity.IsID(value, entityType) {
+		return fmt.Errorf("%s: must be a %s semantic id %q", field, entityType, value)
+	}
+
+	parts := strings.Split(value, ".")
+	unit, ok := global.Units[parts[0]]
+	if !ok {
+		return fmt.Errorf("%s: unknown unit %q", field, parts[0])
+	}
+
+	localID := parts[2]
+	switch entityType {
+	case entity.TypeButton:
+		for _, button := range unit.Entities.Buttons {
+			if button.ID == localID {
+				return nil
+			}
+		}
+	case entity.TypeLight:
+		for _, light := range unit.Entities.Lights {
+			if light.ID == localID {
+				return nil
+			}
+		}
+	}
+
+	return fmt.Errorf("%s: unknown %s %q", field, entityType, value)
+}
+
 func validateGlobalModbus(global *GlobalRoot) error {
 	var errs error
 	for unitID, unit := range global.Units {

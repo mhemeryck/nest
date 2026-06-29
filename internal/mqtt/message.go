@@ -103,17 +103,16 @@ func ParseSemanticSourceEventMessage(message ReceivedMessage, topicPrefix string
 }
 
 func parseSemanticSourceEventTopic(topicPrefix string, topic string) (entity.ID, bool) {
-	segments := strings.Split(strings.Trim(topic, "/"), "/")
-	if len(segments) == 5 {
-		if segments[0] != "units" || segments[2] != "sources" || segments[4] != "event" {
+	topic = strings.Trim(topic, "/")
+	if prefix := strings.Trim(topicPrefix, "/"); prefix != "" {
+		if topic == prefix || !strings.HasPrefix(topic, prefix+"/") {
 			return "", false
 		}
-	} else if len(segments) == 6 {
-		if segments[0] != strings.Trim(topicPrefix, "/") || segments[1] != "units" || segments[3] != "sources" || segments[5] != "event" {
-			return "", false
-		}
-		segments = segments[1:]
-	} else {
+		topic = strings.TrimPrefix(topic, prefix+"/")
+	}
+
+	segments := strings.Split(topic, "/")
+	if len(segments) != 5 || segments[0] != "units" || segments[2] != "sources" || segments[4] != "event" {
 		return "", false
 	}
 

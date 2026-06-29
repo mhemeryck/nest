@@ -56,6 +56,19 @@ func TestParseSemanticSourceEventMessage(t *testing.T) {
 	}, observation)
 }
 
+func TestParseSemanticSourceEventMessageWithMultiSegmentPrefix(t *testing.T) {
+	observation, ok := ParseSemanticSourceEventMessage(ReceivedMessage{
+		Topic:   "building/nest/units/controller_1/sources/controller_1.button.office_button/event",
+		Payload: []byte(`{"source":"controller_1.button.office_button","event":"pressed"}`),
+	}, "building/nest")
+
+	assert.True(t, ok)
+	assert.Equal(t, SemanticSourceEventObservation{
+		SourceID: entity.ID("controller_1.button.office_button"),
+		Event:    "pressed",
+	}, observation)
+}
+
 func TestParseSemanticSourceEventMessageRejectsMismatchedPayloadSource(t *testing.T) {
 	_, ok := ParseSemanticSourceEventMessage(ReceivedMessage{
 		Topic:   "nest/units/controller_1/sources/controller_1.button.office_button/event",
