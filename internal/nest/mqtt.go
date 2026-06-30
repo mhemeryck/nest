@@ -8,6 +8,7 @@ import (
 )
 
 type mqttActor struct {
+	enabled           bool
 	commands          chan mqtt.Command
 	events            chan mqtt.Event
 	done              chan struct{}
@@ -24,6 +25,7 @@ func newMQTTActor(root *entity.Root) mqttActor {
 	topics := mqtt.NewTopics(root.MQTT.TopicPrefix, root.MQTT.UnitID)
 
 	return mqttActor{
+		enabled:           true,
 		commands:          make(chan mqtt.Command, 32),
 		events:            make(chan mqtt.Event, 32),
 		done:              make(chan struct{}),
@@ -34,7 +36,7 @@ func newMQTTActor(root *entity.Root) mqttActor {
 }
 
 func startMQTTActor(ctx context.Context, actor mqttActor) {
-	if actor.commands == nil {
+	if !actor.enabled {
 		return
 	}
 
@@ -42,7 +44,7 @@ func startMQTTActor(ctx context.Context, actor mqttActor) {
 }
 
 func waitForMQTTActor(actor mqttActor) {
-	if actor.done == nil {
+	if !actor.enabled {
 		return
 	}
 
