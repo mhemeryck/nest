@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/mhemeryck/nest/internal/config"
+	"github.com/mhemeryck/nest/internal/entity"
 	"github.com/mhemeryck/nest/internal/registry"
 )
 
@@ -19,10 +20,9 @@ func Run(ctx context.Context, opts Options) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Load and validate external configuration before building runtime state.
-	configRoot, err := config.Load(opts.ConfigPath, opts.UnitID)
+	root, index, err := loadConfig(opts)
 	if err != nil {
-		return fmt.Errorf("load config: %w", err)
+		return err
 	}
 
 	if opts.ValidateOnly {
@@ -30,19 +30,12 @@ func Run(ctx context.Context, opts Options) error {
 		return nil
 	}
 
-	// Translate config into domain entities and indexes used by controllers.
-	root := config.ToEntityRoot(configRoot)
-	index := registry.Build(root)
-
-	configuredDevices, err := sysfsDevices(root, index)
+	mqttActor := newMQTTActor(root)
+	sysfsActor, err := newSysfsActor(root, index)
 	if err != nil {
 		return err
 	}
-	logSysfsDevices(configuredDevices)
 	logModbusConfig(root)
-
-	mqttActor := newMQTTActor(root)
-	sysfsActor := newSysfsActor(root, configuredDevices)
 
 	startMQTTActor(ctx, mqttActor)
 	startSysfsActor(ctx, sysfsActor)
@@ -55,4 +48,16 @@ func Run(ctx context.Context, opts Options) error {
 
 	slog.Info("shutting down")
 	return nil
+}
+
+func loadConfig(opts Options) (*entity.Root, *registry.Index, error) {
+	configRoot, err := config.Load(opts.ConfigPath, opts.UnitID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load config: %w", err)
+	}
+
+	root := config.ToEntityRoot(configRoot)
+	index := registry.Build(root)
+
+	return root, index, nil
 }

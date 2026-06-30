@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/mhemeryck/nest/internal/entity"
+	"github.com/mhemeryck/nest/internal/registry"
 	"github.com/mhemeryck/nest/internal/sysfs"
 )
 
@@ -15,14 +16,20 @@ type sysfsActor struct {
 	pollIntervals sysfs.PollIntervals
 }
 
-func newSysfsActor(root *entity.Root, devices []*sysfs.Device) sysfsActor {
+func newSysfsActor(root *entity.Root, index *registry.Index) (sysfsActor, error) {
+	devices, err := sysfsDevices(root, index)
+	if err != nil {
+		return sysfsActor{}, err
+	}
+	logSysfsDevices(devices)
+
 	return sysfsActor{
 		commands:      make(chan sysfs.Command, 32),
 		states:        make(chan sysfs.StateChange, 32),
 		done:          make(chan struct{}),
 		devices:       devices,
 		pollIntervals: sysfsPollIntervals(root),
-	}
+	}, nil
 }
 
 func startSysfsActor(ctx context.Context, actor sysfsActor) {
