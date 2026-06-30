@@ -208,6 +208,26 @@ Next useful checks:
 
 **Deliverable**: The existing multi-unit light topology can be represented in the global config tree, projected into unit-local runtime indexes, and proven with MQTT-based semantic event sharing before Modbus execution is added.
 
+## Phase 7.1: Runtime Readability Refactor
+
+- [x] Simplify `internal/nest` startup flow so it reads as high-level runtime composition
+- [x] Group actor channel, topic, subscription, and shutdown wiring behind small runtime helpers
+- [x] Keep config, entity, registry, controller, sysfs, and MQTT package boundaries unchanged unless a concrete dependency issue appears
+- [x] Make controller wiring easier to scan without introducing a generic context bag
+- [x] Preserve existing behavior with tests before starting Modbus execution
+
+**Deliverable**: Runtime wiring is easier to read and extend before Modbus adds another transport path.
+
+## Phase 7.2: Runtime Registry Cleanup
+
+- [ ] Decide whether `registry.Index` should become a full runtime registry instead of a lookup-only index
+- [ ] Include canonical runtime data needed by actors and controllers in the registry when that reduces passing both `entity.Root` and `registry.Index`
+- [ ] Keep `entity.Root` as the config-to-domain translation result rather than making config parsing depend on runtime lookup concerns
+- [ ] Rename `registry.Index` if it starts owning canonical runtime data, for example to `registry.Registry`
+- [ ] Update runtime wiring so actors and controller code take the smallest coherent runtime dependency
+
+**Deliverable**: Runtime code no longer needs to pass both the canonical entity root and lookup index when a single registry better represents the unit-local runtime model.
+
 ## Phase 8: Modbus RTU Transport
 
 - [ ] Serial port configuration
