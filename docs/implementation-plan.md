@@ -208,6 +208,16 @@ Next useful checks:
 
 **Deliverable**: The existing multi-unit light topology can be represented in the global config tree, projected into unit-local runtime indexes, and proven with MQTT-based semantic event sharing before Modbus execution is added.
 
+## Phase 7.5: Runtime Readability Refactor
+
+- [x] Simplify `internal/nest` startup flow so it reads as high-level runtime composition
+- [x] Group actor channel, topic, subscription, and shutdown wiring behind small runtime helpers
+- [x] Keep config, entity, registry, controller, sysfs, and MQTT package boundaries unchanged unless a concrete dependency issue appears
+- [x] Make controller wiring easier to scan without introducing a generic context bag
+- [x] Preserve existing behavior with tests before starting Modbus execution
+
+**Deliverable**: Runtime wiring is easier to read and extend before Modbus adds another transport path.
+
 ## Phase 8: Modbus RTU Transport
 
 - [ ] Serial port configuration
