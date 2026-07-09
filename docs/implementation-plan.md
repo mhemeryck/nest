@@ -222,11 +222,11 @@ Next useful checks:
 
 - [x] Decide that `registry.Index` should become a runtime registry rather than a lookup-only index
 - [x] Rename `registry.Index` to `registry.Registry`
-- [ ] Keep `entity.Root` as the bare projected domain model with entity lists, bindings, and config-derived settings
+- [x] Keep `entity.Root` as the bare projected domain model with entity lists, bindings, and config-derived settings
 - [ ] Use `registry.Registry` as the runtime translation catalog built from `entity.Root`
-- [ ] Include runtime data needed by actors and controllers in `registry.Registry` when it avoids passing both `entity.Root` and the registry
+- [x] Include runtime data needed by actors and controllers in `registry.Registry` when it avoids passing both `entity.Root` and the registry
 - [ ] Keep registry fields private and expose package-level functions that take `reg *registry.Registry`
-- [ ] Return copied slices from registry functions so callers do not mutate registry-owned data accidentally
+- [x] Return copied slices from registry functions so callers do not mutate registry-owned data accidentally
 - [ ] Update `internal/nest` runtime wiring to pass one explicit `reg` value into actor and controller setup
 - [ ] Update controller code to depend on `reg *registry.Registry` instead of both `root *entity.Root` and `index *registry.Index`
 - [ ] Keep MQTT topic generation and protocol-specific behavior in the MQTT package rather than moving actor-specific addressing into the registry

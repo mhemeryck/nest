@@ -7,6 +7,12 @@ import (
 )
 
 type Registry struct {
+	sysfsRoot                      string
+	sysfsPollIntervals             entity.PollIntervals
+	mqtt                           entity.MQTT
+	modbus                         entity.Modbus
+	lights                         []entity.Light
+	remoteTargetBindings           []entity.Binding
 	DigitalInputsByDevice          map[entity.SysfsDeviceID]entity.DigitalInput
 	PushButtonsByID                map[entity.PushButtonID]entity.PushButton
 	PushButtonsByInputID           map[entity.DigitalInputID][]entity.PushButton
@@ -21,6 +27,12 @@ type Registry struct {
 
 func Build(root *entity.Root) *Registry {
 	index := &Registry{
+		sysfsRoot:                      root.SysfsRoot,
+		sysfsPollIntervals:             root.SysfsPollIntervals,
+		mqtt:                           root.MQTT,
+		modbus:                         copyModbus(root.Modbus),
+		lights:                         append([]entity.Light(nil), root.Lights...),
+		remoteTargetBindings:           append([]entity.Binding(nil), root.RemoteTargetBindings...),
 		DigitalInputsByDevice:          make(map[entity.SysfsDeviceID]entity.DigitalInput, len(root.DigitalInputs)),
 		PushButtonsByID:                make(map[entity.PushButtonID]entity.PushButton, len(root.PushButtons)),
 		PushButtonsByInputID:           make(map[entity.DigitalInputID][]entity.PushButton),
@@ -65,6 +77,40 @@ func Build(root *entity.Root) *Registry {
 	}
 
 	return index
+}
+
+func SysfsRoot(reg *Registry) string {
+	return reg.sysfsRoot
+}
+
+func SysfsPollIntervals(reg *Registry) entity.PollIntervals {
+	return reg.sysfsPollIntervals
+}
+
+func MQTT(reg *Registry) entity.MQTT {
+	return reg.mqtt
+}
+
+func Modbus(reg *Registry) entity.Modbus {
+	return copyModbus(reg.modbus)
+}
+
+func Lights(reg *Registry) []entity.Light {
+	return append([]entity.Light(nil), reg.lights...)
+}
+
+func RemoteTargetBindings(reg *Registry) []entity.Binding {
+	return append([]entity.Binding(nil), reg.remoteTargetBindings...)
+}
+
+func copyModbus(modbus entity.Modbus) entity.Modbus {
+	return entity.Modbus{
+		Mode:              modbus.Mode,
+		EventSignals:      append([]entity.ModbusEventSignal(nil), modbus.EventSignals...),
+		StatePoints:       append([]entity.ModbusStatePoint(nil), modbus.StatePoints...),
+		EventSignalWrites: append([]entity.ModbusEventSignalWrite(nil), modbus.EventSignalWrites...),
+		StatePolls:        append([]entity.ModbusStatePoll(nil), modbus.StatePolls...),
+	}
 }
 
 func SysfsDeviceIDs(index *Registry) []entity.SysfsDeviceID {

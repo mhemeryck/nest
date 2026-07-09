@@ -2,6 +2,7 @@ package registry
 
 import (
 	"testing"
+	"time"
 
 	"github.com/mhemeryck/nest/internal/entity"
 	"github.com/stretchr/testify/assert"
@@ -96,4 +97,100 @@ func TestLookupHelpers(t *testing.T) {
 	relay, ok = RelayBySysfsDevice(index, entity.SysfsDeviceID("ro_3_14"))
 	require.True(t, ok)
 	assert.Equal(t, root.Relays[0], relay)
+}
+
+func TestRuntimeDataHelpers(t *testing.T) {
+	root := &entity.Root{
+		SysfsRoot: "/sys/test",
+		SysfsPollIntervals: entity.PollIntervals{
+			DigitalInput:  100 * time.Millisecond,
+			DigitalOutput: 200 * time.Millisecond,
+			RelayOutput:   300 * time.Millisecond,
+		},
+		MQTT: entity.MQTT{
+			Enabled:     true,
+			Host:        "mqtt.local",
+			Port:        1883,
+			ClientID:    "nest-test",
+			Username:    "nest",
+			Password:    "secret",
+			TopicPrefix: "nest",
+			UnitID:      "controller_1",
+		},
+		Modbus: entity.Modbus{
+			Mode: entity.ModbusModeMaster,
+			EventSignals: []entity.ModbusEventSignal{
+				{
+					ID:     entity.ModbusEventSignalID("office_button_signal"),
+					Source: entity.ID("controller_1.button.office_button"),
+					Target: entity.ID("controller_2.light.office_light"),
+					Action: entity.ActionToggle,
+				},
+			},
+			StatePoints: []entity.ModbusStatePoint{
+				{
+					ID:     entity.ModbusStatePointID("office_light_state"),
+					Entity: entity.ID("controller_2.light.office_light"),
+				},
+			},
+			EventSignalWrites: []entity.ModbusEventSignalWrite{
+				{
+					Unit:   "controller_2",
+					Signal: entity.ModbusEventSignalID("office_button_signal"),
+					Source: entity.ID("controller_1.button.office_button"),
+					Target: entity.ID("controller_2.light.office_light"),
+					Action: entity.ActionToggle,
+				},
+			},
+			StatePolls: []entity.ModbusStatePoll{
+				{
+					Unit:   "controller_2",
+					Point:  entity.ModbusStatePointID("office_light_state"),
+					Entity: entity.ID("controller_2.light.office_light"),
+				},
+			},
+		},
+		Lights: []entity.Light{
+			{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")},
+		},
+		RemoteTargetBindings: []entity.Binding{
+			{Source: entity.ID("controller_2.button.hall_button"), Target: entity.ID("controller_1.light.office_light"), Action: entity.ActionToggle},
+		},
+	}
+	reg := Build(root)
+
+	assert.Equal(t, root.SysfsRoot, SysfsRoot(reg))
+	assert.Equal(t, root.SysfsPollIntervals, SysfsPollIntervals(reg))
+	assert.Equal(t, root.MQTT, MQTT(reg))
+	assert.Equal(t, root.Modbus, Modbus(reg))
+	assert.Equal(t, root.Lights, Lights(reg))
+	assert.Equal(t, root.RemoteTargetBindings, RemoteTargetBindings(reg))
+}
+
+func TestRuntimeDataHelpersReturnCopies(t *testing.T) {
+	root := &entity.Root{
+		Modbus: entity.Modbus{
+			EventSignals: []entity.ModbusEventSignal{
+				{ID: entity.ModbusEventSignalID("office_button_signal")},
+			},
+		},
+		Lights: []entity.Light{
+			{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")},
+		},
+		RemoteTargetBindings: []entity.Binding{
+			{Source: entity.ID("controller_2.button.hall_button"), Target: entity.ID("controller_1.light.office_light"), Action: entity.ActionToggle},
+		},
+	}
+	reg := Build(root)
+
+	modbus := Modbus(reg)
+	modbus.EventSignals[0].ID = entity.ModbusEventSignalID("changed_signal")
+	lights := Lights(reg)
+	lights[0].Name = "Changed light"
+	bindings := RemoteTargetBindings(reg)
+	bindings[0].Action = entity.Action("changed")
+
+	assert.Equal(t, root.Modbus, Modbus(reg))
+	assert.Equal(t, root.Lights, Lights(reg))
+	assert.Equal(t, root.RemoteTargetBindings, RemoteTargetBindings(reg))
 }
