@@ -11,7 +11,7 @@ import (
 func startController(
 	ctx context.Context,
 	root *entity.Root,
-	index *registry.Index,
+	index *registry.Registry,
 	sysfsActor sysfsActor,
 	mqttActor mqttActor,
 ) <-chan struct{} {

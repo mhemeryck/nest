@@ -17,7 +17,7 @@ import (
 func Run(
 	ctx context.Context,
 	root *entity.Root,
-	index *registry.Index,
+	index *registry.Registry,
 	sysfsCommands chan<- sysfs.Command,
 	mqttCommands chan<- mqtt.Command,
 	mqttTopics mqtt.Topics,
@@ -36,7 +36,7 @@ func Run(
 
 func normalizeEvents(
 	ctx context.Context,
-	index *registry.Index,
+	index *registry.Registry,
 	mqttTopics mqtt.Topics,
 	stateChanges <-chan sysfs.StateChange,
 	mqttEvents <-chan mqtt.Event,
@@ -73,7 +73,7 @@ func normalizeEvents(
 
 func normalizeStateChanges(
 	ctx context.Context,
-	index *registry.Index,
+	index *registry.Registry,
 	stateChanges <-chan sysfs.StateChange,
 	semanticEvents chan<- event.Event,
 ) {
@@ -91,7 +91,7 @@ func normalizeStateChanges(
 	}
 }
 
-func normalizeMQTTEvents(ctx context.Context, index *registry.Index, mqttTopics mqtt.Topics, mqttEvents <-chan mqtt.Event, semanticEvents chan<- event.Event) {
+func normalizeMQTTEvents(ctx context.Context, index *registry.Registry, mqttTopics mqtt.Topics, mqttEvents <-chan mqtt.Event, semanticEvents chan<- event.Event) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -112,7 +112,7 @@ func normalizeMQTTEvents(ctx context.Context, index *registry.Index, mqttTopics 
 func dispatchEvents(
 	ctx context.Context,
 	root *entity.Root,
-	index *registry.Index,
+	index *registry.Registry,
 	sysfsCommands chan<- sysfs.Command,
 	mqttCommands chan<- mqtt.Command,
 	mqttTopics mqtt.Topics,
@@ -170,7 +170,7 @@ func publishMQTTStartup(ctx context.Context, root *entity.Root, commands chan<- 
 	return nil
 }
 
-func semanticEventFromMQTTEvent(index *registry.Index, mqttTopics mqtt.Topics, mqttEvent mqtt.Event) (event.Event, bool) {
+func semanticEventFromMQTTEvent(index *registry.Registry, mqttTopics mqtt.Topics, mqttEvent mqtt.Event) (event.Event, bool) {
 	semanticEvent := event.Event{MQTT: &event.MQTT{PublishTopic: mqttEvent.Publish.Topic, Error: mqttEvent.Error}}
 	switch mqttEvent.Kind {
 	case mqtt.ConnectedEventKind:
@@ -192,7 +192,7 @@ func semanticEventFromMQTTEvent(index *registry.Index, mqttTopics mqtt.Topics, m
 	return semanticEvent, true
 }
 
-func semanticEventFromMQTTMessage(index *registry.Index, mqttTopics mqtt.Topics, message mqtt.ReceivedMessage) (event.Event, bool) {
+func semanticEventFromMQTTMessage(index *registry.Registry, mqttTopics mqtt.Topics, message mqtt.ReceivedMessage) (event.Event, bool) {
 	if semanticEvent, ok := semanticLightEventFromMQTTMessage(index, mqttTopics, message); ok {
 		return semanticEvent, true
 	}
@@ -200,7 +200,7 @@ func semanticEventFromMQTTMessage(index *registry.Index, mqttTopics mqtt.Topics,
 	return semanticSourceEventFromMQTTMessage(index, mqttTopics, message)
 }
 
-func semanticLightEventFromMQTTMessage(index *registry.Index, mqttTopics mqtt.Topics, message mqtt.ReceivedMessage) (event.Event, bool) {
+func semanticLightEventFromMQTTMessage(index *registry.Registry, mqttTopics mqtt.Topics, message mqtt.ReceivedMessage) (event.Event, bool) {
 	lightID, ok := mqtt.ParseLightCommandTopic(mqttTopics, message.Topic)
 	if !ok {
 		return event.Event{}, false
@@ -228,7 +228,7 @@ func semanticLightEventFromMQTTMessage(index *registry.Index, mqttTopics mqtt.To
 	}, true
 }
 
-func semanticSourceEventFromMQTTMessage(index *registry.Index, mqttTopics mqtt.Topics, message mqtt.ReceivedMessage) (event.Event, bool) {
+func semanticSourceEventFromMQTTMessage(index *registry.Registry, mqttTopics mqtt.Topics, message mqtt.ReceivedMessage) (event.Event, bool) {
 	sourceEvent, ok := mqtt.ParseSemanticSourceEventMessage(message, mqttTopics.Prefix)
 	if !ok {
 		slog.Warn("unhandled mqtt message topic", "topic", message.Topic)
@@ -264,7 +264,7 @@ func lightActionFromMQTTPayload(payload []byte) (entity.LightAction, bool) {
 	}
 }
 
-func normalizeStateChange(ctx context.Context, index *registry.Index, semanticEvents chan<- event.Event, stateChange sysfs.StateChange) {
+func normalizeStateChange(ctx context.Context, index *registry.Registry, semanticEvents chan<- event.Event, stateChange sysfs.StateChange) {
 	events, handled := semanticEventsFromStateChange(index, stateChange)
 	if handled {
 		for _, semanticEvent := range events {

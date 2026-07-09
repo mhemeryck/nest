@@ -14,7 +14,7 @@ import (
 func dispatchEvent(
 	ctx context.Context,
 	root *entity.Root,
-	index *registry.Index,
+	index *registry.Registry,
 	sysfsCommands chan<- sysfs.Command,
 	mqttCommands chan<- mqtt.Command,
 	mqttTopics mqtt.Topics,
@@ -28,14 +28,14 @@ func dispatchEvent(
 	return derivedEvents
 }
 
-func dispatchSysfsCommand(ctx context.Context, index *registry.Index, commands chan<- sysfs.Command, busEvent event.Event) {
+func dispatchSysfsCommand(ctx context.Context, index *registry.Registry, commands chan<- sysfs.Command, busEvent event.Event) {
 	switch busEvent.Kind {
 	case event.LightKind:
 		dispatchLightEvent(ctx, index, commands, *busEvent.Light)
 	}
 }
 
-func dispatchMQTTCommand(ctx context.Context, root *entity.Root, index *registry.Index, commands chan<- mqtt.Command, topics mqtt.Topics, busEvent event.Event) {
+func dispatchMQTTCommand(ctx context.Context, root *entity.Root, index *registry.Registry, commands chan<- mqtt.Command, topics mqtt.Topics, busEvent event.Event) {
 	switch busEvent.Kind {
 	case event.PushButtonPressedKind, event.PushButtonReleasedKind:
 		publishPushButtonSourceEvent(ctx, index, commands, topics, busEvent.Kind, *busEvent.PushButton)
@@ -79,7 +79,7 @@ func logPushButtonEvent(eventKind event.Kind, pushButton event.PushButton) {
 	)
 }
 
-func dispatchLightEvent(ctx context.Context, index *registry.Index, sysfsCommands chan<- sysfs.Command, lightEvent event.Light) {
+func dispatchLightEvent(ctx context.Context, index *registry.Registry, sysfsCommands chan<- sysfs.Command, lightEvent event.Light) {
 	switch lightEvent.Action {
 	case entity.LightActionToggle:
 		handleLightToggle(ctx, index, sysfsCommands, lightEvent)

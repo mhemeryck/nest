@@ -10,7 +10,7 @@ import (
 	"github.com/mhemeryck/nest/internal/registry"
 )
 
-func publishPushButtonSourceEvent(ctx context.Context, index *registry.Index, commands chan<- mqtt.Command, topics mqtt.Topics, eventKind event.Kind, pushButton event.PushButton) {
+func publishPushButtonSourceEvent(ctx context.Context, index *registry.Registry, commands chan<- mqtt.Command, topics mqtt.Topics, eventKind event.Kind, pushButton event.PushButton) {
 	if len(registry.RemoteSourceBindingsByButton(index, pushButton.ButtonID)) == 0 {
 		return
 	}

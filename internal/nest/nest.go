@@ -50,7 +50,7 @@ func Run(ctx context.Context, opts Options) error {
 	return nil
 }
 
-func loadConfig(opts Options) (*entity.Root, *registry.Index, error) {
+func loadConfig(opts Options) (*entity.Root, *registry.Registry, error) {
 	configRoot, err := config.Load(opts.ConfigPath, opts.UnitID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("load config: %w", err)

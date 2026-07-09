@@ -16,7 +16,7 @@ type sysfsActor struct {
 	pollIntervals sysfs.PollIntervals
 }
 
-func newSysfsActor(root *entity.Root, index *registry.Index) (sysfsActor, error) {
+func newSysfsActor(root *entity.Root, index *registry.Registry) (sysfsActor, error) {
 	devices, err := sysfsDevices(root, index)
 	if err != nil {
 		return sysfsActor{}, err

@@ -221,7 +221,7 @@ Next useful checks:
 ## Phase 7.2: Runtime Registry Cleanup
 
 - [x] Decide that `registry.Index` should become a runtime registry rather than a lookup-only index
-- [ ] Rename `registry.Index` to `registry.Registry`
+- [x] Rename `registry.Index` to `registry.Registry`
 - [ ] Keep `entity.Root` as the bare projected domain model with entity lists, bindings, and config-derived settings
 - [ ] Use `registry.Registry` as the runtime translation catalog built from `entity.Root`
 - [ ] Include runtime data needed by actors and controllers in `registry.Registry` when it avoids passing both `entity.Root` and the registry

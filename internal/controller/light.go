@@ -10,7 +10,7 @@ import (
 	"github.com/mhemeryck/nest/internal/sysfs"
 )
 
-func handleLightToggle(ctx context.Context, index *registry.Index, sysfsCommands chan<- sysfs.Command, lightEvent event.Light) {
+func handleLightToggle(ctx context.Context, index *registry.Registry, sysfsCommands chan<- sysfs.Command, lightEvent event.Light) {
 	light, ok := registry.LightByID(index, lightEvent.LightID)
 	if !ok {
 		slog.Error("unknown light", "light_id", lightEvent.LightID)
@@ -39,7 +39,7 @@ func handleLightToggle(ctx context.Context, index *registry.Index, sysfsCommands
 	)
 }
 
-func handleLightSet(ctx context.Context, index *registry.Index, sysfsCommands chan<- sysfs.Command, lightEvent event.Light, commandKind sysfs.CommandKind) {
+func handleLightSet(ctx context.Context, index *registry.Registry, sysfsCommands chan<- sysfs.Command, lightEvent event.Light, commandKind sysfs.CommandKind) {
 	light, ok := registry.LightByID(index, lightEvent.LightID)
 	if !ok {
 		slog.Error("unknown light", "light_id", lightEvent.LightID)
@@ -70,11 +70,11 @@ func handleLightSet(ctx context.Context, index *registry.Index, sysfsCommands ch
 	)
 }
 
-func relayToggleCommandForLight(index *registry.Index, light entity.Light) (sysfs.Command, bool) {
+func relayToggleCommandForLight(index *registry.Registry, light entity.Light) (sysfs.Command, bool) {
 	return relayCommandForLight(index, light, sysfs.ToggleCommand)
 }
 
-func relayCommandForLight(index *registry.Index, light entity.Light, commandKind sysfs.CommandKind) (sysfs.Command, bool) {
+func relayCommandForLight(index *registry.Registry, light entity.Light, commandKind sysfs.CommandKind) (sysfs.Command, bool) {
 	relay, ok := registry.RelayByID(index, light.Relay)
 	if !ok {
 		slog.Error("light references unknown relay", "light_id", light.ID, "relay_id", light.Relay)

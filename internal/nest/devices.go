@@ -11,7 +11,7 @@ import (
 	"github.com/mhemeryck/nest/internal/sysfs"
 )
 
-func sysfsDevices(root *entity.Root, index *registry.Index) ([]*sysfs.Device, error) {
+func sysfsDevices(root *entity.Root, index *registry.Registry) ([]*sysfs.Device, error) {
 	slog.Info("crawling sysfs device tree", "root", root.SysfsRoot)
 	devices, err := sysfs.ListDevices(root.SysfsRoot)
 	if err != nil {

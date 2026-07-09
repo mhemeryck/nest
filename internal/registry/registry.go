@@ -6,7 +6,7 @@ import (
 	"github.com/mhemeryck/nest/internal/entity"
 )
 
-type Index struct {
+type Registry struct {
 	DigitalInputsByDevice          map[entity.SysfsDeviceID]entity.DigitalInput
 	PushButtonsByID                map[entity.PushButtonID]entity.PushButton
 	PushButtonsByInputID           map[entity.DigitalInputID][]entity.PushButton
@@ -19,8 +19,8 @@ type Index struct {
 	RelaysByDevice                 map[entity.SysfsDeviceID]entity.Relay
 }
 
-func Build(root *entity.Root) *Index {
-	index := &Index{
+func Build(root *entity.Root) *Registry {
+	index := &Registry{
 		DigitalInputsByDevice:          make(map[entity.SysfsDeviceID]entity.DigitalInput, len(root.DigitalInputs)),
 		PushButtonsByID:                make(map[entity.PushButtonID]entity.PushButton, len(root.PushButtons)),
 		PushButtonsByInputID:           make(map[entity.DigitalInputID][]entity.PushButton),
@@ -67,7 +67,7 @@ func Build(root *entity.Root) *Index {
 	return index
 }
 
-func SysfsDeviceIDs(index *Index) []entity.SysfsDeviceID {
+func SysfsDeviceIDs(index *Registry) []entity.SysfsDeviceID {
 	deviceIDs := make([]entity.SysfsDeviceID, 0, len(index.DigitalInputsByDevice)+len(index.RelaysByDevice))
 	for deviceID := range index.DigitalInputsByDevice {
 		deviceIDs = append(deviceIDs, deviceID)
@@ -81,54 +81,54 @@ func SysfsDeviceIDs(index *Index) []entity.SysfsDeviceID {
 	return deviceIDs
 }
 
-func DigitalInputBySysfsDevice(index *Index, deviceID entity.SysfsDeviceID) (entity.DigitalInput, bool) {
+func DigitalInputBySysfsDevice(index *Registry, deviceID entity.SysfsDeviceID) (entity.DigitalInput, bool) {
 	input, ok := index.DigitalInputsByDevice[deviceID]
 	return input, ok
 }
 
-func PushButtonsByInput(index *Index, inputID entity.DigitalInputID) []entity.PushButton {
+func PushButtonsByInput(index *Registry, inputID entity.DigitalInputID) []entity.PushButton {
 	return index.PushButtonsByInputID[inputID]
 }
 
-func BindingsByButton(index *Index, buttonID entity.PushButtonID) []entity.Binding {
+func BindingsByButton(index *Registry, buttonID entity.PushButtonID) []entity.Binding {
 	return BindingsBySource(index, entity.ID(buttonID))
 }
 
-func BindingsBySource(index *Index, sourceID entity.ID) []entity.Binding {
+func BindingsBySource(index *Registry, sourceID entity.ID) []entity.Binding {
 	return index.BindingsBySourceID[sourceID]
 }
 
-func RemoteSourceBindingsByButton(index *Index, buttonID entity.PushButtonID) []entity.Binding {
+func RemoteSourceBindingsByButton(index *Registry, buttonID entity.PushButtonID) []entity.Binding {
 	return RemoteSourceBindingsBySource(index, entity.ID(buttonID))
 }
 
-func RemoteSourceBindingsBySource(index *Index, sourceID entity.ID) []entity.Binding {
+func RemoteSourceBindingsBySource(index *Registry, sourceID entity.ID) []entity.Binding {
 	return index.RemoteSourceBindingsBySourceID[sourceID]
 }
 
-func RemoteTargetBindingsByButton(index *Index, buttonID entity.PushButtonID) []entity.Binding {
+func RemoteTargetBindingsByButton(index *Registry, buttonID entity.PushButtonID) []entity.Binding {
 	return RemoteTargetBindingsBySource(index, entity.ID(buttonID))
 }
 
-func RemoteTargetBindingsBySource(index *Index, sourceID entity.ID) []entity.Binding {
+func RemoteTargetBindingsBySource(index *Registry, sourceID entity.ID) []entity.Binding {
 	return index.RemoteTargetBindingsBySourceID[sourceID]
 }
 
-func LightByID(index *Index, lightID entity.LightID) (entity.Light, bool) {
+func LightByID(index *Registry, lightID entity.LightID) (entity.Light, bool) {
 	light, ok := index.LightsByID[lightID]
 	return light, ok
 }
 
-func LightsByRelay(index *Index, relayID entity.RelayID) []entity.Light {
+func LightsByRelay(index *Registry, relayID entity.RelayID) []entity.Light {
 	return index.LightsByRelayID[relayID]
 }
 
-func RelayByID(index *Index, relayID entity.RelayID) (entity.Relay, bool) {
+func RelayByID(index *Registry, relayID entity.RelayID) (entity.Relay, bool) {
 	relay, ok := index.RelaysByID[relayID]
 	return relay, ok
 }
 
-func RelayBySysfsDevice(index *Index, deviceID entity.SysfsDeviceID) (entity.Relay, bool) {
+func RelayBySysfsDevice(index *Registry, deviceID entity.SysfsDeviceID) (entity.Relay, bool) {
 	relay, ok := index.RelaysByDevice[deviceID]
 	return relay, ok
 }

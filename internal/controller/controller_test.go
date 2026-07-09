@@ -428,7 +428,7 @@ func captureLogs(t *testing.T, fn func()) string {
 func dispatchQueuedTestEvents(
 	ctx context.Context,
 	root *entity.Root,
-	index *registry.Index,
+	index *registry.Registry,
 	sysfsCommands chan<- sysfs.Command,
 	mqttCommands chan<- mqtt.Command,
 	mqttTopics mqtt.Topics,
