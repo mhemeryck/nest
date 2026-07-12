@@ -11,14 +11,15 @@ import (
 	"github.com/mhemeryck/nest/internal/sysfs"
 )
 
-func sysfsDevices(root *entity.Root, index *registry.Registry) ([]*sysfs.Device, error) {
-	slog.Info("crawling sysfs device tree", "root", root.SysfsRoot)
-	devices, err := sysfs.ListDevices(root.SysfsRoot)
+func sysfsDevices(reg *registry.Registry) ([]*sysfs.Device, error) {
+	sysfsRoot := registry.SysfsRoot(reg)
+	slog.Info("crawling sysfs device tree", "root", sysfsRoot)
+	devices, err := sysfs.ListDevices(sysfsRoot)
 	if err != nil {
 		return nil, fmt.Errorf("crawl sysfs: %w", err)
 	}
 
-	configured, missing := configuredDevices(devices, registry.SysfsDeviceIDs(index))
+	configured, missing := configuredDevices(devices, registry.SysfsDeviceIDs(reg))
 	if len(missing) > 0 {
 		return nil, missingDevicesError(missing)
 	}

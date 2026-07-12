@@ -56,10 +56,10 @@ func SemanticSourceEventTopic(topics Topics, sourceID entity.ID) string {
 	return joinTopic(topics, "units", unitID, "sources", string(sourceID), "event")
 }
 
-func SemanticSourceEventSubscriptionTopics(topics Topics, root *entity.Root) []string {
-	seen := make(map[string]struct{}, len(root.RemoteTargetBindings))
-	subscriptions := make([]string, 0, len(root.RemoteTargetBindings))
-	for _, binding := range root.RemoteTargetBindings {
+func SemanticSourceEventSubscriptionTopics(topics Topics, bindings []entity.Binding) []string {
+	seen := make(map[string]struct{}, len(bindings))
+	subscriptions := make([]string, 0, len(bindings))
+	for _, binding := range bindings {
 		topic := SemanticSourceEventTopic(topics, binding.Source)
 		if _, ok := seen[topic]; ok {
 			continue

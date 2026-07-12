@@ -4,22 +4,19 @@ import (
 	"context"
 
 	"github.com/mhemeryck/nest/internal/controller"
-	"github.com/mhemeryck/nest/internal/entity"
 	"github.com/mhemeryck/nest/internal/registry"
 )
 
 func startController(
 	ctx context.Context,
-	root *entity.Root,
-	index *registry.Registry,
+	reg *registry.Registry,
 	sysfsActor sysfsActor,
 	mqttActor mqttActor,
 ) <-chan struct{} {
 	done := make(chan struct{})
 	go controller.Run(
 		ctx,
-		root,
-		index,
+		reg,
 		sysfsActor.commands,
 		mqttActor.commands,
 		mqttActor.topics,

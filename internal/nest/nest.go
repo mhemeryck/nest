@@ -6,7 +6,6 @@ import (
 	"log/slog"
 
 	"github.com/mhemeryck/nest/internal/config"
-	"github.com/mhemeryck/nest/internal/entity"
 	"github.com/mhemeryck/nest/internal/registry"
 )
 
@@ -20,7 +19,7 @@ func Run(ctx context.Context, opts Options) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	root, index, err := loadConfig(opts)
+	reg, err := loadRegistry(opts)
 	if err != nil {
 		return err
 	}
@@ -30,17 +29,17 @@ func Run(ctx context.Context, opts Options) error {
 		return nil
 	}
 
-	mqttActor := newMQTTActor(root)
-	sysfsActor, err := newSysfsActor(root, index)
+	mqttActor := newMQTTActor(reg)
+	sysfsActor, err := newSysfsActor(reg)
 	if err != nil {
 		return err
 	}
-	logModbusConfig(root)
+	logModbusConfig(reg)
 
 	startMQTTActor(ctx, mqttActor)
 	startSysfsActor(ctx, sysfsActor)
 
-	controllerDone := startController(ctx, root, index, sysfsActor, mqttActor)
+	controllerDone := startController(ctx, reg, sysfsActor, mqttActor)
 
 	slog.Info("runtime started", "message", "press Ctrl+C to exit")
 
@@ -50,14 +49,14 @@ func Run(ctx context.Context, opts Options) error {
 	return nil
 }
 
-func loadConfig(opts Options) (*entity.Root, *registry.Registry, error) {
+func loadRegistry(opts Options) (*registry.Registry, error) {
 	configRoot, err := config.Load(opts.ConfigPath, opts.UnitID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("load config: %w", err)
+		return nil, fmt.Errorf("load config: %w", err)
 	}
 
 	root := config.ToEntityRoot(configRoot)
-	index := registry.Build(root)
+	reg := registry.Build(root)
 
-	return root, index, nil
+	return reg, nil
 }

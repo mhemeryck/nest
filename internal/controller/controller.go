@@ -16,8 +16,7 @@ import (
 
 func Run(
 	ctx context.Context,
-	root *entity.Root,
-	index *registry.Registry,
+	reg *registry.Registry,
 	sysfsCommands chan<- sysfs.Command,
 	mqttCommands chan<- mqtt.Command,
 	mqttTopics mqtt.Topics,
@@ -28,9 +27,9 @@ func Run(
 	defer close(done)
 	semanticEvents := make(chan event.Event, 32)
 	normalizerDone := make(chan struct{})
-	go normalizeEvents(ctx, index, mqttTopics, stateChanges, mqttEvents, semanticEvents, normalizerDone)
+	go normalizeEvents(ctx, reg, mqttTopics, stateChanges, mqttEvents, semanticEvents, normalizerDone)
 
-	dispatchEvents(ctx, root, index, sysfsCommands, mqttCommands, mqttTopics, semanticEvents)
+	dispatchEvents(ctx, reg, sysfsCommands, mqttCommands, mqttTopics, semanticEvents)
 	<-normalizerDone
 }
 
@@ -111,8 +110,7 @@ func normalizeMQTTEvents(ctx context.Context, index *registry.Registry, mqttTopi
 
 func dispatchEvents(
 	ctx context.Context,
-	root *entity.Root,
-	index *registry.Registry,
+	reg *registry.Registry,
 	sysfsCommands chan<- sysfs.Command,
 	mqttCommands chan<- mqtt.Command,
 	mqttTopics mqtt.Topics,
@@ -123,7 +121,7 @@ func dispatchEvents(
 
 	for {
 		if semanticEvent, remainingEvents, ok := popEvent(dispatchQueue); ok {
-			dispatchQueue = append(remainingEvents, dispatchEvent(ctx, root, index, sysfsCommands, mqttCommands, mqttTopics, semanticEvent)...)
+			dispatchQueue = append(remainingEvents, dispatchEvent(ctx, reg, sysfsCommands, mqttCommands, mqttTopics, semanticEvent)...)
 			continue
 		}
 
@@ -153,8 +151,8 @@ func popEvent(events []event.Event) (event.Event, []event.Event, bool) {
 	return events[0], events[1:], true
 }
 
-func publishMQTTStartup(ctx context.Context, root *entity.Root, commands chan<- mqtt.Command) error {
-	startupCommands, err := mqtt.StartupCommands(root)
+func publishMQTTStartup(ctx context.Context, reg *registry.Registry, commands chan<- mqtt.Command) error {
+	startupCommands, err := mqtt.StartupCommands(registry.MQTT(reg), registry.Lights(reg))
 	if err != nil {
 		return fmt.Errorf("build mqtt startup commands: %w", err)
 	}

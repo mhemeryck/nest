@@ -9,24 +9,17 @@ import (
 )
 
 func TestStartupCommands(t *testing.T) {
-	root := &entity.Root{
-		MQTT: entity.MQTT{
-			TopicPrefix: "nest",
-			UnitID:      "controller_1",
-		},
-		Relays: []entity.Relay{{
-			ID:          entity.RelayID("office_light_relay"),
-			Name:        "Office light relay",
-			SysfsDevice: entity.SysfsDeviceID("ro_3_14"),
-		}},
-		Lights: []entity.Light{{
-			ID:    entity.LightID("office_light"),
-			Name:  "Office light",
-			Relay: entity.RelayID("office_light_relay"),
-		}},
+	cfg := entity.MQTT{
+		TopicPrefix: "nest",
+		UnitID:      "controller_1",
 	}
+	lights := []entity.Light{{
+		ID:    entity.LightID("office_light"),
+		Name:  "Office light",
+		Relay: entity.RelayID("office_light_relay"),
+	}}
 
-	commands, err := StartupCommands(root)
+	commands, err := StartupCommands(cfg, lights)
 	require.NoError(t, err)
 	require.Len(t, commands, 2)
 

@@ -5,6 +5,7 @@ import (
 
 	"github.com/mhemeryck/nest/internal/entity"
 	"github.com/mhemeryck/nest/internal/mqtt"
+	"github.com/mhemeryck/nest/internal/registry"
 )
 
 type mqttActor struct {
@@ -17,12 +18,13 @@ type mqttActor struct {
 	cfg               entity.MQTT
 }
 
-func newMQTTActor(root *entity.Root) mqttActor {
-	if !root.MQTT.Enabled {
+func newMQTTActor(reg *registry.Registry) mqttActor {
+	cfg := registry.MQTT(reg)
+	if !cfg.Enabled {
 		return mqttActor{}
 	}
 
-	topics := mqtt.NewTopics(root.MQTT.TopicPrefix, root.MQTT.UnitID)
+	topics := mqtt.NewTopics(cfg.TopicPrefix, cfg.UnitID)
 
 	return mqttActor{
 		enabled:           true,
@@ -30,8 +32,8 @@ func newMQTTActor(root *entity.Root) mqttActor {
 		events:            make(chan mqtt.Event, 32),
 		done:              make(chan struct{}),
 		topics:            topics,
-		sourceEventTopics: mqtt.SemanticSourceEventSubscriptionTopics(topics, root),
-		cfg:               root.MQTT,
+		sourceEventTopics: mqtt.SemanticSourceEventSubscriptionTopics(topics, registry.RemoteTargetBindings(reg)),
+		cfg:               cfg,
 	}
 }
 
