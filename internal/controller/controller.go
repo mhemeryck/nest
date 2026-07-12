@@ -44,38 +44,6 @@ func normalizeEvents(
 ) {
 	defer close(done)
 	defer close(semanticEvents)
-	normalizerCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	normalizerDone := make(chan struct{}, 2)
-
-	go func() {
-		normalizeStateChanges(normalizerCtx, index, stateChanges, semanticEvents)
-		normalizerDone <- struct{}{}
-	}()
-	go func() {
-		normalizeMQTTEvents(normalizerCtx, index, mqttTopics, mqttEvents, semanticEvents)
-		normalizerDone <- struct{}{}
-	}()
-
-	completed := 0
-	select {
-	case <-ctx.Done():
-	case <-normalizerDone:
-		completed++
-	}
-	cancel()
-	for completed < 2 {
-		<-normalizerDone
-		completed++
-	}
-}
-
-func normalizeStateChanges(
-	ctx context.Context,
-	index *registry.Registry,
-	stateChanges <-chan sysfs.StateChange,
-	semanticEvents chan<- event.Event,
-) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -86,15 +54,6 @@ func normalizeStateChanges(
 			}
 
 			normalizeStateChange(ctx, index, semanticEvents, stateChange)
-		}
-	}
-}
-
-func normalizeMQTTEvents(ctx context.Context, index *registry.Registry, mqttTopics mqtt.Topics, mqttEvents <-chan mqtt.Event, semanticEvents chan<- event.Event) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
 		case mqttEvent, ok := <-mqttEvents:
 			if !ok {
 				return
