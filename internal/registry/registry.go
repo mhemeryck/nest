@@ -13,16 +13,16 @@ type Registry struct {
 	modbus                         entity.Modbus
 	lights                         []entity.Light
 	remoteTargetBindings           []entity.Binding
-	DigitalInputsByDevice          map[entity.SysfsDeviceID]entity.DigitalInput
-	PushButtonsByID                map[entity.PushButtonID]entity.PushButton
-	PushButtonsByInputID           map[entity.DigitalInputID][]entity.PushButton
-	LightsByID                     map[entity.LightID]entity.Light
-	LightsByRelayID                map[entity.RelayID][]entity.Light
-	BindingsBySourceID             map[entity.ID][]entity.Binding
-	RemoteSourceBindingsBySourceID map[entity.ID][]entity.Binding
-	RemoteTargetBindingsBySourceID map[entity.ID][]entity.Binding
-	RelaysByID                     map[entity.RelayID]entity.Relay
-	RelaysByDevice                 map[entity.SysfsDeviceID]entity.Relay
+	digitalInputsByDevice          map[entity.SysfsDeviceID]entity.DigitalInput
+	pushButtonsByID                map[entity.PushButtonID]entity.PushButton
+	pushButtonsByInputID           map[entity.DigitalInputID][]entity.PushButton
+	lightsByID                     map[entity.LightID]entity.Light
+	lightsByRelayID                map[entity.RelayID][]entity.Light
+	bindingsBySourceID             map[entity.ID][]entity.Binding
+	remoteSourceBindingsBySourceID map[entity.ID][]entity.Binding
+	remoteTargetBindingsBySourceID map[entity.ID][]entity.Binding
+	relaysByID                     map[entity.RelayID]entity.Relay
+	relaysByDevice                 map[entity.SysfsDeviceID]entity.Relay
 }
 
 func Build(root *entity.Root) *Registry {
@@ -31,49 +31,49 @@ func Build(root *entity.Root) *Registry {
 		sysfsPollIntervals:             root.SysfsPollIntervals,
 		mqtt:                           root.MQTT,
 		modbus:                         copyModbus(root.Modbus),
-		lights:                         append([]entity.Light(nil), root.Lights...),
-		remoteTargetBindings:           append([]entity.Binding(nil), root.RemoteTargetBindings...),
-		DigitalInputsByDevice:          make(map[entity.SysfsDeviceID]entity.DigitalInput, len(root.DigitalInputs)),
-		PushButtonsByID:                make(map[entity.PushButtonID]entity.PushButton, len(root.PushButtons)),
-		PushButtonsByInputID:           make(map[entity.DigitalInputID][]entity.PushButton),
-		LightsByID:                     make(map[entity.LightID]entity.Light, len(root.Lights)),
-		LightsByRelayID:                make(map[entity.RelayID][]entity.Light),
-		BindingsBySourceID:             make(map[entity.ID][]entity.Binding),
-		RemoteSourceBindingsBySourceID: make(map[entity.ID][]entity.Binding),
-		RemoteTargetBindingsBySourceID: make(map[entity.ID][]entity.Binding),
-		RelaysByID:                     make(map[entity.RelayID]entity.Relay, len(root.Relays)),
-		RelaysByDevice:                 make(map[entity.SysfsDeviceID]entity.Relay, len(root.Relays)),
+		lights:                         slices.Clone(root.Lights),
+		remoteTargetBindings:           slices.Clone(root.RemoteTargetBindings),
+		digitalInputsByDevice:          make(map[entity.SysfsDeviceID]entity.DigitalInput, len(root.DigitalInputs)),
+		pushButtonsByID:                make(map[entity.PushButtonID]entity.PushButton, len(root.PushButtons)),
+		pushButtonsByInputID:           make(map[entity.DigitalInputID][]entity.PushButton),
+		lightsByID:                     make(map[entity.LightID]entity.Light, len(root.Lights)),
+		lightsByRelayID:                make(map[entity.RelayID][]entity.Light),
+		bindingsBySourceID:             make(map[entity.ID][]entity.Binding),
+		remoteSourceBindingsBySourceID: make(map[entity.ID][]entity.Binding),
+		remoteTargetBindingsBySourceID: make(map[entity.ID][]entity.Binding),
+		relaysByID:                     make(map[entity.RelayID]entity.Relay, len(root.Relays)),
+		relaysByDevice:                 make(map[entity.SysfsDeviceID]entity.Relay, len(root.Relays)),
 	}
 
 	for _, input := range root.DigitalInputs {
-		index.DigitalInputsByDevice[input.SysfsDevice] = input
+		index.digitalInputsByDevice[input.SysfsDevice] = input
 	}
 
 	for _, button := range root.PushButtons {
-		index.PushButtonsByID[button.ID] = button
-		index.PushButtonsByInputID[button.Input] = append(index.PushButtonsByInputID[button.Input], button)
+		index.pushButtonsByID[button.ID] = button
+		index.pushButtonsByInputID[button.Input] = append(index.pushButtonsByInputID[button.Input], button)
 	}
 
 	for _, light := range root.Lights {
-		index.LightsByID[light.ID] = light
-		index.LightsByRelayID[light.Relay] = append(index.LightsByRelayID[light.Relay], light)
+		index.lightsByID[light.ID] = light
+		index.lightsByRelayID[light.Relay] = append(index.lightsByRelayID[light.Relay], light)
 	}
 
 	for _, relay := range root.Relays {
-		index.RelaysByID[relay.ID] = relay
-		index.RelaysByDevice[relay.SysfsDevice] = relay
+		index.relaysByID[relay.ID] = relay
+		index.relaysByDevice[relay.SysfsDevice] = relay
 	}
 
 	for _, binding := range root.Bindings {
-		index.BindingsBySourceID[binding.Source] = append(index.BindingsBySourceID[binding.Source], binding)
+		index.bindingsBySourceID[binding.Source] = append(index.bindingsBySourceID[binding.Source], binding)
 	}
 
 	for _, binding := range root.RemoteSourceBindings {
-		index.RemoteSourceBindingsBySourceID[binding.Source] = append(index.RemoteSourceBindingsBySourceID[binding.Source], binding)
+		index.remoteSourceBindingsBySourceID[binding.Source] = append(index.remoteSourceBindingsBySourceID[binding.Source], binding)
 	}
 
 	for _, binding := range root.RemoteTargetBindings {
-		index.RemoteTargetBindingsBySourceID[binding.Source] = append(index.RemoteTargetBindingsBySourceID[binding.Source], binding)
+		index.remoteTargetBindingsBySourceID[binding.Source] = append(index.remoteTargetBindingsBySourceID[binding.Source], binding)
 	}
 
 	return index
@@ -96,29 +96,29 @@ func Modbus(reg *Registry) entity.Modbus {
 }
 
 func Lights(reg *Registry) []entity.Light {
-	return append([]entity.Light(nil), reg.lights...)
+	return slices.Clone(reg.lights)
 }
 
 func RemoteTargetBindings(reg *Registry) []entity.Binding {
-	return append([]entity.Binding(nil), reg.remoteTargetBindings...)
+	return slices.Clone(reg.remoteTargetBindings)
 }
 
 func copyModbus(modbus entity.Modbus) entity.Modbus {
 	return entity.Modbus{
 		Mode:              modbus.Mode,
-		EventSignals:      append([]entity.ModbusEventSignal(nil), modbus.EventSignals...),
-		StatePoints:       append([]entity.ModbusStatePoint(nil), modbus.StatePoints...),
-		EventSignalWrites: append([]entity.ModbusEventSignalWrite(nil), modbus.EventSignalWrites...),
-		StatePolls:        append([]entity.ModbusStatePoll(nil), modbus.StatePolls...),
+		EventSignals:      slices.Clone(modbus.EventSignals),
+		StatePoints:       slices.Clone(modbus.StatePoints),
+		EventSignalWrites: slices.Clone(modbus.EventSignalWrites),
+		StatePolls:        slices.Clone(modbus.StatePolls),
 	}
 }
 
 func SysfsDeviceIDs(index *Registry) []entity.SysfsDeviceID {
-	deviceIDs := make([]entity.SysfsDeviceID, 0, len(index.DigitalInputsByDevice)+len(index.RelaysByDevice))
-	for deviceID := range index.DigitalInputsByDevice {
+	deviceIDs := make([]entity.SysfsDeviceID, 0, len(index.digitalInputsByDevice)+len(index.relaysByDevice))
+	for deviceID := range index.digitalInputsByDevice {
 		deviceIDs = append(deviceIDs, deviceID)
 	}
-	for deviceID := range index.RelaysByDevice {
+	for deviceID := range index.relaysByDevice {
 		deviceIDs = append(deviceIDs, deviceID)
 	}
 
@@ -128,12 +128,12 @@ func SysfsDeviceIDs(index *Registry) []entity.SysfsDeviceID {
 }
 
 func DigitalInputBySysfsDevice(index *Registry, deviceID entity.SysfsDeviceID) (entity.DigitalInput, bool) {
-	input, ok := index.DigitalInputsByDevice[deviceID]
+	input, ok := index.digitalInputsByDevice[deviceID]
 	return input, ok
 }
 
 func PushButtonsByInput(index *Registry, inputID entity.DigitalInputID) []entity.PushButton {
-	return index.PushButtonsByInputID[inputID]
+	return slices.Clone(index.pushButtonsByInputID[inputID])
 }
 
 func BindingsByButton(index *Registry, buttonID entity.PushButtonID) []entity.Binding {
@@ -141,7 +141,7 @@ func BindingsByButton(index *Registry, buttonID entity.PushButtonID) []entity.Bi
 }
 
 func BindingsBySource(index *Registry, sourceID entity.ID) []entity.Binding {
-	return index.BindingsBySourceID[sourceID]
+	return slices.Clone(index.bindingsBySourceID[sourceID])
 }
 
 func RemoteSourceBindingsByButton(index *Registry, buttonID entity.PushButtonID) []entity.Binding {
@@ -149,7 +149,7 @@ func RemoteSourceBindingsByButton(index *Registry, buttonID entity.PushButtonID)
 }
 
 func RemoteSourceBindingsBySource(index *Registry, sourceID entity.ID) []entity.Binding {
-	return index.RemoteSourceBindingsBySourceID[sourceID]
+	return slices.Clone(index.remoteSourceBindingsBySourceID[sourceID])
 }
 
 func RemoteTargetBindingsByButton(index *Registry, buttonID entity.PushButtonID) []entity.Binding {
@@ -157,24 +157,24 @@ func RemoteTargetBindingsByButton(index *Registry, buttonID entity.PushButtonID)
 }
 
 func RemoteTargetBindingsBySource(index *Registry, sourceID entity.ID) []entity.Binding {
-	return index.RemoteTargetBindingsBySourceID[sourceID]
+	return slices.Clone(index.remoteTargetBindingsBySourceID[sourceID])
 }
 
 func LightByID(index *Registry, lightID entity.LightID) (entity.Light, bool) {
-	light, ok := index.LightsByID[lightID]
+	light, ok := index.lightsByID[lightID]
 	return light, ok
 }
 
 func LightsByRelay(index *Registry, relayID entity.RelayID) []entity.Light {
-	return index.LightsByRelayID[relayID]
+	return slices.Clone(index.lightsByRelayID[relayID])
 }
 
 func RelayByID(index *Registry, relayID entity.RelayID) (entity.Relay, bool) {
-	relay, ok := index.RelaysByID[relayID]
+	relay, ok := index.relaysByID[relayID]
 	return relay, ok
 }
 
 func RelayBySysfsDevice(index *Registry, deviceID entity.SysfsDeviceID) (entity.Relay, bool) {
-	relay, ok := index.RelaysByDevice[deviceID]
+	relay, ok := index.relaysByDevice[deviceID]
 	return relay, ok
 }

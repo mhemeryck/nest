@@ -225,7 +225,7 @@ Next useful checks:
 - [x] Keep `entity.Root` as the bare projected domain model with entity lists, bindings, and config-derived settings
 - [x] Use `registry.Registry` as the runtime translation catalog built from `entity.Root`
 - [x] Include runtime data needed by actors and controllers in `registry.Registry` when it avoids passing both `entity.Root` and the registry
-- [ ] Keep registry fields private and expose package-level functions that take `reg *registry.Registry`
+- [x] Keep registry fields private and expose package-level functions that take `reg *registry.Registry`
 - [x] Return copied slices from registry functions so callers do not mutate registry-owned data accidentally
 - [x] Update `internal/nest` runtime wiring to pass one explicit `reg` value into actor and controller setup
 - [x] Update controller code to depend on `reg *registry.Registry` instead of both `root *entity.Root` and `index *registry.Index`
