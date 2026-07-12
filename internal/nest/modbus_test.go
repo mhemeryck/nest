@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/mhemeryck/nest/internal/entity"
+	"github.com/mhemeryck/nest/internal/registry"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -15,13 +16,13 @@ func TestLogModbusConfigLogsConfiguredRouteIntents(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buffer, &slog.HandlerOptions{Level: slog.LevelInfo})))
 	t.Cleanup(func() { slog.SetDefault(previous) })
 
-	logModbusConfig(&entity.Root{
+	logModbusConfig(registry.Build(&entity.Root{
 		Modbus: entity.Modbus{
 			Mode:              entity.ModbusModeMaster,
 			EventSignalWrites: []entity.ModbusEventSignalWrite{{}},
 			StatePolls:        []entity.ModbusStatePoll{{}},
 		},
-	})
+	}))
 
 	log := buffer.String()
 	assert.Contains(t, log, "modbus route intents configured")
@@ -36,7 +37,7 @@ func TestLogModbusConfigSkipsUnconfiguredModbus(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buffer, &slog.HandlerOptions{Level: slog.LevelInfo})))
 	t.Cleanup(func() { slog.SetDefault(previous) })
 
-	logModbusConfig(&entity.Root{})
+	logModbusConfig(registry.Build(&entity.Root{}))
 
 	assert.Empty(t, buffer.String())
 }

@@ -220,13 +220,26 @@ Next useful checks:
 
 ## Phase 7.2: Runtime Registry Cleanup
 
-- [ ] Decide whether `registry.Index` should become a full runtime registry instead of a lookup-only index
-- [ ] Include canonical runtime data needed by actors and controllers in the registry when that reduces passing both `entity.Root` and `registry.Index`
-- [ ] Keep `entity.Root` as the config-to-domain translation result rather than making config parsing depend on runtime lookup concerns
-- [ ] Rename `registry.Index` if it starts owning canonical runtime data, for example to `registry.Registry`
-- [ ] Update runtime wiring so actors and controller code take the smallest coherent runtime dependency
+- [x] Decide that `registry.Index` should become a runtime registry rather than a lookup-only index
+- [x] Rename `registry.Index` to `registry.Registry`
+- [x] Keep `entity.Root` as the bare projected domain model with entity lists, bindings, and config-derived settings
+- [x] Use `registry.Registry` as the runtime translation catalog built from `entity.Root`
+- [x] Include runtime data needed by actors and controllers in `registry.Registry` when it avoids passing both `entity.Root` and the registry
+- [x] Keep registry fields private and expose package-level functions that take `reg *registry.Registry`
+- [x] Return copied slices from registry functions so callers do not mutate registry-owned data accidentally
+- [x] Update `internal/nest` runtime wiring to pass one explicit `reg` value into actor and controller setup
+- [x] Update controller code to depend on `reg *registry.Registry` instead of both `root *entity.Root` and `index *registry.Index`
+- [x] Keep MQTT topic generation and protocol-specific behavior in the MQTT package rather than moving actor-specific addressing into the registry
 
-**Deliverable**: Runtime code no longer needs to pass both the canonical entity root and lookup index when a single registry better represents the unit-local runtime model.
+Current direction:
+
+- `entity.Root` is the bare projected domain model produced by config-to-entity translation
+- `registry.Registry` is the runtime lookup and translation catalog built from `entity.Root`
+- `internal/nest` remains responsible for runtime composition, actor lifecycle, channel wiring, startup, and shutdown
+- controller code uses the registry to translate observations and semantic events into follow-up events or actor commands
+- actor packages keep ownership of external protocol details such as MQTT topics, sysfs crawling, and future Modbus transport addresses
+
+**Deliverable**: Runtime code no longer needs to pass both the canonical entity root and lookup index when a single registry better represents the unit-local translation catalog.
 
 ## Phase 8: Modbus RTU Transport
 

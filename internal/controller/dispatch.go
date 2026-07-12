@@ -13,36 +13,35 @@ import (
 
 func dispatchEvent(
 	ctx context.Context,
-	root *entity.Root,
-	index *registry.Index,
+	reg *registry.Registry,
 	sysfsCommands chan<- sysfs.Command,
 	mqttCommands chan<- mqtt.Command,
 	mqttTopics mqtt.Topics,
 	busEvent event.Event,
 ) []event.Event {
 	logSemanticEvent(busEvent)
-	derivedEvents := bindingEventsFromEvent(index, busEvent)
-	dispatchSysfsCommand(ctx, index, sysfsCommands, busEvent)
-	dispatchMQTTCommand(ctx, root, index, mqttCommands, mqttTopics, busEvent)
+	derivedEvents := bindingEventsFromEvent(reg, busEvent)
+	dispatchSysfsCommand(ctx, reg, sysfsCommands, busEvent)
+	dispatchMQTTCommand(ctx, reg, mqttCommands, mqttTopics, busEvent)
 
 	return derivedEvents
 }
 
-func dispatchSysfsCommand(ctx context.Context, index *registry.Index, commands chan<- sysfs.Command, busEvent event.Event) {
+func dispatchSysfsCommand(ctx context.Context, index *registry.Registry, commands chan<- sysfs.Command, busEvent event.Event) {
 	switch busEvent.Kind {
 	case event.LightKind:
 		dispatchLightEvent(ctx, index, commands, *busEvent.Light)
 	}
 }
 
-func dispatchMQTTCommand(ctx context.Context, root *entity.Root, index *registry.Index, commands chan<- mqtt.Command, topics mqtt.Topics, busEvent event.Event) {
+func dispatchMQTTCommand(ctx context.Context, reg *registry.Registry, commands chan<- mqtt.Command, topics mqtt.Topics, busEvent event.Event) {
 	switch busEvent.Kind {
 	case event.PushButtonPressedKind, event.PushButtonReleasedKind:
-		publishPushButtonSourceEvent(ctx, index, commands, topics, busEvent.Kind, *busEvent.PushButton)
+		publishPushButtonSourceEvent(ctx, reg, commands, topics, busEvent.Kind, *busEvent.PushButton)
 	case event.LightStateKind:
 		publishLightState(ctx, commands, topics, *busEvent.LightState)
 	case event.MQTTConnectedKind:
-		if err := publishMQTTStartup(ctx, root, commands); err != nil {
+		if err := publishMQTTStartup(ctx, reg, commands); err != nil {
 			slog.Error("mqtt startup publish failed", "error", err)
 		}
 	}
@@ -79,7 +78,7 @@ func logPushButtonEvent(eventKind event.Kind, pushButton event.PushButton) {
 	)
 }
 
-func dispatchLightEvent(ctx context.Context, index *registry.Index, sysfsCommands chan<- sysfs.Command, lightEvent event.Light) {
+func dispatchLightEvent(ctx context.Context, index *registry.Registry, sysfsCommands chan<- sysfs.Command, lightEvent event.Light) {
 	switch lightEvent.Action {
 	case entity.LightActionToggle:
 		handleLightToggle(ctx, index, sysfsCommands, lightEvent)

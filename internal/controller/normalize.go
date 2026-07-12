@@ -7,7 +7,7 @@ import (
 	"github.com/mhemeryck/nest/internal/sysfs"
 )
 
-func pushButtonEventsFromStateChange(index *registry.Index, stateChange sysfs.StateChange) ([]event.Event, bool) {
+func pushButtonEventsFromStateChange(index *registry.Registry, stateChange sysfs.StateChange) ([]event.Event, bool) {
 	input, ok := registry.DigitalInputBySysfsDevice(index, entity.SysfsDeviceID(stateChange.Device.Identifier))
 	if !ok {
 		return nil, false
@@ -33,7 +33,7 @@ func pushButtonEventsFromStateChange(index *registry.Index, stateChange sysfs.St
 	return buttonEvents, true
 }
 
-func semanticEventsFromStateChange(index *registry.Index, stateChange sysfs.StateChange) ([]event.Event, bool) {
+func semanticEventsFromStateChange(index *registry.Registry, stateChange sysfs.StateChange) ([]event.Event, bool) {
 	deviceID := entity.SysfsDeviceID(stateChange.Device.Identifier)
 	if input, ok := registry.DigitalInputBySysfsDevice(index, deviceID); ok {
 		events := []event.Event{{

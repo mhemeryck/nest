@@ -3,7 +3,6 @@ package nest
 import (
 	"context"
 
-	"github.com/mhemeryck/nest/internal/entity"
 	"github.com/mhemeryck/nest/internal/registry"
 	"github.com/mhemeryck/nest/internal/sysfs"
 )
@@ -16,8 +15,8 @@ type sysfsActor struct {
 	pollIntervals sysfs.PollIntervals
 }
 
-func newSysfsActor(root *entity.Root, index *registry.Index) (sysfsActor, error) {
-	devices, err := sysfsDevices(root, index)
+func newSysfsActor(reg *registry.Registry) (sysfsActor, error) {
+	devices, err := sysfsDevices(reg)
 	if err != nil {
 		return sysfsActor{}, err
 	}
@@ -28,7 +27,7 @@ func newSysfsActor(root *entity.Root, index *registry.Index) (sysfsActor, error)
 		states:        make(chan sysfs.StateChange, 32),
 		done:          make(chan struct{}),
 		devices:       devices,
-		pollIntervals: sysfsPollIntervals(root),
+		pollIntervals: sysfsPollIntervals(reg),
 	}, nil
 }
 
@@ -41,10 +40,12 @@ func waitForSysfsActor(actor sysfsActor) {
 	close(actor.states)
 }
 
-func sysfsPollIntervals(root *entity.Root) sysfs.PollIntervals {
+func sysfsPollIntervals(reg *registry.Registry) sysfs.PollIntervals {
+	pollIntervals := registry.SysfsPollIntervals(reg)
+
 	return sysfs.PollIntervals{
-		DigitalInput:  root.SysfsPollIntervals.DigitalInput,
-		DigitalOutput: root.SysfsPollIntervals.DigitalOutput,
-		RelayOutput:   root.SysfsPollIntervals.RelayOutput,
+		DigitalInput:  pollIntervals.DigitalInput,
+		DigitalOutput: pollIntervals.DigitalOutput,
+		RelayOutput:   pollIntervals.RelayOutput,
 	}
 }

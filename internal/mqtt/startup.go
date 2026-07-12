@@ -2,9 +2,9 @@ package mqtt
 
 import "github.com/mhemeryck/nest/internal/entity"
 
-func StartupCommands(root *entity.Root) ([]Command, error) {
-	topics := NewTopics(root.MQTT.TopicPrefix, root.MQTT.UnitID)
-	homeAssistantDiscovery, err := HomeAssistantDeviceDiscoveryMessage(root, topics)
+func StartupCommands(cfg entity.MQTT, lights []entity.Light) ([]Command, error) {
+	topics := NewTopics(cfg.TopicPrefix, cfg.UnitID)
+	homeAssistantDiscovery, err := HomeAssistantDeviceDiscoveryMessage(lights, topics)
 	if err != nil {
 		return nil, err
 	}

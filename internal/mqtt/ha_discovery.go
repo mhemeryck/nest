@@ -37,23 +37,23 @@ type HomeAssistantComponentDiscovery struct {
 	PayloadOff         string `json:"payload_off"`
 }
 
-func BuildHomeAssistantDeviceDiscovery(root *entity.Root, topics Topics) HomeAssistantDeviceDiscovery {
+func BuildHomeAssistantDeviceDiscovery(lights []entity.Light, topics Topics) HomeAssistantDeviceDiscovery {
 	doc := HomeAssistantDeviceDiscovery{
 		Device:            homeAssistantDevice(topics),
 		Origin:            HomeAssistantOrigin{Name: "nest"},
-		Components:        make(map[string]HomeAssistantComponentDiscovery, len(root.Lights)),
+		Components:        make(map[string]HomeAssistantComponentDiscovery, len(lights)),
 		AvailabilityTopic: AvailabilityTopic(topics),
 	}
 
-	for _, light := range root.Lights {
+	for _, light := range lights {
 		doc.Components[lightTopicSegment(light.ID)] = homeAssistantLightComponent(light, topics)
 	}
 
 	return doc
 }
 
-func HomeAssistantDeviceDiscoveryPayload(root *entity.Root, topics Topics) ([]byte, error) {
-	payload, err := json.Marshal(BuildHomeAssistantDeviceDiscovery(root, topics))
+func HomeAssistantDeviceDiscoveryPayload(lights []entity.Light, topics Topics) ([]byte, error) {
+	payload, err := json.Marshal(BuildHomeAssistantDeviceDiscovery(lights, topics))
 	if err != nil {
 		return nil, err
 	}
@@ -61,8 +61,8 @@ func HomeAssistantDeviceDiscoveryPayload(root *entity.Root, topics Topics) ([]by
 	return payload, nil
 }
 
-func HomeAssistantDeviceDiscoveryMessage(root *entity.Root, topics Topics) (PublishMessage, error) {
-	payload, err := HomeAssistantDeviceDiscoveryPayload(root, topics)
+func HomeAssistantDeviceDiscoveryMessage(lights []entity.Light, topics Topics) (PublishMessage, error) {
+	payload, err := HomeAssistantDeviceDiscoveryPayload(lights, topics)
 	if err != nil {
 		return PublishMessage{}, err
 	}

@@ -16,8 +16,7 @@ import (
 
 func Run(
 	ctx context.Context,
-	root *entity.Root,
-	index *registry.Index,
+	reg *registry.Registry,
 	sysfsCommands chan<- sysfs.Command,
 	mqttCommands chan<- mqtt.Command,
 	mqttTopics mqtt.Topics,
@@ -28,15 +27,15 @@ func Run(
 	defer close(done)
 	semanticEvents := make(chan event.Event, 32)
 	normalizerDone := make(chan struct{})
-	go normalizeEvents(ctx, index, mqttTopics, stateChanges, mqttEvents, semanticEvents, normalizerDone)
+	go normalizeEvents(ctx, reg, mqttTopics, stateChanges, mqttEvents, semanticEvents, normalizerDone)
 
-	dispatchEvents(ctx, root, index, sysfsCommands, mqttCommands, mqttTopics, semanticEvents)
+	dispatchEvents(ctx, reg, sysfsCommands, mqttCommands, mqttTopics, semanticEvents)
 	<-normalizerDone
 }
 
 func normalizeEvents(
 	ctx context.Context,
-	index *registry.Index,
+	index *registry.Registry,
 	mqttTopics mqtt.Topics,
 	stateChanges <-chan sysfs.StateChange,
 	mqttEvents <-chan mqtt.Event,
@@ -45,38 +44,6 @@ func normalizeEvents(
 ) {
 	defer close(done)
 	defer close(semanticEvents)
-	normalizerCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	normalizerDone := make(chan struct{}, 2)
-
-	go func() {
-		normalizeStateChanges(normalizerCtx, index, stateChanges, semanticEvents)
-		normalizerDone <- struct{}{}
-	}()
-	go func() {
-		normalizeMQTTEvents(normalizerCtx, index, mqttTopics, mqttEvents, semanticEvents)
-		normalizerDone <- struct{}{}
-	}()
-
-	completed := 0
-	select {
-	case <-ctx.Done():
-	case <-normalizerDone:
-		completed++
-	}
-	cancel()
-	for completed < 2 {
-		<-normalizerDone
-		completed++
-	}
-}
-
-func normalizeStateChanges(
-	ctx context.Context,
-	index *registry.Index,
-	stateChanges <-chan sysfs.StateChange,
-	semanticEvents chan<- event.Event,
-) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -87,15 +54,6 @@ func normalizeStateChanges(
 			}
 
 			normalizeStateChange(ctx, index, semanticEvents, stateChange)
-		}
-	}
-}
-
-func normalizeMQTTEvents(ctx context.Context, index *registry.Index, mqttTopics mqtt.Topics, mqttEvents <-chan mqtt.Event, semanticEvents chan<- event.Event) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
 		case mqttEvent, ok := <-mqttEvents:
 			if !ok {
 				return
@@ -111,8 +69,7 @@ func normalizeMQTTEvents(ctx context.Context, index *registry.Index, mqttTopics 
 
 func dispatchEvents(
 	ctx context.Context,
-	root *entity.Root,
-	index *registry.Index,
+	reg *registry.Registry,
 	sysfsCommands chan<- sysfs.Command,
 	mqttCommands chan<- mqtt.Command,
 	mqttTopics mqtt.Topics,
@@ -123,7 +80,7 @@ func dispatchEvents(
 
 	for {
 		if semanticEvent, remainingEvents, ok := popEvent(dispatchQueue); ok {
-			dispatchQueue = append(remainingEvents, dispatchEvent(ctx, root, index, sysfsCommands, mqttCommands, mqttTopics, semanticEvent)...)
+			dispatchQueue = append(remainingEvents, dispatchEvent(ctx, reg, sysfsCommands, mqttCommands, mqttTopics, semanticEvent)...)
 			continue
 		}
 
@@ -153,8 +110,8 @@ func popEvent(events []event.Event) (event.Event, []event.Event, bool) {
 	return events[0], events[1:], true
 }
 
-func publishMQTTStartup(ctx context.Context, root *entity.Root, commands chan<- mqtt.Command) error {
-	startupCommands, err := mqtt.StartupCommands(root)
+func publishMQTTStartup(ctx context.Context, reg *registry.Registry, commands chan<- mqtt.Command) error {
+	startupCommands, err := mqtt.StartupCommands(registry.MQTT(reg), registry.Lights(reg))
 	if err != nil {
 		return fmt.Errorf("build mqtt startup commands: %w", err)
 	}
@@ -170,7 +127,7 @@ func publishMQTTStartup(ctx context.Context, root *entity.Root, commands chan<- 
 	return nil
 }
 
-func semanticEventFromMQTTEvent(index *registry.Index, mqttTopics mqtt.Topics, mqttEvent mqtt.Event) (event.Event, bool) {
+func semanticEventFromMQTTEvent(index *registry.Registry, mqttTopics mqtt.Topics, mqttEvent mqtt.Event) (event.Event, bool) {
 	semanticEvent := event.Event{MQTT: &event.MQTT{PublishTopic: mqttEvent.Publish.Topic, Error: mqttEvent.Error}}
 	switch mqttEvent.Kind {
 	case mqtt.ConnectedEventKind:
@@ -192,7 +149,7 @@ func semanticEventFromMQTTEvent(index *registry.Index, mqttTopics mqtt.Topics, m
 	return semanticEvent, true
 }
 
-func semanticEventFromMQTTMessage(index *registry.Index, mqttTopics mqtt.Topics, message mqtt.ReceivedMessage) (event.Event, bool) {
+func semanticEventFromMQTTMessage(index *registry.Registry, mqttTopics mqtt.Topics, message mqtt.ReceivedMessage) (event.Event, bool) {
 	if semanticEvent, ok := semanticLightEventFromMQTTMessage(index, mqttTopics, message); ok {
 		return semanticEvent, true
 	}
@@ -200,7 +157,7 @@ func semanticEventFromMQTTMessage(index *registry.Index, mqttTopics mqtt.Topics,
 	return semanticSourceEventFromMQTTMessage(index, mqttTopics, message)
 }
 
-func semanticLightEventFromMQTTMessage(index *registry.Index, mqttTopics mqtt.Topics, message mqtt.ReceivedMessage) (event.Event, bool) {
+func semanticLightEventFromMQTTMessage(index *registry.Registry, mqttTopics mqtt.Topics, message mqtt.ReceivedMessage) (event.Event, bool) {
 	lightID, ok := mqtt.ParseLightCommandTopic(mqttTopics, message.Topic)
 	if !ok {
 		return event.Event{}, false
@@ -228,7 +185,7 @@ func semanticLightEventFromMQTTMessage(index *registry.Index, mqttTopics mqtt.To
 	}, true
 }
 
-func semanticSourceEventFromMQTTMessage(index *registry.Index, mqttTopics mqtt.Topics, message mqtt.ReceivedMessage) (event.Event, bool) {
+func semanticSourceEventFromMQTTMessage(index *registry.Registry, mqttTopics mqtt.Topics, message mqtt.ReceivedMessage) (event.Event, bool) {
 	sourceEvent, ok := mqtt.ParseSemanticSourceEventMessage(message, mqttTopics.Prefix)
 	if !ok {
 		slog.Warn("unhandled mqtt message topic", "topic", message.Topic)
@@ -264,7 +221,7 @@ func lightActionFromMQTTPayload(payload []byte) (entity.LightAction, bool) {
 	}
 }
 
-func normalizeStateChange(ctx context.Context, index *registry.Index, semanticEvents chan<- event.Event, stateChange sysfs.StateChange) {
+func normalizeStateChange(ctx context.Context, index *registry.Registry, semanticEvents chan<- event.Event, stateChange sysfs.StateChange) {
 	events, handled := semanticEventsFromStateChange(index, stateChange)
 	if handled {
 		for _, semanticEvent := range events {
