@@ -243,8 +243,8 @@ Current direction:
 
 ## Phase 8: Modbus RTU Transport
 
-- [ ] Serial port configuration
-- [ ] Modbus unit ID configuration
+- [x] Serial port configuration
+- [x] Modbus unit ID configuration
 - [ ] Map remote relay targets to Modbus coils
 - [ ] Read coils for relay state feedback
 - [ ] Write coils for relay control
@@ -252,6 +252,22 @@ Current direction:
 - [ ] Decide whether output units execute commands directly or expose relay coils only
 
 **Deliverable**: `nest` can execute distributed light control across units via RS-485.
+
+Current status:
+
+- The global configuration models RTU serial ports, baud rates, timeouts, slave unit IDs, and coil addresses.
+- Configuration validation requires exactly one Modbus master when Modbus is configured.
+- `internal/modbus` uses ModbusOne for RTU client behavior instead of implementing RTU framing locally.
+- Master coil reads and writes are proven against an in-memory ModbusOne RTU server.
+- The Modbus entrypoint is not wired into `internal/nest` or the controller yet.
+- Slave RTU handling, semantic event translation, state projection, retries, and production relay routing remain incomplete.
+
+Next useful step:
+
+- Add the slave RTU actor path using ModbusOne `RTUServer` callbacks.
+- Test a master and slave actor together with event-signal writes and state-point reads.
+- Wire the Modbus actor command and event channels through runtime and controller composition.
+- Add a PTY-backed integration test for the production `modbus.Run` serial-opening path.
 
 ## Phase 9: Light Control Migration
 
