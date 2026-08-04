@@ -14,6 +14,9 @@ units:
         enabled: true
       modbus:
         mode: master
+        port: /dev/ttyNS0
+        baudrate: 19200
+        timeout: 500ms
         event_signal_writes:
           - unit: remote
             signal: office_button_toggle
@@ -75,13 +78,19 @@ units:
         enabled: true
       modbus:
         mode: slave
+        port: /dev/ttyNS0
+        baudrate: 19200
+        timeout: 500ms
+        unit_id: 1
         event_signals:
           - id: office_button_toggle
+            coil: 1
             source: local.button.office_button
             target: remote.light.remote_light
             action: toggle
         state_points:
           - id: remote_light_state
+            coil: 2
             entity: remote.light.remote_light
       sysfs:
         root: test/fixtures

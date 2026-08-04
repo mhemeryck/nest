@@ -137,6 +137,10 @@ func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
 func cloneModbusConfig(modbus ModbusConfig) ModbusConfig {
 	return ModbusConfig{
 		Mode:              modbus.Mode,
+		Port:              modbus.Port,
+		BaudRate:          modbus.BaudRate,
+		Timeout:           modbus.Timeout,
+		UnitID:            modbus.UnitID,
 		EventSignals:      append([]ModbusEventSignalConfig(nil), modbus.EventSignals...),
 		StatePoints:       append([]ModbusStatePointConfig(nil), modbus.StatePoints...),
 		EventSignalWrites: append([]ModbusEventSignalWriteConfig(nil), modbus.EventSignalWrites...),

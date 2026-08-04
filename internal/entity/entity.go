@@ -59,6 +59,10 @@ type MQTT struct {
 
 type Modbus struct {
 	Mode              ModbusMode
+	Port              string
+	BaudRate          int
+	Timeout           time.Duration
+	UnitID            int
 	EventSignals      []ModbusEventSignal
 	StatePoints       []ModbusStatePoint
 	EventSignalWrites []ModbusEventSignalWrite
@@ -67,6 +71,7 @@ type Modbus struct {
 
 type ModbusEventSignal struct {
 	ID     ModbusEventSignalID
+	Coil   int
 	Source ID
 	Target ID
 	Action Action
@@ -74,6 +79,7 @@ type ModbusEventSignal struct {
 
 type ModbusStatePoint struct {
 	ID     ModbusStatePointID
+	Coil   int
 	Entity ID
 }
 

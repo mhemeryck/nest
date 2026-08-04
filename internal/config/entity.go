@@ -78,6 +78,10 @@ func ToEntityRoot(root *Root) *entity.Root {
 func modbusFromConfig(modbus ModbusConfig) entity.Modbus {
 	converted := entity.Modbus{
 		Mode:              entity.ModbusMode(modbus.Mode),
+		Port:              modbus.Port,
+		BaudRate:          modbus.BaudRate,
+		Timeout:           modbus.Timeout,
+		UnitID:            modbus.UnitID,
 		EventSignals:      make([]entity.ModbusEventSignal, 0, len(modbus.EventSignals)),
 		StatePoints:       make([]entity.ModbusStatePoint, 0, len(modbus.StatePoints)),
 		EventSignalWrites: make([]entity.ModbusEventSignalWrite, 0, len(modbus.EventSignalWrites)),
@@ -87,6 +91,7 @@ func modbusFromConfig(modbus ModbusConfig) entity.Modbus {
 	for _, signal := range modbus.EventSignals {
 		converted.EventSignals = append(converted.EventSignals, entity.ModbusEventSignal{
 			ID:     entity.ModbusEventSignalID(signal.ID),
+			Coil:   signal.Coil,
 			Source: entity.ID(signal.Source),
 			Target: entity.ID(signal.Target),
 			Action: entity.Action(signal.Action),
@@ -96,6 +101,7 @@ func modbusFromConfig(modbus ModbusConfig) entity.Modbus {
 	for _, point := range modbus.StatePoints {
 		converted.StatePoints = append(converted.StatePoints, entity.ModbusStatePoint{
 			ID:     entity.ModbusStatePointID(point.ID),
+			Coil:   point.Coil,
 			Entity: entity.ID(point.Entity),
 		})
 	}

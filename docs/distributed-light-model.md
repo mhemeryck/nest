@@ -173,9 +173,6 @@ units:
         role: master
         port: /dev/ttyNS0
         baudrate: 19200
-        slaves:
-          garage_io:
-            unit_id: 1
 
     entities:
       buttons:
@@ -208,6 +205,7 @@ units:
         role: slave
         port: /dev/ttyNS0
         baudrate: 19200
+        timeout: 5ms
         unit_id: 1
         coils:
           - id: driveway

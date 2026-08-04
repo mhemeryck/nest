@@ -106,6 +106,10 @@ func RemoteTargetBindings(reg *Registry) []entity.Binding {
 func copyModbus(modbus entity.Modbus) entity.Modbus {
 	return entity.Modbus{
 		Mode:              modbus.Mode,
+		Port:              modbus.Port,
+		BaudRate:          modbus.BaudRate,
+		Timeout:           modbus.Timeout,
+		UnitID:            modbus.UnitID,
 		EventSignals:      slices.Clone(modbus.EventSignals),
 		StatePoints:       slices.Clone(modbus.StatePoints),
 		EventSignalWrites: slices.Clone(modbus.EventSignalWrites),
