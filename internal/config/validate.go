@@ -295,22 +295,27 @@ func validateGlobalBindingEndpoint(global *GlobalRoot, field string, value strin
 func validateGlobalModbus(global *GlobalRoot) error {
 	var errs error
 	var masterUnit string
+	modbusConfigured := false
 	seenSlaveIDs := make(map[int]string)
 
 	for unitID, unit := range global.Units {
 		prefix := fmt.Sprintf("units.%s.actors.modbus", unitID)
 		if unit.Actors.Modbus.Mode == ModbusModeMaster {
+			modbusConfigured = true
 			if masterUnit != "" {
 				errs = errors.Join(errs, fmt.Errorf("%s.mode: multiple master units, already configured on %q", prefix, masterUnit))
 			} else {
 				masterUnit = unitID
 			}
 		}
-		if unit.Actors.Modbus.Mode == ModbusModeSlave && unit.Actors.Modbus.UnitID != 0 {
-			if previous, ok := seenSlaveIDs[unit.Actors.Modbus.UnitID]; ok {
-				errs = errors.Join(errs, fmt.Errorf("%s.unit_id: duplicates slave unit %q", prefix, previous))
-			} else {
-				seenSlaveIDs[unit.Actors.Modbus.UnitID] = unitID
+		if unit.Actors.Modbus.Mode == ModbusModeSlave {
+			modbusConfigured = true
+			if unit.Actors.Modbus.UnitID != 0 {
+				if previous, ok := seenSlaveIDs[unit.Actors.Modbus.UnitID]; ok {
+					errs = errors.Join(errs, fmt.Errorf("%s.unit_id: duplicates slave unit %q", prefix, previous))
+				} else {
+					seenSlaveIDs[unit.Actors.Modbus.UnitID] = unitID
+				}
 			}
 		}
 
@@ -337,6 +342,9 @@ func validateGlobalModbus(global *GlobalRoot) error {
 				errs = errors.Join(errs, fmt.Errorf("%s.point: unknown state point %q on unit %q", routePrefix, poll.Point, poll.Unit))
 			}
 		}
+	}
+	if modbusConfigured && masterUnit == "" {
+		errs = errors.Join(errs, fmt.Errorf("modbus: exactly one master unit is required when Modbus is configured"))
 	}
 
 	return errs

@@ -465,6 +465,17 @@ func TestProjectUnitRejectsDuplicateModbusSlaveIDs(t *testing.T) {
 	assert.Contains(t, err.Error(), "duplicates slave unit")
 }
 
+func TestProjectUnitRejectsModbusWithoutMaster(t *testing.T) {
+	_, err := ProjectUnit(&GlobalRoot{
+		Units: map[string]UnitConfig{
+			"slave": {Actors: UnitActorsConfig{Modbus: UnitModbusConfig{Mode: ModbusModeSlave, UnitID: 1}}},
+		},
+	}, "slave")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "exactly one master unit is required")
+}
+
 func TestProjectUnitRejectsUnsupportedEntityEndpoints(t *testing.T) {
 	_, err := ProjectUnit(&GlobalRoot{
 		Units: map[string]UnitConfig{
