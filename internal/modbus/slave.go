@@ -59,7 +59,7 @@ func modbusCoilAddress(coil int) (uint16, error) {
 	return uint16(coil), nil
 }
 
-func (state *slaveState) readCoils(address, quantity uint16) ([]bool, error) {
+func readSlaveCoils(state *slaveState, address, quantity uint16) ([]bool, error) {
 	state.mu.RLock()
 	defer state.mu.RUnlock()
 
@@ -75,7 +75,7 @@ func (state *slaveState) readCoils(address, quantity uint16) ([]bool, error) {
 	return values, nil
 }
 
-func (state *slaveState) writeEventSignals(address uint16, values []bool) ([]Event, error) {
+func writeSlaveEventSignals(state *slaveState, address uint16, values []bool) ([]Event, error) {
 	state.mu.Lock()
 	defer state.mu.Unlock()
 
@@ -98,7 +98,7 @@ func (state *slaveState) writeEventSignals(address uint16, values []bool) ([]Eve
 	return events, nil
 }
 
-func (state *slaveState) setStatePoint(coil uint16, value bool) error {
+func setSlaveStatePoint(state *slaveState, coil uint16, value bool) error {
 	state.mu.Lock()
 	defer state.mu.Unlock()
 
@@ -109,36 +109,23 @@ func (state *slaveState) setStatePoint(coil uint16, value bool) error {
 	return nil
 }
 
-func runSlave(
+func newSlaveHandler(
 	ctx context.Context,
-	connection modbusone.SerialContext,
-	cfg entity.Modbus,
-	commands <-chan Command,
+	unitID uint8,
+	state *slaveState,
 	events chan<- Event,
-) {
-	if cfg.UnitID < 1 || cfg.UnitID > 247 {
-		slog.Error("modbus slave unit id must be between 1 and 247", "unit_id", cfg.UnitID)
-		_ = connection.Close()
-		return
-	}
-
-	state, err := newSlaveState(cfg)
-	if err != nil {
-		slog.Error("configure modbus slave", "error", err)
-		_ = connection.Close()
-		return
-	}
-
-	server := modbusone.NewRTUServer(connection, byte(cfg.UnitID))
-	handler := &modbusone.SimpleHandler{
-		ReadCoils: state.readCoils,
+) *modbusone.SimpleHandler {
+	return &modbusone.SimpleHandler{
+		ReadCoils: func(address, quantity uint16) ([]bool, error) {
+			return readSlaveCoils(state, address, quantity)
+		},
 		WriteCoils: func(address uint16, values []bool) error {
-			writeEvents, err := state.writeEventSignals(address, values)
+			writeEvents, err := writeSlaveEventSignals(state, address, values)
 			if err != nil {
 				return err
 			}
 			for _, event := range writeEvents {
-				event.UnitID = uint8(cfg.UnitID)
+				event.UnitID = unitID
 				if !sendEvent(ctx, events, event) {
 					return context.Canceled
 				}
@@ -146,7 +133,43 @@ func runSlave(
 			return nil
 		},
 	}
+}
 
+func handleSlaveCommand(
+	ctx context.Context,
+	unitID uint8,
+	state *slaveState,
+	command Command,
+	events chan<- Event,
+) bool {
+	if command.Kind != SetCoilStateCommandKind {
+		return sendEvent(ctx, events, failedEvent(command, fmt.Errorf("command %q is not supported in slave mode", command.Kind)))
+	}
+	if err := setSlaveStatePoint(state, command.Coil, command.Value); err != nil {
+		return sendEvent(ctx, events, Event{
+			Kind:   WriteFailedEventKind,
+			UnitID: unitID,
+			Coil:   command.Coil,
+			Error:  err.Error(),
+		})
+	}
+	return sendEvent(ctx, events, Event{
+		Kind:   StateUpdatedEventKind,
+		UnitID: unitID,
+		Coil:   command.Coil,
+		Value:  command.Value,
+	})
+}
+
+func serveSlave(
+	ctx context.Context,
+	server *modbusone.RTUServer,
+	handler *modbusone.SimpleHandler,
+	unitID uint8,
+	state *slaveState,
+	commands <-chan Command,
+	events chan<- Event,
+) {
 	serveDone := make(chan error, 1)
 	go func() { serveDone <- server.Serve(handler) }()
 
@@ -170,24 +193,42 @@ func runSlave(
 				stop()
 				return
 			}
-			if command.Kind != SetCoilStateCommandKind {
-				if !sendEvent(ctx, events, failedEvent(command, fmt.Errorf("command %q is not supported in slave mode", command.Kind))) {
-					stop()
-					return
-				}
-				continue
-			}
-			if err := state.setStatePoint(command.Coil, command.Value); err != nil {
-				if !sendEvent(ctx, events, Event{Kind: WriteFailedEventKind, UnitID: uint8(cfg.UnitID), Coil: command.Coil, Error: err.Error()}) {
-					stop()
-					return
-				}
-				continue
-			}
-			if !sendEvent(ctx, events, Event{Kind: StateUpdatedEventKind, UnitID: uint8(cfg.UnitID), Coil: command.Coil, Value: command.Value}) {
+			if !handleSlaveCommand(ctx, unitID, state, command, events) {
 				stop()
 				return
 			}
 		}
 	}
+}
+
+func validateSlaveConfig(cfg entity.Modbus) error {
+	if cfg.UnitID < 1 || cfg.UnitID > 247 {
+		return fmt.Errorf("modbus slave unit id must be between 1 and 247: %d", cfg.UnitID)
+	}
+	return nil
+}
+
+func runSlave(
+	ctx context.Context,
+	connection modbusone.SerialContext,
+	cfg entity.Modbus,
+	commands <-chan Command,
+	events chan<- Event,
+) {
+	if err := validateSlaveConfig(cfg); err != nil {
+		slog.Error("invalid modbus slave configuration", "error", err)
+		_ = connection.Close()
+		return
+	}
+
+	state, err := newSlaveState(cfg)
+	if err != nil {
+		slog.Error("configure modbus slave", "error", err)
+		_ = connection.Close()
+		return
+	}
+
+	server := modbusone.NewRTUServer(connection, byte(cfg.UnitID))
+	handler := newSlaveHandler(ctx, uint8(cfg.UnitID), state, events)
+	serveSlave(ctx, server, handler, uint8(cfg.UnitID), state, commands, events)
 }
