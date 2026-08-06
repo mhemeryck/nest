@@ -2,7 +2,9 @@ package modbus
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"slices"
 
 	"github.com/mhemeryck/nest/internal/entity"
 	"github.com/tarm/serial"
@@ -63,16 +65,8 @@ func Run(
 ) {
 	defer close(done)
 
-	if cfg.Mode != entity.ModbusModeMaster && cfg.Mode != entity.ModbusModeSlave {
-		slog.Error("modbus runtime mode is not supported", "mode", cfg.Mode)
-		return
-	}
-	if cfg.Port == "" {
-		slog.Error("modbus port is not configured")
-		return
-	}
-	if cfg.BaudRate <= 0 {
-		slog.Error("modbus baud rate must be positive", "baud_rate", cfg.BaudRate)
+	if err := validateConfig(cfg); err != nil {
+		slog.Error("invalid modbus configuration", "error", err)
 		return
 	}
 
@@ -93,6 +87,19 @@ func Run(
 	}
 
 	runSlave(ctx, serialContext, cfg, commands, events)
+}
+
+func validateConfig(cfg entity.Modbus) error {
+	if !slices.Contains([]entity.ModbusMode{entity.ModbusModeMaster, entity.ModbusModeSlave}, cfg.Mode) {
+		return fmt.Errorf("modbus runtime mode is not supported: %q", cfg.Mode)
+	}
+	if cfg.Port == "" {
+		return fmt.Errorf("modbus port is not configured")
+	}
+	if cfg.BaudRate <= 0 {
+		return fmt.Errorf("modbus baud rate must be positive: %d", cfg.BaudRate)
+	}
+	return nil
 }
 
 func sendEvent(ctx context.Context, events chan<- Event, event Event) bool {
