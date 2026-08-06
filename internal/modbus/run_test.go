@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mhemeryck/nest/internal/entity"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	modbusone "github.com/xiegeo/modbusone"
@@ -61,6 +62,78 @@ func TestRunMasterExchangesCoilsWithInMemorySlave(t *testing.T) {
 	}
 
 	<-serverDone
+}
+
+func TestRunSlaveExchangesConfiguredCoilsWithMaster(t *testing.T) {
+	masterConnection, slaveConnection := net.Pipe()
+	t.Cleanup(func() {
+		assert.NoError(t, masterConnection.Close())
+		assert.NoError(t, slaveConnection.Close())
+	})
+
+	slaveContext, cancelSlave := context.WithCancel(context.Background())
+	t.Cleanup(cancelSlave)
+	slaveCommands := make(chan Command, 1)
+	slaveEvents := make(chan Event, 2)
+	slaveDone := make(chan struct{})
+	go func() {
+		defer close(slaveDone)
+		runSlave(slaveContext, modbusone.NewSerialContext(slaveConnection, 19200), entity.Modbus{
+			Mode:   entity.ModbusModeSlave,
+			UnitID: 1,
+			EventSignals: []entity.ModbusEventSignal{
+				{ID: "button_toggle", Coil: 3},
+			},
+			StatePoints: []entity.ModbusStatePoint{
+				{ID: "light_state", Coil: 7},
+			},
+		}, slaveCommands, slaveEvents)
+	}()
+
+	masterContext, cancelMaster := context.WithCancel(context.Background())
+	defer cancelMaster()
+	masterCommands := make(chan Command, 2)
+	masterEvents := make(chan Event, 2)
+	masterDone := make(chan struct{})
+	go func() {
+		defer close(masterDone)
+		runMaster(masterContext, modbusone.NewSerialContext(masterConnection, 19200), time.Second, masterCommands, masterEvents)
+	}()
+
+	masterCommands <- WriteCoilCommand(1, 3, true)
+	writeEvent := receiveEvent(t, masterEvents)
+	assert.Equal(t, WriteSucceededEventKind, writeEvent.Kind)
+	assert.True(t, writeEvent.Value)
+
+	slaveEvent := receiveEvent(t, slaveEvents)
+	assert.Equal(t, WriteSucceededEventKind, slaveEvent.Kind)
+	assert.Equal(t, uint16(3), slaveEvent.Coil)
+	assert.True(t, slaveEvent.Value)
+
+	slaveCommands <- SetCoilStateCommand(7, true)
+	stateEvent := receiveEvent(t, slaveEvents)
+	assert.Equal(t, StateUpdatedEventKind, stateEvent.Kind)
+	assert.Equal(t, uint16(7), stateEvent.Coil)
+	assert.True(t, stateEvent.Value)
+
+	masterCommands <- ReadCoilCommand(1, 7)
+	readEvent := receiveEvent(t, masterEvents)
+	assert.Equal(t, CoilReadEventKind, readEvent.Kind)
+	assert.True(t, readEvent.Value)
+
+	cancelMaster()
+	select {
+	case <-masterDone:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for master shutdown")
+	}
+
+	cancelSlave()
+	select {
+	case <-slaveDone:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for slave shutdown")
+	}
 }
 
 func TestCommandPDU(t *testing.T) {

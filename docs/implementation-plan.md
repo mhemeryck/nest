@@ -261,17 +261,18 @@ Current status:
 - Master coil reads and writes are proven against an in-memory ModbusOne RTU server.
 - The current Modbus work is intentionally mergeable infrastructure and does not enable or migrate existing light hardware.
 - The Modbus entrypoint is not wired into `internal/nest` or the controller yet.
-- Slave RTU handling, semantic event translation, state projection, retries, and production relay routing remain incomplete.
+- The standalone slave RTU actor now serves configured event-signal and state-point coils and emits events for incoming event-signal writes.
+- Runtime lifecycle wiring, semantic event translation, state projection, retries, and production relay routing remain incomplete.
 
 Remaining work is grouped into five chunks:
 
 ### 1. Slave Transport
 
-- [ ] Implement the slave RTU actor using ModbusOne `RTUServer` callbacks.
-- [ ] Serve configured event-signal and state-point coils.
-- [ ] Emit events for incoming event-signal writes.
-- [ ] Provide state-point values from actor-owned state.
-- [ ] Test the standalone slave against the existing in-memory master.
+- [x] Implement the slave RTU actor using ModbusOne `RTUServer` callbacks.
+- [x] Serve configured event-signal and state-point coils.
+- [x] Emit events for incoming event-signal writes.
+- [x] Provide state-point values from actor-owned state.
+- [x] Test the standalone slave against the existing in-memory master.
 
 ### 2. Runtime Lifecycle Wiring
 
