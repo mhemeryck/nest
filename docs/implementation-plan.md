@@ -263,12 +263,42 @@ Current status:
 - The Modbus entrypoint is not wired into `internal/nest` or the controller yet.
 - Slave RTU handling, semantic event translation, state projection, retries, and production relay routing remain incomplete.
 
-Next useful step:
+Remaining work is grouped into five chunks:
 
-- Add the slave RTU actor path using ModbusOne `RTUServer` callbacks.
-- Test a master and slave actor together with event-signal writes and state-point reads.
-- Wire the Modbus actor command and event channels through runtime and controller composition.
-- Add a PTY-backed integration test for the production `modbus.Run` serial-opening path.
+### 1. Slave Transport
+
+- [ ] Implement the slave RTU actor using ModbusOne `RTUServer` callbacks.
+- [ ] Serve configured event-signal and state-point coils.
+- [ ] Emit events for incoming event-signal writes.
+- [ ] Provide state-point values from actor-owned state.
+- [ ] Test the standalone slave against the existing in-memory master.
+
+### 2. Runtime Lifecycle Wiring
+
+- [ ] Start the existing master runtime from `internal/nest`.
+- [ ] Start the slave runtime from `internal/nest`.
+- [ ] Connect Modbus command and event channels to runtime startup and shutdown.
+- [ ] Replace configuration-only Modbus logging with actor lifecycle wiring.
+
+### 3. Controller Route Execution
+
+- [ ] Convert source-local semantic events into configured master event-signal coil writes.
+- [ ] Convert slave event-signal writes into target-local semantic actions.
+- [ ] Project local relay state into slave state-point coils.
+- [ ] Convert master state-poll results into remote entity observations.
+
+### 4. State Polling Policy
+
+- [ ] Decide when master state polls occur.
+- [ ] Implement the minimum useful polling policy.
+- [ ] Test startup, periodic, and command-related polling behavior as applicable.
+
+### 5. Hardening and Hardware Verification
+
+- [ ] Define retry and transient serial-error behavior.
+- [ ] Add a PTY-backed integration test for the production `modbus.Run` serial-opening path.
+- [ ] Test master and slave actors together across the serial abstraction.
+- [ ] Verify the complete path against physical RS-485 hardware.
 
 ## Phase 9: Local Cover Controller
 
