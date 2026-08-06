@@ -12,9 +12,9 @@ MQTT should be added early as a passive observability and contract-discovery int
 Each unit should publish state topics and a retained autodiscovery document that describes the command and state topics it exposes.
 Command topics may be advertised before command handling is enabled, but the discovery payload must make that disabled state explicit.
 
-The first control migration should be lights rather than covers.
-The existing light setup spans multiple physical units, so distributed light control and Modbus RTU behavior need to be proven before cover control.
-Covers come later because motor control adds safety requirements around up/down relay interlocks, timing, and restart recovery.
+The first control migration should be covers on a non-critical unit.
+The existing light setup is operational and spans multiple physical units, so it should remain on the current controller while Modbus RTU and the longer-term hardware direction mature.
+Covers are a suitable first migration target because their buttons and motor relays are on the same physical unit and can replace the existing `hausmaus` plus `covers` path as one standalone controller.
 
 ## Phase 1: Sysfs Layer
 
@@ -246,12 +246,12 @@ Current direction:
 - [x] Serial port configuration
 - [x] Modbus unit ID configuration
 - [ ] Map remote relay targets to Modbus coils
-- [ ] Read coils for relay state feedback
-- [ ] Write coils for relay control
+- [x] Read coils for relay state feedback
+- [x] Write coils for relay control
 - [ ] Define retry and error behavior for transient serial failures
 - [ ] Decide whether output units execute commands directly or expose relay coils only
 
-**Deliverable**: `nest` can execute distributed light control across units via RS-485.
+**Deliverable**: `nest` has a tested Modbus RTU transport foundation suitable for merging, but it is not yet connected to production runtime control.
 
 Current status:
 
@@ -259,6 +259,7 @@ Current status:
 - Configuration validation requires exactly one Modbus master when Modbus is configured.
 - `internal/modbus` uses ModbusOne for RTU client behavior instead of implementing RTU framing locally.
 - Master coil reads and writes are proven against an in-memory ModbusOne RTU server.
+- The current Modbus work is intentionally mergeable infrastructure and does not enable or migrate existing light hardware.
 - The Modbus entrypoint is not wired into `internal/nest` or the controller yet.
 - Slave RTU handling, semantic event translation, state projection, retries, and production relay routing remain incomplete.
 
@@ -269,7 +270,48 @@ Next useful step:
 - Wire the Modbus actor command and event channels through runtime and controller composition.
 - Add a PTY-backed integration test for the production `modbus.Run` serial-opening path.
 
-## Phase 9: Light Control Migration
+## Phase 9: Local Cover Controller
+
+- [ ] Define a config-driven cover model with separate open and close actuator references
+- [ ] Configure local up and down relay endpoints
+- [ ] Configure local open and close button inputs
+- [ ] Implement press-and-hold open button behavior
+- [ ] Implement press-and-hold close button behavior
+- [ ] Stop on button release
+- [ ] Stop remote motion when either physical button is pressed
+- [ ] Define deterministic behavior when both buttons are active
+- [ ] Implement open, close, stop, and remote movement commands
+- [ ] Enforce up/down relay interlocks and stop before reversing
+- [ ] Ensure both relays are off during startup and shutdown
+- [ ] Add motion timeout handling
+- [ ] Add unit tests for the state machine and safety rules
+- [ ] Run the controller on an isolated, non-critical unit with `hausmaus` and `covers` disabled
+- [ ] Replace the legacy `hausmaus` plus `covers` control path on that unit
+
+**Deliverable**: `nest` can safely control and observe covers on one physical unit without depending on Modbus, MQTT, Home Assistant, `hausmaus`, or the legacy `covers` service.
+
+**Migration boundary:**
+
+- `nest` owns the configured cover inputs and relays on the migrated unit.
+- Existing light controllers remain unchanged on other units.
+- MQTT and Home Assistant are external command and state interfaces, not local cover-control dependencies.
+
+## Phase 10: Cover Refinement
+
+- [ ] Add time-based position tracking
+- [ ] Add timing calibration and `max_time` handling
+- [ ] Define behavior when position is unknown after restart
+- [ ] Add recovery behavior after restart or interrupted movement
+
+**Notes:**
+
+- Covers should build on the same config and event model defined earlier.
+- Safety rules must ensure up/down relays are never active simultaneously.
+- The cover state machine should remain independent of sysfs so it can be moved to better-suited hardware later.
+
+**Deliverable**: Cover entities behave predictably under real-world timing and interruption scenarios.
+
+## Phase 11: Light Control Migration
 
 - [ ] Start with one migrated light circuit
 - [ ] Enable relay writes only for selected migrated lights
@@ -277,58 +319,42 @@ Next useful step:
 - [ ] Expand migration circuit by circuit
 - [ ] Keep existing controller behavior available until each circuit is verified
 
-**Deliverable**: Existing distributed light control is migrated safely to `nest` before cover control begins.
+**Notes:**
 
-## Phase 10: Controller-Side Button Semantics
+- This phase is intentionally deferred while the existing light integration remains operational.
+- Modbus runtime integration and the longer-term controller hardware direction should be settled before critical light migration.
+
+**Deliverable**: Existing distributed light control is migrated safely to `nest` after cover behavior and transport foundations have been proven.
+
+## Phase 12: Controller-Side Button Semantics
 
 - [ ] Verify whether hardware and sysfs behavior already provide sufficient debounce for deployed buttons
 - [x] Treat `pressed` and `released` as controller-owned semantic events derived from sysfs state changes
 - [ ] Add press duration tracking for button holds
 - [ ] Add semantic events such as `long_press` or `held_for` for actions like dimmer control
 - [ ] Define deterministic behavior for repeated physical button events and timer cancellation
+- [ ] Define configurable edge-triggered cover behavior where a press starts movement without requiring the button to be held
+- [ ] Define behavior for repeated presses and opposite-direction presses
 - [ ] Add multi-input trigger support when a concrete lighting or cover use case requires it
 
 Current status:
 Press and release button events already exist in controller normalization.
-Richer duration-based button semantics are still deferred.
-This phase is intentionally no longer on the critical path for Modbus-backed light migration.
+The first standalone cover migration preserves the current press-and-hold behavior.
+Press-to-move behavior is deferred until the standalone migration is stable.
 
-**Deliverable**: Controller-side button semantics support hold-aware actions such as dimming without pushing timing policy into sysfs.
+**Deliverable**: Controller-side button semantics support configurable hold-aware and edge-triggered actions without pushing timing policy into sysfs.
 
-## Phase 11: Local Cover Controller
+## Phase 13: Cover MQTT Commands
 
-- [ ] Config-driven cover model
-- [ ] Covers composed from `up_relay` and `down_relay`
-- [ ] Config-driven mapping of inputs to cover actions
-- [ ] Open, close, stop, and toggle commands
-- [ ] Up/down relay control with safety interlocks
-- [ ] End-to-end single-unit control loop
+- [ ] Subscribe to cover command topics advertised in Home Assistant discovery
+- [ ] Require explicit configuration before cover commands are enabled
+- [ ] Reflect cover command enablement in the discovery payload
+- [ ] Accept a minimal command set for migrated covers
+- [ ] Publish resulting cover state changes after command execution
 
-**Deliverable**: Single-unit shade control works reliably on one hardware unit.
+Light command handling and discovery are already covered by Phase 6.
 
-## Phase 12: MQTT Commands
-
-- [ ] Subscribe to command topics already advertised in autodiscovery
-- [ ] Require explicit config before commands are enabled
-- [ ] Reflect command enablement in the autodiscovery payload
-- [ ] Accept a minimal command set for migrated lights
-- [ ] Accept a minimal command set for covers after local cover behavior is proven
-- [ ] Publish resulting state changes after command execution
-
-**Deliverable**: External systems can control migrated entities through MQTT.
-
-## Phase 13: Cover Refinement
-
-- [ ] Position tracking
-- [ ] Timing calibration and `max_time` handling
-- [ ] Recovery behavior after restart or interrupted movement
-
-**Notes:**
-
-- Covers should build on the same config and event model defined earlier
-- Safety rules must ensure up/down relays are never active simultaneously
-
-**Deliverable**: Cover entities behave predictably under real-world timing and interruption scenarios.
+**Deliverable**: Home Assistant can control migrated covers through MQTT without becoming a local cover-control dependency.
 
 ## Phase 14: MQTT and Home Assistant Expansion
 
