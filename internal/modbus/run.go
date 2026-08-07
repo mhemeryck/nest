@@ -70,17 +70,11 @@ func Run(
 		return
 	}
 
-	connection, err := serial.OpenPort(&serial.Config{
-		Name:        cfg.Port,
-		Baud:        cfg.BaudRate,
-		ReadTimeout: cfg.Timeout,
-	})
+	serialContext, err := openSerialContext(cfg)
 	if err != nil {
 		slog.Error("open modbus serial port", "port", cfg.Port, "error", err)
 		return
 	}
-
-	serialContext := modbusone.NewSerialContext(connection, int64(cfg.BaudRate))
 
 	switch cfg.Mode {
 	case entity.ModbusModeMaster:
@@ -91,6 +85,19 @@ func Run(
 		slog.Warn("unsupported modbus mode", "mode", cfg.Mode)
 		return
 	}
+}
+
+func openSerialContext(cfg entity.Modbus) (modbusone.SerialContext, error) {
+	connection, err := serial.OpenPort(&serial.Config{
+		Name:        cfg.Port,
+		Baud:        cfg.BaudRate,
+		ReadTimeout: cfg.Timeout,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return modbusone.NewSerialContext(connection, int64(cfg.BaudRate)), nil
 }
 
 func validateConfig(cfg entity.Modbus) error {
