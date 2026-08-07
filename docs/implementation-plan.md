@@ -288,6 +288,13 @@ Remaining work is grouped into five chunks:
 - [ ] Project local relay state into slave state-point coils.
 - [ ] Convert master state-poll results into remote entity observations.
 
+Working assumption:
+
+- Initial Modbus event signals represent remote push-button press delivery.
+- A configured event-signal coil written `true` produces a button-press semantic event on the receiving unit.
+- The initial implementation does not define `false` writes, release, hold, repeated-press, or arbitrary payload semantics.
+- Revisit those semantics in Phase 12 before using Modbus event signals for hold-aware controls such as covers.
+
 ### 4. State Polling Policy
 
 - [ ] Decide when master state polls occur.
