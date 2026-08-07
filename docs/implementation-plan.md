@@ -284,7 +284,7 @@ Remaining work is grouped into five chunks:
 ### 3. Controller Route Execution
 
 - [ ] Convert source-local semantic events into configured master event-signal coil writes.
-- [ ] Convert slave event-signal writes into target-local semantic actions.
+- [x] Convert slave event-signal writes into target-local semantic actions.
 - [ ] Project local relay state into slave state-point coils.
 - [ ] Convert master state-poll results into remote entity observations.
 

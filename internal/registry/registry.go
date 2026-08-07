@@ -21,6 +21,7 @@ type Registry struct {
 	bindingsBySourceID             map[entity.ID][]entity.Binding
 	remoteSourceBindingsBySourceID map[entity.ID][]entity.Binding
 	remoteTargetBindingsBySourceID map[entity.ID][]entity.Binding
+	modbusEventSignalsByCoil       map[int]entity.ModbusEventSignal
 	relaysByID                     map[entity.RelayID]entity.Relay
 	relaysByDevice                 map[entity.SysfsDeviceID]entity.Relay
 }
@@ -41,6 +42,7 @@ func Build(root *entity.Root) *Registry {
 		bindingsBySourceID:             make(map[entity.ID][]entity.Binding),
 		remoteSourceBindingsBySourceID: make(map[entity.ID][]entity.Binding),
 		remoteTargetBindingsBySourceID: make(map[entity.ID][]entity.Binding),
+		modbusEventSignalsByCoil:       make(map[int]entity.ModbusEventSignal, len(root.Modbus.EventSignals)),
 		relaysByID:                     make(map[entity.RelayID]entity.Relay, len(root.Relays)),
 		relaysByDevice:                 make(map[entity.SysfsDeviceID]entity.Relay, len(root.Relays)),
 	}
@@ -74,6 +76,10 @@ func Build(root *entity.Root) *Registry {
 
 	for _, binding := range root.RemoteTargetBindings {
 		index.remoteTargetBindingsBySourceID[binding.Source] = append(index.remoteTargetBindingsBySourceID[binding.Source], binding)
+	}
+
+	for _, signal := range root.Modbus.EventSignals {
+		index.modbusEventSignalsByCoil[signal.Coil] = signal
 	}
 
 	return index
@@ -162,6 +168,11 @@ func RemoteTargetBindingsByButton(index *Registry, buttonID entity.PushButtonID)
 
 func RemoteTargetBindingsBySource(index *Registry, sourceID entity.ID) []entity.Binding {
 	return slices.Clone(index.remoteTargetBindingsBySourceID[sourceID])
+}
+
+func ModbusEventSignalByCoil(index *Registry, coil uint16) (entity.ModbusEventSignal, bool) {
+	signal, ok := index.modbusEventSignalsByCoil[int(coil)]
+	return signal, ok
 }
 
 func LightByID(index *Registry, lightID entity.LightID) (entity.Light, bool) {

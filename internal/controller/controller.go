@@ -67,9 +67,15 @@ func normalizeEvents(
 			if handled {
 				publishSemanticEvent(ctx, semanticEvents, semanticEvent)
 			}
-		case _, ok := <-modbusEvents:
+		case modbusEvent, ok := <-modbusEvents:
 			if !ok {
 				modbusEvents = nil
+				continue
+			}
+
+			semanticEvent, handled := semanticEventFromModbusEvent(index, modbusEvent)
+			if handled {
+				publishSemanticEvent(ctx, semanticEvents, semanticEvent)
 			}
 		}
 	}
@@ -199,20 +205,45 @@ func semanticSourceEventFromMQTTMessage(index *registry.Registry, mqttTopics mqt
 		slog.Warn("unhandled mqtt message topic", "topic", message.Topic)
 		return event.Event{}, false
 	}
-	if len(registry.RemoteTargetBindingsBySource(index, sourceEvent.SourceID)) == 0 {
+	semanticEvent, handled := semanticEventFromSourceEvent(index, sourceEvent.SourceID, sourceEvent.Event)
+	if !handled {
 		slog.Warn("mqtt source event has no target-local binding", "source_id", sourceEvent.SourceID)
+	}
+
+	return semanticEvent, handled
+}
+
+func semanticEventFromModbusEvent(index *registry.Registry, modbusEvent modbus.Event) (event.Event, bool) {
+	if modbusEvent.Kind != modbus.WriteSucceededEventKind || !modbusEvent.Value {
+		return event.Event{}, false
+	}
+
+	signal, ok := registry.ModbusEventSignalByCoil(index, modbusEvent.Coil)
+	if !ok {
+		return event.Event{}, false
+	}
+
+	// Initial Modbus event signals represent remote button presses.
+	return semanticEventFromSourceEvent(index, signal.Source, "pressed")
+}
+
+func semanticEventFromSourceEvent(index *registry.Registry, sourceID entity.ID, sourceEvent string) (event.Event, bool) {
+	if len(registry.RemoteTargetBindingsBySource(index, sourceID)) == 0 {
 		return event.Event{}, false
 	}
 
 	semanticEvent := event.Event{
 		PushButton: &event.PushButton{
-			ButtonID: entity.PushButtonID(sourceEvent.SourceID),
+			ButtonID: entity.PushButtonID(sourceID),
 		},
 	}
-	if sourceEvent.Event == "pressed" {
+	switch sourceEvent {
+	case "pressed":
 		semanticEvent.Kind = event.PushButtonPressedKind
-	} else {
+	case "released":
 		semanticEvent.Kind = event.PushButtonReleasedKind
+	default:
+		return event.Event{}, false
 	}
 
 	return semanticEvent, true

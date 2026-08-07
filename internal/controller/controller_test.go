@@ -249,6 +249,50 @@ func TestDispatchRemoteSourceEventTogglesTargetLocalLight(t *testing.T) {
 	assert.Equal(t, "ro_3_14", command.DeviceID)
 }
 
+func TestProjectedConfigModbusEventSignalTogglesTargetLocalLight(t *testing.T) {
+	configRoot, err := config.Load(filepath.Join("..", "..", "test", "fixtures", "config.local-mqtt.yaml"), "remote")
+	require.NoError(t, err)
+	index := registry.Build(config.ToEntityRoot(configRoot))
+	sysfsCommands := make(chan sysfs.Command, 1)
+
+	semanticEvent, handled := semanticEventFromModbusEvent(index, modbus.Event{
+		Kind:  modbus.WriteSucceededEventKind,
+		Coil:  1,
+		Value: true,
+	})
+	require.True(t, handled)
+	assert.Equal(t, event.PushButtonPressedKind, semanticEvent.Kind)
+	assert.Equal(t, entity.PushButtonID("local.button.office_button"), semanticEvent.PushButton.ButtonID)
+
+	derivedEvents := dispatchEvent(t.Context(), index, sysfsCommands, nil, mqtt.Topics{}, semanticEvent)
+	require.Len(t, derivedEvents, 1)
+	dispatchEvent(t.Context(), index, sysfsCommands, nil, mqtt.Topics{}, derivedEvents[0])
+
+	command := <-sysfsCommands
+	assert.Equal(t, sysfs.ToggleCommand, command.Kind)
+	assert.Equal(t, "ro_3_12", command.DeviceID)
+}
+
+func TestNormalizeModbusEventIgnoresNonTriggerWrites(t *testing.T) {
+	index := registry.Build(&entity.Root{
+		Modbus: entity.Modbus{
+			EventSignals: []entity.ModbusEventSignal{{
+				Coil:   1,
+				Source: entity.ID("local.button.office_button"),
+			}},
+		},
+	})
+
+	for _, modbusEvent := range []modbus.Event{
+		{Kind: modbus.WriteSucceededEventKind, Coil: 1, Value: false},
+		{Kind: modbus.WriteSucceededEventKind, Coil: 2, Value: true},
+		{Kind: modbus.StateUpdatedEventKind, Coil: 1, Value: true},
+	} {
+		_, handled := semanticEventFromModbusEvent(index, modbusEvent)
+		assert.False(t, handled, "event: %#v", modbusEvent)
+	}
+}
+
 func TestHandleStateChangePublishesMappedLightState(t *testing.T) {
 	index := registry.Build(&entity.Root{
 		Lights: []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
