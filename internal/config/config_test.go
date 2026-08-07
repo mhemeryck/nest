@@ -45,9 +45,10 @@ func TestLoadLocalMQTTFixtureProjectsRemoteSourceBinding(t *testing.T) {
 	assert.True(t, file.MQTT.Enabled)
 	require.Len(t, file.RemoteSourceBindings, 1)
 	assert.Equal(t, BindingConfig{
-		Source: "local.button.office_button",
-		Target: "remote.light.remote_light",
-		Action: BindingActionToggle,
+		Source:             "local.button.office_button",
+		Target:             "remote.light.remote_light",
+		Action:             BindingActionToggle,
+		ExecutionTransport: "modbus",
 	}, file.RemoteSourceBindings[0])
 }
 
@@ -67,6 +68,8 @@ func TestLoadLocalMQTTFixtureProjectsPhysicalModbusConfig(t *testing.T) {
 			Source: "local.button.office_button",
 			Target: "remote.light.remote_light",
 			Action: BindingActionToggle,
+			UnitID: 1,
+			Coil:   1,
 		}},
 		StatePolls: []ModbusStatePollConfig{{
 			Unit:   "remote",
@@ -92,9 +95,10 @@ func TestLoadLocalMQTTFixtureProjectsRemoteTargetBinding(t *testing.T) {
 	assert.True(t, file.MQTT.Enabled)
 	require.Len(t, file.RemoteTargetBindings, 1)
 	assert.Equal(t, BindingConfig{
-		Source: "local.button.office_button",
-		Target: "remote.light.remote_light",
-		Action: BindingActionToggle,
+		Source:             "local.button.office_button",
+		Target:             "remote.light.remote_light",
+		Action:             BindingActionToggle,
+		ExecutionTransport: "modbus",
 	}, file.RemoteTargetBindings[0])
 }
 
@@ -243,9 +247,10 @@ func TestProjectUnitProjectsRemoteBindingsByPerspective(t *testing.T) {
 			},
 		},
 		Bindings: []GlobalBindingConfig{{
-			Source: "controller_1.button.office_button",
-			Target: "controller_2.light.hall_light",
-			Action: "toggle",
+			Source:             "controller_1.button.office_button",
+			Target:             "controller_2.light.hall_light",
+			Action:             "toggle",
+			ExecutionTransport: "mqtt",
 		}},
 	}
 
@@ -257,14 +262,16 @@ func TestProjectUnitProjectsRemoteBindingsByPerspective(t *testing.T) {
 	assert.Empty(t, sourceLocal.Bindings)
 	assert.Empty(t, targetLocal.Bindings)
 	assert.Equal(t, []BindingConfig{{
-		Source: "controller_1.button.office_button",
-		Target: "controller_2.light.hall_light",
-		Action: "toggle",
+		Source:             "controller_1.button.office_button",
+		Target:             "controller_2.light.hall_light",
+		Action:             "toggle",
+		ExecutionTransport: "mqtt",
 	}}, sourceLocal.RemoteSourceBindings)
 	assert.Equal(t, []BindingConfig{{
-		Source: "controller_1.button.office_button",
-		Target: "controller_2.light.hall_light",
-		Action: "toggle",
+		Source:             "controller_1.button.office_button",
+		Target:             "controller_2.light.hall_light",
+		Action:             "toggle",
+		ExecutionTransport: "mqtt",
 	}}, targetLocal.RemoteTargetBindings)
 }
 
@@ -375,6 +382,8 @@ func TestProjectUnitProjectsUnitModbusConfig(t *testing.T) {
 		Source: "local.button.office_button",
 		Target: "remote.light.remote_light",
 		Action: BindingActionToggle,
+		UnitID: 1,
+		Coil:   1,
 	}}, local.Modbus.EventSignalWrites)
 	assert.Equal(t, []ModbusStatePollConfig{{
 		Unit:   "remote",

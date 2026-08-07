@@ -20,7 +20,7 @@ func Run(
 	reg *registry.Registry,
 	sysfsCommands chan<- sysfs.Command,
 	mqttCommands chan<- mqtt.Command,
-	_ chan<- modbus.Command,
+	modbusCommands chan<- modbus.Command,
 	mqttTopics mqtt.Topics,
 	stateChanges <-chan sysfs.StateChange,
 	mqttEvents <-chan mqtt.Event,
@@ -32,7 +32,7 @@ func Run(
 	normalizerDone := make(chan struct{})
 	go normalizeEvents(ctx, reg, mqttTopics, stateChanges, mqttEvents, modbusEvents, semanticEvents, normalizerDone)
 
-	dispatchEvents(ctx, reg, sysfsCommands, mqttCommands, mqttTopics, semanticEvents)
+	dispatchEvents(ctx, reg, sysfsCommands, mqttCommands, modbusCommands, mqttTopics, semanticEvents)
 	<-normalizerDone
 }
 
@@ -86,6 +86,7 @@ func dispatchEvents(
 	reg *registry.Registry,
 	sysfsCommands chan<- sysfs.Command,
 	mqttCommands chan<- mqtt.Command,
+	modbusCommands chan<- modbus.Command,
 	mqttTopics mqtt.Topics,
 	semanticEvents <-chan event.Event,
 ) {
@@ -94,7 +95,7 @@ func dispatchEvents(
 
 	for {
 		if semanticEvent, remainingEvents, ok := popEvent(dispatchQueue); ok {
-			dispatchQueue = append(remainingEvents, dispatchEvent(ctx, reg, sysfsCommands, mqttCommands, mqttTopics, semanticEvent)...)
+			dispatchQueue = append(remainingEvents, dispatchEvent(ctx, reg, sysfsCommands, mqttCommands, modbusCommands, mqttTopics, semanticEvent)...)
 			continue
 		}
 
@@ -205,8 +206,8 @@ func semanticSourceEventFromMQTTMessage(index *registry.Registry, mqttTopics mqt
 		slog.Warn("unhandled mqtt message topic", "topic", message.Topic)
 		return event.Event{}, false
 	}
-	semanticEvent, handled := semanticEventFromSourceEvent(index, sourceEvent.SourceID, sourceEvent.Event)
-	if !handled {
+	semanticEvent, handled := semanticEventFromSourceEvent(index, sourceEvent.SourceID, sourceEvent.Event, entity.ExecutionTransportMQTT)
+	if !handled && len(registry.RemoteTargetBindingsBySource(index, sourceEvent.SourceID)) == 0 {
 		slog.Warn("mqtt source event has no target-local binding", "source_id", sourceEvent.SourceID)
 	}
 
@@ -224,17 +225,18 @@ func semanticEventFromModbusEvent(index *registry.Registry, modbusEvent modbus.E
 	}
 
 	// Initial Modbus event signals represent remote button presses.
-	return semanticEventFromSourceEvent(index, signal.Source, "pressed")
+	return semanticEventFromSourceEvent(index, signal.Source, "pressed", entity.ExecutionTransportModbus)
 }
 
-func semanticEventFromSourceEvent(index *registry.Registry, sourceID entity.ID, sourceEvent string) (event.Event, bool) {
-	if len(registry.RemoteTargetBindingsBySource(index, sourceID)) == 0 {
+func semanticEventFromSourceEvent(index *registry.Registry, sourceID entity.ID, sourceEvent string, delivery entity.ExecutionTransport) (event.Event, bool) {
+	if len(remoteTargetBindingsBySourceAndTransport(index, sourceID, delivery)) == 0 {
 		return event.Event{}, false
 	}
 
 	semanticEvent := event.Event{
 		PushButton: &event.PushButton{
 			ButtonID: entity.PushButtonID(sourceID),
+			Delivery: delivery,
 		},
 	}
 	switch sourceEvent {

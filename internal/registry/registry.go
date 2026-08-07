@@ -7,44 +7,46 @@ import (
 )
 
 type Registry struct {
-	sysfsRoot                      string
-	sysfsPollIntervals             entity.PollIntervals
-	mqtt                           entity.MQTT
-	modbus                         entity.Modbus
-	lights                         []entity.Light
-	remoteTargetBindings           []entity.Binding
-	digitalInputsByDevice          map[entity.SysfsDeviceID]entity.DigitalInput
-	pushButtonsByID                map[entity.PushButtonID]entity.PushButton
-	pushButtonsByInputID           map[entity.DigitalInputID][]entity.PushButton
-	lightsByID                     map[entity.LightID]entity.Light
-	lightsByRelayID                map[entity.RelayID][]entity.Light
-	bindingsBySourceID             map[entity.ID][]entity.Binding
-	remoteSourceBindingsBySourceID map[entity.ID][]entity.Binding
-	remoteTargetBindingsBySourceID map[entity.ID][]entity.Binding
-	modbusEventSignalsByCoil       map[int]entity.ModbusEventSignal
-	relaysByID                     map[entity.RelayID]entity.Relay
-	relaysByDevice                 map[entity.SysfsDeviceID]entity.Relay
+	sysfsRoot                         string
+	sysfsPollIntervals                entity.PollIntervals
+	mqtt                              entity.MQTT
+	modbus                            entity.Modbus
+	lights                            []entity.Light
+	remoteTargetBindings              []entity.Binding
+	digitalInputsByDevice             map[entity.SysfsDeviceID]entity.DigitalInput
+	pushButtonsByID                   map[entity.PushButtonID]entity.PushButton
+	pushButtonsByInputID              map[entity.DigitalInputID][]entity.PushButton
+	lightsByID                        map[entity.LightID]entity.Light
+	lightsByRelayID                   map[entity.RelayID][]entity.Light
+	bindingsBySourceID                map[entity.ID][]entity.Binding
+	remoteSourceBindingsBySourceID    map[entity.ID][]entity.Binding
+	remoteTargetBindingsBySourceID    map[entity.ID][]entity.Binding
+	modbusEventSignalsByCoil          map[int]entity.ModbusEventSignal
+	modbusEventSignalWritesBySourceID map[entity.ID][]entity.ModbusEventSignalWrite
+	relaysByID                        map[entity.RelayID]entity.Relay
+	relaysByDevice                    map[entity.SysfsDeviceID]entity.Relay
 }
 
 func Build(root *entity.Root) *Registry {
 	index := &Registry{
-		sysfsRoot:                      root.SysfsRoot,
-		sysfsPollIntervals:             root.SysfsPollIntervals,
-		mqtt:                           root.MQTT,
-		modbus:                         copyModbus(root.Modbus),
-		lights:                         slices.Clone(root.Lights),
-		remoteTargetBindings:           slices.Clone(root.RemoteTargetBindings),
-		digitalInputsByDevice:          make(map[entity.SysfsDeviceID]entity.DigitalInput, len(root.DigitalInputs)),
-		pushButtonsByID:                make(map[entity.PushButtonID]entity.PushButton, len(root.PushButtons)),
-		pushButtonsByInputID:           make(map[entity.DigitalInputID][]entity.PushButton),
-		lightsByID:                     make(map[entity.LightID]entity.Light, len(root.Lights)),
-		lightsByRelayID:                make(map[entity.RelayID][]entity.Light),
-		bindingsBySourceID:             make(map[entity.ID][]entity.Binding),
-		remoteSourceBindingsBySourceID: make(map[entity.ID][]entity.Binding),
-		remoteTargetBindingsBySourceID: make(map[entity.ID][]entity.Binding),
-		modbusEventSignalsByCoil:       make(map[int]entity.ModbusEventSignal, len(root.Modbus.EventSignals)),
-		relaysByID:                     make(map[entity.RelayID]entity.Relay, len(root.Relays)),
-		relaysByDevice:                 make(map[entity.SysfsDeviceID]entity.Relay, len(root.Relays)),
+		sysfsRoot:                         root.SysfsRoot,
+		sysfsPollIntervals:                root.SysfsPollIntervals,
+		mqtt:                              root.MQTT,
+		modbus:                            copyModbus(root.Modbus),
+		lights:                            slices.Clone(root.Lights),
+		remoteTargetBindings:              slices.Clone(root.RemoteTargetBindings),
+		digitalInputsByDevice:             make(map[entity.SysfsDeviceID]entity.DigitalInput, len(root.DigitalInputs)),
+		pushButtonsByID:                   make(map[entity.PushButtonID]entity.PushButton, len(root.PushButtons)),
+		pushButtonsByInputID:              make(map[entity.DigitalInputID][]entity.PushButton),
+		lightsByID:                        make(map[entity.LightID]entity.Light, len(root.Lights)),
+		lightsByRelayID:                   make(map[entity.RelayID][]entity.Light),
+		bindingsBySourceID:                make(map[entity.ID][]entity.Binding),
+		remoteSourceBindingsBySourceID:    make(map[entity.ID][]entity.Binding),
+		remoteTargetBindingsBySourceID:    make(map[entity.ID][]entity.Binding),
+		modbusEventSignalsByCoil:          make(map[int]entity.ModbusEventSignal, len(root.Modbus.EventSignals)),
+		modbusEventSignalWritesBySourceID: make(map[entity.ID][]entity.ModbusEventSignalWrite),
+		relaysByID:                        make(map[entity.RelayID]entity.Relay, len(root.Relays)),
+		relaysByDevice:                    make(map[entity.SysfsDeviceID]entity.Relay, len(root.Relays)),
 	}
 
 	for _, input := range root.DigitalInputs {
@@ -80,6 +82,9 @@ func Build(root *entity.Root) *Registry {
 
 	for _, signal := range root.Modbus.EventSignals {
 		index.modbusEventSignalsByCoil[signal.Coil] = signal
+	}
+	for _, write := range root.Modbus.EventSignalWrites {
+		index.modbusEventSignalWritesBySourceID[write.Source] = append(index.modbusEventSignalWritesBySourceID[write.Source], write)
 	}
 
 	return index
@@ -173,6 +178,10 @@ func RemoteTargetBindingsBySource(index *Registry, sourceID entity.ID) []entity.
 func ModbusEventSignalByCoil(index *Registry, coil uint16) (entity.ModbusEventSignal, bool) {
 	signal, ok := index.modbusEventSignalsByCoil[int(coil)]
 	return signal, ok
+}
+
+func ModbusEventSignalWritesBySource(index *Registry, sourceID entity.ID) []entity.ModbusEventSignalWrite {
+	return slices.Clone(index.modbusEventSignalWritesBySourceID[sourceID])
 }
 
 func LightByID(index *Registry, lightID entity.LightID) (entity.Light, bool) {

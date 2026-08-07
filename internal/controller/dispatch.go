@@ -6,6 +6,7 @@ import (
 
 	"github.com/mhemeryck/nest/internal/controller/event"
 	"github.com/mhemeryck/nest/internal/entity"
+	"github.com/mhemeryck/nest/internal/modbus"
 	"github.com/mhemeryck/nest/internal/mqtt"
 	"github.com/mhemeryck/nest/internal/registry"
 	"github.com/mhemeryck/nest/internal/sysfs"
@@ -16,6 +17,7 @@ func dispatchEvent(
 	reg *registry.Registry,
 	sysfsCommands chan<- sysfs.Command,
 	mqttCommands chan<- mqtt.Command,
+	modbusCommands chan<- modbus.Command,
 	mqttTopics mqtt.Topics,
 	busEvent event.Event,
 ) []event.Event {
@@ -23,6 +25,7 @@ func dispatchEvent(
 	derivedEvents := bindingEventsFromEvent(reg, busEvent)
 	dispatchSysfsCommand(ctx, reg, sysfsCommands, busEvent)
 	dispatchMQTTCommand(ctx, reg, mqttCommands, mqttTopics, busEvent)
+	dispatchModbusCommand(ctx, reg, modbusCommands, busEvent)
 
 	return derivedEvents
 }
@@ -43,6 +46,20 @@ func dispatchMQTTCommand(ctx context.Context, reg *registry.Registry, commands c
 	case event.MQTTConnectedKind:
 		if err := publishMQTTStartup(ctx, reg, commands); err != nil {
 			slog.Error("mqtt startup publish failed", "error", err)
+		}
+	}
+}
+
+func dispatchModbusCommand(ctx context.Context, reg *registry.Registry, commands chan<- modbus.Command, busEvent event.Event) {
+	if commands == nil || busEvent.Kind != event.PushButtonPressedKind {
+		return
+	}
+
+	for _, write := range registry.ModbusEventSignalWritesBySource(reg, entity.ID(busEvent.PushButton.ButtonID)) {
+		select {
+		case <-ctx.Done():
+			return
+		case commands <- modbus.WriteCoilCommand(write.UnitID, write.Coil, true):
 		}
 	}
 }

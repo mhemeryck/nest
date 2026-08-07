@@ -234,8 +234,19 @@ func validateGlobalBindings(global *GlobalRoot) error {
 		sourceErr := validateGlobalBindingEndpoint(global, prefix+".source", binding.Source, entity.TypeButton)
 		targetErr := validateGlobalBindingEndpoint(global, prefix+".target", binding.Target, entity.TypeLight)
 		actionErr := validateModbusBindingAction(prefix+".action", binding.Action)
+		transportErr := error(nil)
 
 		if sourceErr == nil && targetErr == nil && actionErr == nil {
+			sourceUnit := strings.Split(binding.Source, ".")[0]
+			targetUnit := strings.Split(binding.Target, ".")[0]
+			if sourceUnit == targetUnit {
+				if binding.ExecutionTransport != "" {
+					transportErr = fmt.Errorf("%s.execution_transport: only valid for cross-unit bindings", prefix)
+				}
+			} else {
+				transportErr = validateExecutionTransport(prefix+".execution_transport", binding.ExecutionTransport)
+			}
+
 			key := binding.Source + "\x00" + binding.Target + "\x00" + binding.Action
 			if _, ok := seen[key]; ok {
 				errs = errors.Join(
@@ -253,10 +264,18 @@ func validateGlobalBindings(global *GlobalRoot) error {
 			}
 		}
 
-		errs = errors.Join(errs, sourceErr, targetErr, actionErr)
+		errs = errors.Join(errs, sourceErr, targetErr, actionErr, transportErr)
 	}
 
 	return errs
+}
+
+func validateExecutionTransport(field string, value string) error {
+	if value != string(entity.ExecutionTransportMQTT) && value != string(entity.ExecutionTransportModbus) {
+		return fmt.Errorf("%s: must be %q or %q", field, entity.ExecutionTransportMQTT, entity.ExecutionTransportModbus)
+	}
+
+	return nil
 }
 
 func validateGlobalBindingEndpoint(global *GlobalRoot, field string, value string, entityType entity.Type) error {
@@ -300,6 +319,7 @@ func validateGlobalModbus(global *GlobalRoot) error {
 
 	for unitID, unit := range global.Units {
 		prefix := fmt.Sprintf("units.%s.actors.modbus", unitID)
+		errs = errors.Join(errs, validateModbus(unit.Actors.Modbus))
 		if unit.Actors.Modbus.Mode == ModbusModeMaster {
 			modbusConfigured = true
 			if masterUnit != "" {

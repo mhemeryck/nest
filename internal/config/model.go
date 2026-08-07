@@ -70,6 +70,8 @@ type ModbusEventSignalWriteConfig struct {
 	Source string `yaml:"source"`
 	Target string `yaml:"target"`
 	Action string `yaml:"action"`
+	UnitID uint8  `yaml:"-"`
+	Coil   uint16 `yaml:"-"`
 }
 
 type ModbusStatePollConfig struct {
@@ -102,9 +104,10 @@ type LightConfig struct {
 }
 
 type BindingConfig struct {
-	Source string `yaml:"source"`
-	Target string `yaml:"target"`
-	Action string `yaml:"action"`
+	Source             string `yaml:"source"`
+	Target             string `yaml:"target"`
+	Action             string `yaml:"action"`
+	ExecutionTransport string `yaml:"execution_transport"`
 }
 
 const BindingActionToggle = "toggle"

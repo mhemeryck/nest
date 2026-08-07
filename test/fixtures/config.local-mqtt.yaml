@@ -121,3 +121,4 @@ bindings:
   - source: local.button.office_button
     target: remote.light.remote_light
     action: toggle
+    execution_transport: modbus

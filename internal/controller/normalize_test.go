@@ -138,6 +138,7 @@ func TestSemanticEventFromMQTTEventMapsSourceEventToPushButtonEvent(t *testing.T
 			Source: entity.ID("controller_2.button.hall_button"),
 			Target: entity.ID("controller_1.light.office_light"),
 			Action: entity.ActionToggle,
+			ExecutionTransport: entity.ExecutionTransportMQTT,
 		}},
 	}
 

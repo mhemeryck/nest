@@ -113,6 +113,8 @@ func modbusFromConfig(modbus ModbusConfig) entity.Modbus {
 			Source: entity.ID(write.Source),
 			Target: entity.ID(write.Target),
 			Action: entity.Action(write.Action),
+			UnitID: write.UnitID,
+			Coil:   write.Coil,
 		})
 	}
 
@@ -129,9 +131,10 @@ func modbusFromConfig(modbus ModbusConfig) entity.Modbus {
 
 func bindingFromConfig(binding BindingConfig) entity.Binding {
 	return entity.Binding{
-		Source: entity.ID(binding.Source),
-		Target: entity.ID(binding.Target),
-		Action: entity.Action(binding.Action),
+		Source:             entity.ID(binding.Source),
+		Target:             entity.ID(binding.Target),
+		Action:             entity.Action(binding.Action),
+		ExecutionTransport: entity.ExecutionTransport(binding.ExecutionTransport),
 	}
 }
 

@@ -283,7 +283,7 @@ Remaining work is grouped into five chunks:
 
 ### 3. Controller Route Execution
 
-- [ ] Convert source-local semantic events into configured master event-signal coil writes.
+- [x] Convert source-local semantic events into configured master event-signal coil writes.
 - [x] Convert slave event-signal writes into target-local semantic actions.
 - [ ] Project local relay state into slave state-point coils.
 - [ ] Convert master state-poll results into remote entity observations.
@@ -294,6 +294,7 @@ Working assumption:
 - A configured event-signal coil written `true` produces a button-press semantic event on the receiving unit.
 - The initial implementation does not define `false` writes, release, hold, repeated-press, or arbitrary payload semantics.
 - Revisit those semantics in Phase 12 before using Modbus event signals for hold-aware controls such as covers.
+- Cross-unit bindings declare an explicit execution transport so MQTT and Modbus may both publish semantic events without executing the binding twice.
 
 ### 4. State Polling Policy
 

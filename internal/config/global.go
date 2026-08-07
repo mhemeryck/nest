@@ -57,9 +57,10 @@ type UnitEntitiesConfig struct {
 }
 
 type GlobalBindingConfig struct {
-	Source string `yaml:"source"`
-	Target string `yaml:"target"`
-	Action string `yaml:"action"`
+	Source             string `yaml:"source"`
+	Target             string `yaml:"target"`
+	Action             string `yaml:"action"`
+	ExecutionTransport string `yaml:"execution_transport"`
 }
 
 type EndpointRefConfig struct {
@@ -110,7 +111,7 @@ func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
 			PollIntervals: unit.Actors.Sysfs.PollIntervals,
 		},
 		MQTT:          mqtt,
-		Modbus:        cloneModbusConfig(unit.Actors.Modbus),
+		Modbus:        projectModbusConfig(global, unit.Actors.Modbus),
 		DigitalInputs: append([]DigitalInputConfig(nil), unit.Actors.Sysfs.DigitalInputs...),
 		PushButtons:   localButtons,
 		Lights:        localLights,
@@ -132,6 +133,23 @@ func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
 	}
 
 	return local, nil
+}
+
+func projectModbusConfig(global *GlobalRoot, modbus ModbusConfig) ModbusConfig {
+	projected := cloneModbusConfig(modbus)
+	for i := range projected.EventSignalWrites {
+		write := &projected.EventSignalWrites[i]
+		target := global.Units[write.Unit]
+		write.UnitID = uint8(target.Actors.Modbus.UnitID)
+		for _, signal := range target.Actors.Modbus.EventSignals {
+			if signal.ID == write.Signal {
+				write.Coil = uint16(signal.Coil)
+				break
+			}
+		}
+	}
+
+	return projected
 }
 
 func cloneModbusConfig(modbus ModbusConfig) ModbusConfig {

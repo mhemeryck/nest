@@ -12,18 +12,21 @@ type (
 	RelayID             string
 	Action              string
 	LightAction         string
+	ExecutionTransport  string
 	ModbusMode          string
 	ModbusEventSignalID string
 	ModbusStatePointID  string
 )
 
 const (
-	ActionToggle      Action      = "toggle"
-	LightActionToggle LightAction = "toggle"
-	LightActionOn     LightAction = "on"
-	LightActionOff    LightAction = "off"
-	ModbusModeMaster  ModbusMode  = "master"
-	ModbusModeSlave   ModbusMode  = "slave"
+	ActionToggle             Action             = "toggle"
+	LightActionToggle        LightAction        = "toggle"
+	LightActionOn            LightAction        = "on"
+	LightActionOff           LightAction        = "off"
+	ModbusModeMaster         ModbusMode         = "master"
+	ModbusModeSlave          ModbusMode         = "slave"
+	ExecutionTransportMQTT   ExecutionTransport = "mqtt"
+	ExecutionTransportModbus ExecutionTransport = "modbus"
 )
 
 type Root struct {
@@ -89,6 +92,8 @@ type ModbusEventSignalWrite struct {
 	Source ID
 	Target ID
 	Action Action
+	UnitID uint8
+	Coil   uint16
 }
 
 type ModbusStatePoll struct {
@@ -121,7 +126,8 @@ type Light struct {
 }
 
 type Binding struct {
-	Source ID
-	Target ID
-	Action Action
+	Source             ID
+	Target             ID
+	Action             Action
+	ExecutionTransport ExecutionTransport
 }
