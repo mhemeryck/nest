@@ -2,6 +2,7 @@ package nest
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/mhemeryck/nest/internal/controller"
 	"github.com/mhemeryck/nest/internal/registry"
@@ -37,10 +38,20 @@ func waitForShutdown(
 	sysfsActor sysfsActor,
 	mqttActor mqttActor,
 	modbusActor modbusActor,
-) {
-	<-controllerDone
-	cancel()
+) error {
+	var shutdownErr error
+	select {
+	case <-controllerDone:
+		cancel()
+	case <-modbusActor.done:
+		shutdownErr = fmt.Errorf("modbus actor stopped")
+		cancel()
+		<-controllerDone
+	}
+
 	waitForSysfsActor(sysfsActor)
 	waitForMQTTActor(mqttActor)
 	waitForModbusActor(modbusActor)
+
+	return shutdownErr
 }

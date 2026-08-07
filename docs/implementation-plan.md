@@ -259,10 +259,11 @@ Current status:
 - Configuration validation requires exactly one Modbus master when Modbus is configured.
 - `internal/modbus` uses ModbusOne for RTU client behavior instead of implementing RTU framing locally.
 - Master coil reads and writes are proven against an in-memory ModbusOne RTU server.
-- The current Modbus work is intentionally mergeable infrastructure and does not enable or migrate existing light hardware.
-- The Modbus entrypoint is not wired into `internal/nest` or the controller yet.
+- The Modbus runtime starts from `internal/nest` and routes configured master event-signal writes through the controller.
+- Configured Modbus event signals can execute target-local light actions, but have not been verified on production RS-485 hardware.
 - The standalone slave RTU actor now serves configured event-signal and state-point coils and emits events for incoming event-signal writes.
-- Runtime lifecycle wiring, semantic event translation, state projection, retries, and production relay routing remain incomplete.
+- A configured Modbus actor stopping unexpectedly stops the runtime rather than leaving an unconsumed command channel behind.
+- State projection, retries, and production hardware verification remain incomplete.
 
 Remaining work is grouped into five chunks:
 

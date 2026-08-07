@@ -44,10 +44,10 @@ func Run(ctx context.Context, opts Options) error {
 
 	slog.Info("runtime started", "message", "press Ctrl+C to exit")
 
-	waitForShutdown(cancel, controllerDone, sysfsActor, mqttActor, modbusActor)
+	err = waitForShutdown(cancel, controllerDone, sysfsActor, mqttActor, modbusActor)
 
 	slog.Info("shutting down")
-	return nil
+	return err
 }
 
 func loadRegistry(opts Options) (*registry.Registry, error) {
