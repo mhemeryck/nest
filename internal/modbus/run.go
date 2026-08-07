@@ -81,12 +81,16 @@ func Run(
 	}
 
 	serialContext := modbusone.NewSerialContext(connection, int64(cfg.BaudRate))
-	if cfg.Mode == entity.ModbusModeMaster {
+
+	switch cfg.Mode {
+	case entity.ModbusModeMaster:
 		runMaster(ctx, serialContext, cfg.Timeout, commands, events)
+	case entity.ModbusModeSlave:
+		runSlave(ctx, serialContext, cfg, commands, events)
+	default:
+		slog.Warn("unsupported modbus mode", "mode", cfg.Mode)
 		return
 	}
-
-	runSlave(ctx, serialContext, cfg, commands, events)
 }
 
 func validateConfig(cfg entity.Modbus) error {

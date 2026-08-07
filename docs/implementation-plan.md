@@ -276,10 +276,10 @@ Remaining work is grouped into five chunks:
 
 ### 2. Runtime Lifecycle Wiring
 
-- [ ] Start the existing master runtime from `internal/nest`.
-- [ ] Start the slave runtime from `internal/nest`.
-- [ ] Connect Modbus command and event channels to runtime startup and shutdown.
-- [ ] Replace configuration-only Modbus logging with actor lifecycle wiring.
+- [x] Start the existing master runtime from `internal/nest`.
+- [x] Start the slave runtime from `internal/nest`.
+- [x] Connect Modbus command and event channels to runtime startup and shutdown.
+- [x] Replace configuration-only Modbus logging with actor lifecycle wiring.
 
 ### 3. Controller Route Execution
 

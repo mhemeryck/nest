@@ -12,6 +12,7 @@ import (
 	"github.com/mhemeryck/nest/internal/config"
 	"github.com/mhemeryck/nest/internal/controller/event"
 	"github.com/mhemeryck/nest/internal/entity"
+	"github.com/mhemeryck/nest/internal/modbus"
 	"github.com/mhemeryck/nest/internal/mqtt"
 	"github.com/mhemeryck/nest/internal/registry"
 	"github.com/mhemeryck/nest/internal/sysfs"
@@ -25,7 +26,7 @@ func TestRunReturnsOnSignal(t *testing.T) {
 	stateChanges := make(chan sysfs.StateChange)
 	commands := make(chan sysfs.Command)
 	done := make(chan struct{})
-	go Run(ctx, index, commands, nil, mqtt.Topics{}, stateChanges, nil, done)
+	go Run(ctx, index, commands, nil, nil, mqtt.Topics{}, stateChanges, nil, nil, done)
 
 	cancel()
 
@@ -42,7 +43,7 @@ func TestRunReturnsWhenPollEventsClose(t *testing.T) {
 	stateChanges := make(chan sysfs.StateChange)
 	commands := make(chan sysfs.Command)
 	done := make(chan struct{})
-	go Run(ctx, index, commands, nil, mqtt.Topics{}, stateChanges, nil, done)
+	go Run(ctx, index, commands, nil, nil, mqtt.Topics{}, stateChanges, nil, nil, done)
 
 	close(stateChanges)
 
@@ -50,6 +51,31 @@ func TestRunReturnsWhenPollEventsClose(t *testing.T) {
 	case <-done:
 	case <-time.After(time.Second):
 		require.Fail(t, "Run did not return after poll event channel closed")
+	}
+}
+
+func TestRunContinuesWhenModbusEventsClose(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	index := registry.Build(&entity.Root{})
+	stateChanges := make(chan sysfs.StateChange)
+	modbusEvents := make(chan modbus.Event)
+	commands := make(chan sysfs.Command)
+	done := make(chan struct{})
+	go Run(ctx, index, commands, nil, nil, mqtt.Topics{}, stateChanges, nil, modbusEvents, done)
+
+	close(modbusEvents)
+
+	select {
+	case <-done:
+		require.Fail(t, "Run returned after Modbus event channel closed")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		require.Fail(t, "Run did not return after signal")
 	}
 }
 

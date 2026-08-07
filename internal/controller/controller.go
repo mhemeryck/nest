@@ -9,6 +9,7 @@ import (
 
 	"github.com/mhemeryck/nest/internal/controller/event"
 	"github.com/mhemeryck/nest/internal/entity"
+	"github.com/mhemeryck/nest/internal/modbus"
 	"github.com/mhemeryck/nest/internal/mqtt"
 	"github.com/mhemeryck/nest/internal/registry"
 	"github.com/mhemeryck/nest/internal/sysfs"
@@ -19,15 +20,17 @@ func Run(
 	reg *registry.Registry,
 	sysfsCommands chan<- sysfs.Command,
 	mqttCommands chan<- mqtt.Command,
+	_ chan<- modbus.Command,
 	mqttTopics mqtt.Topics,
 	stateChanges <-chan sysfs.StateChange,
 	mqttEvents <-chan mqtt.Event,
+	modbusEvents <-chan modbus.Event,
 	done chan<- struct{},
 ) {
 	defer close(done)
 	semanticEvents := make(chan event.Event, 32)
 	normalizerDone := make(chan struct{})
-	go normalizeEvents(ctx, reg, mqttTopics, stateChanges, mqttEvents, semanticEvents, normalizerDone)
+	go normalizeEvents(ctx, reg, mqttTopics, stateChanges, mqttEvents, modbusEvents, semanticEvents, normalizerDone)
 
 	dispatchEvents(ctx, reg, sysfsCommands, mqttCommands, mqttTopics, semanticEvents)
 	<-normalizerDone
@@ -39,6 +42,7 @@ func normalizeEvents(
 	mqttTopics mqtt.Topics,
 	stateChanges <-chan sysfs.StateChange,
 	mqttEvents <-chan mqtt.Event,
+	modbusEvents <-chan modbus.Event,
 	semanticEvents chan<- event.Event,
 	done chan<- struct{},
 ) {
@@ -62,6 +66,10 @@ func normalizeEvents(
 			semanticEvent, handled := semanticEventFromMQTTEvent(index, mqttTopics, mqttEvent)
 			if handled {
 				publishSemanticEvent(ctx, semanticEvents, semanticEvent)
+			}
+		case _, ok := <-modbusEvents:
+			if !ok {
+				modbusEvents = nil
 			}
 		}
 	}

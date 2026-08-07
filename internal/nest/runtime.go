@@ -12,6 +12,7 @@ func startController(
 	reg *registry.Registry,
 	sysfsActor sysfsActor,
 	mqttActor mqttActor,
+	modbusActor modbusActor,
 ) <-chan struct{} {
 	done := make(chan struct{})
 	go controller.Run(
@@ -19,9 +20,11 @@ func startController(
 		reg,
 		sysfsActor.commands,
 		mqttActor.commands,
+		modbusActor.commands,
 		mqttActor.topics,
 		sysfsActor.states,
 		mqttActor.events,
+		modbusActor.events,
 		done,
 	)
 
@@ -33,9 +36,11 @@ func waitForShutdown(
 	controllerDone <-chan struct{},
 	sysfsActor sysfsActor,
 	mqttActor mqttActor,
+	modbusActor modbusActor,
 ) {
 	<-controllerDone
 	cancel()
 	waitForSysfsActor(sysfsActor)
 	waitForMQTTActor(mqttActor)
+	waitForModbusActor(modbusActor)
 }
