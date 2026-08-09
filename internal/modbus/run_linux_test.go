@@ -49,6 +49,9 @@ func TestRunMasterOpensConfiguredPTY(t *testing.T) {
 		Port:     slave.Name(),
 		BaudRate: 19200,
 		Timeout:  100 * time.Millisecond,
+		EventSignalWrites: []entity.ModbusEventSignalWrite{{
+			UnitID: 1,
+		}},
 	}, commands, events, done)
 
 	// Test -> command channel -> Nest master -> PTY -> test slave peer.
@@ -67,7 +70,6 @@ func TestRunMasterOpensConfiguredPTY(t *testing.T) {
 
 	// Original slave handle close; peer master read unblocked after actor shutdown.
 	assert.NoError(t, slave.Close())
-	assert.NoError(t, server.Close())
 	select {
 	case <-serverDone:
 	case <-time.After(time.Second):

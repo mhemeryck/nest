@@ -31,7 +31,7 @@ func runMaster(
 ) {
 	state := &masterTransactionState{}
 	// Set up the master RTU client that issues reads and writes to slave coils.
-	client, serveDone := startMasterClient(connection, cfg.Timeout, state)
+	client, serveDone := startMasterClient(connection, cfg, state)
 	serveStopped := false
 	defer func() {
 		if err := client.Close(); err != nil {
@@ -59,12 +59,12 @@ func runMaster(
 
 func startMasterClient(
 	connection modbusone.SerialContext,
-	timeout time.Duration,
+	cfg entity.Modbus,
 	state *masterTransactionState,
 ) (*modbusone.RTUClient, <-chan error) {
 	client := modbusone.NewRTUClient(connection, 1)
-	if timeout > 0 {
-		client.SetServerProcessingTime(timeout)
+	if cfg.Timeout > 0 {
+		client.SetServerProcessingTime(cfg.Timeout)
 	}
 
 	handler := &modbusone.SimpleHandler{
@@ -85,10 +85,22 @@ func startMasterClient(
 
 	serveDone := make(chan error, 1)
 	go func() {
-		serveDone <- client.Serve(handler)
+		serveDone <- client.ServeRTU(masterHandlers(cfg, handler))
 	}()
 
 	return client, serveDone
+}
+
+func masterHandlers(cfg entity.Modbus, handler modbusone.ProtocolHandler) modbusone.MultiIDHandler {
+	handlers := make(modbusone.MultiIDHandler, len(cfg.EventSignalWrites)+len(cfg.StatePolls))
+	for _, write := range cfg.EventSignalWrites {
+		handlers[write.UnitID] = handler
+	}
+	for _, poll := range cfg.StatePolls {
+		handlers[poll.UnitID] = handler
+	}
+
+	return handlers
 }
 
 // runMasterLoop handles:

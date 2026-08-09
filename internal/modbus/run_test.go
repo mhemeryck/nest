@@ -20,7 +20,7 @@ func TestRunMasterExchangesCoilsWithInMemorySlave(t *testing.T) {
 	})
 
 	coils := make([]bool, 13)
-	server := modbusone.NewRTUServer(modbusone.NewSerialContext(serverConnection, 19200), 1)
+	server := modbusone.NewRTUServer(modbusone.NewSerialContext(serverConnection, 19200), 2)
 	serverHandler := &modbusone.SimpleHandler{
 		ReadCoils: func(address, quantity uint16) ([]bool, error) {
 			return append([]bool(nil), coils[address:address+quantity]...), nil
@@ -40,16 +40,21 @@ func TestRunMasterExchangesCoilsWithInMemorySlave(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		runMaster(ctx, modbusone.NewSerialContext(clientConnection, 19200), entity.Modbus{Timeout: time.Second}, commands, events)
+		runMaster(ctx, modbusone.NewSerialContext(clientConnection, 19200), entity.Modbus{
+			Timeout: time.Second,
+			EventSignalWrites: []entity.ModbusEventSignalWrite{{
+				UnitID: 2,
+			}},
+		}, commands, events)
 	}()
 
-	commands <- WriteCoilCommand(1, 12, true)
+	commands <- WriteCoilCommand(2, 12, true)
 	writeEvent := receiveEvent(t, events)
 	assert.Equal(t, WriteSucceededEventKind, writeEvent.Kind)
 	assert.True(t, writeEvent.Value)
 	assert.True(t, coils[12])
 
-	commands <- ReadCoilCommand(1, 12)
+	commands <- ReadCoilCommand(2, 12)
 	readEvent := receiveEvent(t, events)
 	assert.Equal(t, CoilReadEventKind, readEvent.Kind)
 	assert.True(t, readEvent.Value)
@@ -97,7 +102,12 @@ func TestRunSlaveExchangesConfiguredCoilsWithMaster(t *testing.T) {
 	masterDone := make(chan struct{})
 	go func() {
 		defer close(masterDone)
-		runMaster(masterContext, modbusone.NewSerialContext(masterConnection, 19200), entity.Modbus{Timeout: time.Second}, masterCommands, masterEvents)
+		runMaster(masterContext, modbusone.NewSerialContext(masterConnection, 19200), entity.Modbus{
+			Timeout: time.Second,
+			EventSignalWrites: []entity.ModbusEventSignalWrite{{
+				UnitID: 1,
+			}},
+		}, masterCommands, masterEvents)
 	}()
 
 	masterCommands <- WriteCoilCommand(1, 3, true)
