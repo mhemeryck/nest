@@ -456,6 +456,84 @@ func TestProjectUnitRejectsUnknownModbusRouteEndpoints(t *testing.T) {
 	assert.Contains(t, err.Error(), `units.local.actors.modbus.state_polls[0].point: unknown state point "missing_point" on unit "remote"`)
 }
 
+func TestValidateGlobalModbusRejectsMismatchedEventSignalWriteMetadata(t *testing.T) {
+	tests := []struct {
+		name         string
+		write        ModbusEventSignalWriteConfig
+		signalAction string
+		message      string
+	}{
+		{
+			name: "source",
+			write: ModbusEventSignalWriteConfig{
+				Source: "local.button.hallway_button",
+				Target: "remote.light.remote_light",
+				Action: BindingActionToggle,
+			},
+			message: `event_signal_writes[0].source: must match event signal "office_button_toggle" source "local.button.office_button"`,
+		},
+		{
+			name: "target",
+			write: ModbusEventSignalWriteConfig{
+				Source: "local.button.office_button",
+				Target: "remote.light.hallway_light",
+				Action: BindingActionToggle,
+			},
+			message: `event_signal_writes[0].target: must match event signal "office_button_toggle" target "remote.light.remote_light"`,
+		},
+		{
+			name: "action",
+			write: ModbusEventSignalWriteConfig{
+				Source: "local.button.office_button",
+				Target: "remote.light.remote_light",
+				Action: BindingActionToggle,
+			},
+			signalAction: "press",
+			message:      `event_signal_writes[0].action: must match event signal "office_button_toggle" action "press"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.write.Unit = "remote"
+			tt.write.Signal = "office_button_toggle"
+			if tt.signalAction == "" {
+				tt.signalAction = BindingActionToggle
+			}
+			global := &GlobalRoot{
+				Units: map[string]UnitConfig{
+					"local": {
+						Actors: UnitActorsConfig{
+							Modbus: UnitModbusConfig{
+								Mode:              ModbusModeMaster,
+								EventSignalWrites: []ModbusEventSignalWriteConfig{tt.write},
+							},
+						},
+					},
+					"remote": {
+						Actors: UnitActorsConfig{
+							Modbus: UnitModbusConfig{
+								Mode:   ModbusModeSlave,
+								UnitID: 1,
+								EventSignals: []ModbusEventSignalConfig{{
+									ID:     "office_button_toggle",
+									Source: "local.button.office_button",
+									Target: "remote.light.remote_light",
+									Action: tt.signalAction,
+								}},
+							},
+						},
+					},
+				},
+			}
+
+			err := validateGlobalModbus(global)
+
+			require.ErrorContains(t, err, tt.message)
+		})
+	}
+}
+
 func TestProjectUnitRejectsMultipleModbusMasters(t *testing.T) {
 	_, err := ProjectUnit(&GlobalRoot{
 		Units: map[string]UnitConfig{

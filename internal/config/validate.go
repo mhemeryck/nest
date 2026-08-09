@@ -349,8 +349,19 @@ func validateGlobalModbus(global *GlobalRoot) error {
 				errs = errors.Join(errs, fmt.Errorf("%s.unit: unknown unit %q", routePrefix, write.Unit))
 				continue
 			}
-			if !modbusEventSignalExists(target.Actors.Modbus.EventSignals, write.Signal) {
+			signal, ok := modbusEventSignalByID(target.Actors.Modbus.EventSignals, write.Signal)
+			if !ok {
 				errs = errors.Join(errs, fmt.Errorf("%s.signal: unknown event signal %q on unit %q", routePrefix, write.Signal, write.Unit))
+				continue
+			}
+			if write.Source != signal.Source {
+				errs = errors.Join(errs, fmt.Errorf("%s.source: must match event signal %q source %q", routePrefix, write.Signal, signal.Source))
+			}
+			if write.Target != signal.Target {
+				errs = errors.Join(errs, fmt.Errorf("%s.target: must match event signal %q target %q", routePrefix, write.Signal, signal.Target))
+			}
+			if write.Action != signal.Action {
+				errs = errors.Join(errs, fmt.Errorf("%s.action: must match event signal %q action %q", routePrefix, write.Signal, signal.Action))
 			}
 		}
 
@@ -376,14 +387,14 @@ func validateGlobalModbus(global *GlobalRoot) error {
 	return errs
 }
 
-func modbusEventSignalExists(signals []ModbusEventSignalConfig, id string) bool {
+func modbusEventSignalByID(signals []ModbusEventSignalConfig, id string) (ModbusEventSignalConfig, bool) {
 	for _, signal := range signals {
 		if signal.ID == id {
-			return true
+			return signal, true
 		}
 	}
 
-	return false
+	return ModbusEventSignalConfig{}, false
 }
 
 func modbusStatePointExists(points []ModbusStatePointConfig, id string) bool {
