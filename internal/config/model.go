@@ -43,6 +43,7 @@ type ModbusConfig struct {
 	Port              string                         `yaml:"port"`
 	BaudRate          int                            `yaml:"baudrate"`
 	Timeout           time.Duration                  `yaml:"timeout"`
+	PollInterval      time.Duration                  `yaml:"poll_interval"`
 	UnitID            int                            `yaml:"unit_id"`
 	EventSignals      []ModbusEventSignalConfig      `yaml:"event_signals"`
 	StatePoints       []ModbusStatePointConfig       `yaml:"state_points"`
@@ -78,6 +79,8 @@ type ModbusStatePollConfig struct {
 	Unit   string `yaml:"unit"`
 	Point  string `yaml:"point"`
 	Entity string `yaml:"entity"`
+	UnitID uint8  `yaml:"-"`
+	Coil   uint16 `yaml:"-"`
 }
 
 type DigitalInputConfig struct {

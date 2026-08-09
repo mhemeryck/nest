@@ -78,7 +78,7 @@ func Run(
 
 	switch cfg.Mode {
 	case entity.ModbusModeMaster:
-		runMaster(ctx, serialContext, cfg.Timeout, commands, events)
+		runMaster(ctx, serialContext, cfg, commands, events)
 	case entity.ModbusModeSlave:
 		runSlave(ctx, serialContext, cfg, commands, events)
 	default:

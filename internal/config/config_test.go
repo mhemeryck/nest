@@ -58,10 +58,11 @@ func TestLoadLocalMQTTFixtureProjectsPhysicalModbusConfig(t *testing.T) {
 	local, err := Load(path, "local")
 	require.NoError(t, err)
 	assert.Equal(t, ModbusConfig{
-		Mode:     ModbusModeMaster,
-		Port:     "/dev/ttyNS0",
-		BaudRate: 19200,
-		Timeout:  500 * time.Millisecond,
+		Mode:         ModbusModeMaster,
+		Port:         "/dev/ttyNS0",
+		BaudRate:     19200,
+		Timeout:      500 * time.Millisecond,
+		PollInterval: time.Second,
 		EventSignalWrites: []ModbusEventSignalWriteConfig{{
 			Unit:   "remote",
 			Signal: "office_button_toggle",
@@ -75,6 +76,8 @@ func TestLoadLocalMQTTFixtureProjectsPhysicalModbusConfig(t *testing.T) {
 			Unit:   "remote",
 			Point:  "remote_light_state",
 			Entity: "remote.light.remote_light",
+			UnitID: 1,
+			Coil:   2,
 		}},
 	}, local.Modbus)
 
@@ -322,10 +325,11 @@ func TestProjectUnitProjectsUnitModbusConfig(t *testing.T) {
 			"local": {
 				Actors: UnitActorsConfig{
 					Modbus: UnitModbusConfig{
-						Mode:     ModbusModeMaster,
-						Port:     "/dev/ttyNS0",
-						BaudRate: 19200,
-						Timeout:  500 * time.Millisecond,
+						Mode:         ModbusModeMaster,
+						Port:         "/dev/ttyNS0",
+						BaudRate:     19200,
+						Timeout:      500 * time.Millisecond,
+						PollInterval: time.Second,
 						EventSignalWrites: []ModbusEventSignalWriteConfig{{
 							Unit:   "remote",
 							Signal: "office_button_toggle",
@@ -376,6 +380,7 @@ func TestProjectUnitProjectsUnitModbusConfig(t *testing.T) {
 	assert.Equal(t, "/dev/ttyNS0", local.Modbus.Port)
 	assert.Equal(t, 19200, local.Modbus.BaudRate)
 	assert.Equal(t, 500*time.Millisecond, local.Modbus.Timeout)
+	assert.Equal(t, time.Second, local.Modbus.PollInterval)
 	assert.Equal(t, []ModbusEventSignalWriteConfig{{
 		Unit:   "remote",
 		Signal: "office_button_toggle",
@@ -389,6 +394,8 @@ func TestProjectUnitProjectsUnitModbusConfig(t *testing.T) {
 		Unit:   "remote",
 		Point:  "remote_light_state",
 		Entity: "remote.light.remote_light",
+		UnitID: 1,
+		Coil:   2,
 	}}, local.Modbus.StatePolls)
 	assert.Empty(t, local.Modbus.EventSignals)
 	assert.Empty(t, local.Modbus.StatePoints)

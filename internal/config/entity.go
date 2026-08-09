@@ -81,6 +81,7 @@ func modbusFromConfig(modbus ModbusConfig) entity.Modbus {
 		Port:              modbus.Port,
 		BaudRate:          modbus.BaudRate,
 		Timeout:           modbus.Timeout,
+		PollInterval:      modbus.PollInterval,
 		UnitID:            modbus.UnitID,
 		EventSignals:      make([]entity.ModbusEventSignal, 0, len(modbus.EventSignals)),
 		StatePoints:       make([]entity.ModbusStatePoint, 0, len(modbus.StatePoints)),
@@ -123,6 +124,8 @@ func modbusFromConfig(modbus ModbusConfig) entity.Modbus {
 			Unit:   poll.Unit,
 			Point:  entity.ModbusStatePointID(poll.Point),
 			Entity: entity.ID(poll.Entity),
+			UnitID: poll.UnitID,
+			Coil:   poll.Coil,
 		})
 	}
 

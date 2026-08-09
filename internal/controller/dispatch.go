@@ -51,15 +51,34 @@ func dispatchMQTTCommand(ctx context.Context, reg *registry.Registry, commands c
 }
 
 func dispatchModbusCommand(ctx context.Context, reg *registry.Registry, commands chan<- modbus.Command, busEvent event.Event) {
-	if commands == nil || busEvent.Kind != event.PushButtonPressedKind {
+	if commands == nil {
 		return
 	}
 
-	for _, write := range registry.ModbusEventSignalWritesBySource(reg, entity.ID(busEvent.PushButton.ButtonID)) {
+	switch busEvent.Kind {
+	case event.PushButtonPressedKind:
+		dispatchModbusEventSignalWrites(ctx, reg, commands, *busEvent.PushButton)
+	case event.LightStateKind:
+		dispatchModbusStatePoints(ctx, reg, commands, *busEvent.LightState)
+	}
+}
+
+func dispatchModbusEventSignalWrites(ctx context.Context, reg *registry.Registry, commands chan<- modbus.Command, pushButton event.PushButton) {
+	for _, write := range registry.ModbusEventSignalWritesBySource(reg, entity.ID(pushButton.ButtonID)) {
 		select {
 		case <-ctx.Done():
 			return
 		case commands <- modbus.WriteCoilCommand(write.UnitID, write.Coil, true):
+		}
+	}
+}
+
+func dispatchModbusStatePoints(ctx context.Context, reg *registry.Registry, commands chan<- modbus.Command, lightState event.LightState) {
+	for _, point := range registry.ModbusStatePointsByEntity(reg, entity.ID(lightState.LightID)) {
+		select {
+		case <-ctx.Done():
+			return
+		case commands <- modbus.SetCoilStateCommand(uint16(point.Coil), lightState.Value != 0):
 		}
 	}
 }

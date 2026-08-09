@@ -215,7 +215,28 @@ func semanticSourceEventFromMQTTMessage(index *registry.Registry, mqttTopics mqt
 }
 
 func semanticEventFromModbusEvent(index *registry.Registry, modbusEvent modbus.Event) (event.Event, bool) {
-	if modbusEvent.Kind != modbus.WriteSucceededEventKind || !modbusEvent.Value {
+	switch modbusEvent.Kind {
+	case modbus.CoilReadEventKind:
+		poll, ok := registry.ModbusStatePollByCoil(index, modbusEvent.UnitID, modbusEvent.Coil)
+		if !ok {
+			return event.Event{}, false
+		}
+		value := 0
+		if modbusEvent.Value {
+			value = 1
+		}
+		return event.Event{
+			Kind: event.LightStateKind,
+			LightState: &event.LightState{
+				LightID: entity.LightID(poll.Entity),
+				Value:   value,
+			},
+		}, true
+	case modbus.WriteSucceededEventKind:
+		if !modbusEvent.Value {
+			return event.Event{}, false
+		}
+	default:
 		return event.Event{}, false
 	}
 

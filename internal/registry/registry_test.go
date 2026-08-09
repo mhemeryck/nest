@@ -264,3 +264,31 @@ func TestModbusEventSignalByCoil(t *testing.T) {
 	_, ok = ModbusEventSignalByCoil(reg, 13)
 	assert.False(t, ok)
 }
+
+func TestModbusStatePointAndPollLookups(t *testing.T) {
+	root := &entity.Root{
+		Modbus: entity.Modbus{
+			StatePoints: []entity.ModbusStatePoint{{
+				ID:     entity.ModbusStatePointID("office_light_state"),
+				Coil:   12,
+				Entity: entity.ID("remote.light.office_light"),
+			}},
+			StatePolls: []entity.ModbusStatePoll{{
+				Unit:   "remote",
+				Point:  entity.ModbusStatePointID("office_light_state"),
+				Entity: entity.ID("remote.light.office_light"),
+				UnitID: 1,
+				Coil:   12,
+			}},
+		},
+	}
+	reg := Build(root)
+
+	assert.Equal(t, root.Modbus.StatePoints, ModbusStatePointsByEntity(reg, entity.ID("remote.light.office_light")))
+	poll, ok := ModbusStatePollByCoil(reg, 1, 12)
+	require.True(t, ok)
+	assert.Equal(t, root.Modbus.StatePolls[0], poll)
+
+	_, ok = ModbusStatePollByCoil(reg, 1, 13)
+	assert.False(t, ok)
+}

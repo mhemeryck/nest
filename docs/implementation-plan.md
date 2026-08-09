@@ -262,6 +262,9 @@ Current status:
 - The Modbus runtime starts from `internal/nest` and routes configured master event-signal writes through the controller.
 - Configured Modbus event signals can execute target-local light actions, but have not been verified on production RS-485 hardware.
 - The standalone slave RTU actor now serves configured event-signal and state-point coils and emits events for incoming event-signal writes.
+- Slave relay-backed light state now projects into configured state-point coils.
+- Master state polls read slave state points immediately at startup and periodically thereafter.
+- Master coil reads normalize into remote light state observations for existing MQTT state publishing.
 - A configured Modbus actor stopping unexpectedly stops the runtime rather than leaving an unconsumed command channel behind.
 - State projection, retries, and production hardware verification remain incomplete.
 
@@ -286,8 +289,8 @@ Remaining work is grouped into five chunks:
 
 - [x] Convert source-local semantic events into configured master event-signal coil writes.
 - [x] Convert slave event-signal writes into target-local semantic actions.
-- [ ] Project local relay state into slave state-point coils.
-- [ ] Convert master state-poll results into remote entity observations.
+- [x] Project local relay state into slave state-point coils.
+- [x] Convert master state-poll results into remote entity observations.
 
 Working assumption:
 
@@ -299,9 +302,9 @@ Working assumption:
 
 ### 4. State Polling Policy
 
-- [ ] Decide when master state polls occur.
-- [ ] Implement the minimum useful polling policy.
-- [ ] Test startup, periodic, and command-related polling behavior as applicable.
+- [x] Poll all configured state points immediately at startup and periodically thereafter.
+- [x] Implement a master-owned polling loop that serializes reads with command writes.
+- [x] Test startup and periodic polling behavior.
 
 ### 5. Hardening and Hardware Verification
 

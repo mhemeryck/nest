@@ -148,6 +148,17 @@ func projectModbusConfig(global *GlobalRoot, modbus ModbusConfig) ModbusConfig {
 			}
 		}
 	}
+	for i := range projected.StatePolls {
+		poll := &projected.StatePolls[i]
+		target := global.Units[poll.Unit]
+		poll.UnitID = uint8(target.Actors.Modbus.UnitID)
+		for _, point := range target.Actors.Modbus.StatePoints {
+			if point.ID == poll.Point {
+				poll.Coil = uint16(point.Coil)
+				break
+			}
+		}
+	}
 
 	return projected
 }
@@ -158,6 +169,7 @@ func cloneModbusConfig(modbus ModbusConfig) ModbusConfig {
 		Port:              modbus.Port,
 		BaudRate:          modbus.BaudRate,
 		Timeout:           modbus.Timeout,
+		PollInterval:      modbus.PollInterval,
 		UnitID:            modbus.UnitID,
 		EventSignals:      append([]ModbusEventSignalConfig(nil), modbus.EventSignals...),
 		StatePoints:       append([]ModbusStatePointConfig(nil), modbus.StatePoints...),

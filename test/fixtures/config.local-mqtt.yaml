@@ -17,6 +17,7 @@ units:
         port: /dev/ttyNS0
         baudrate: 19200
         timeout: 500ms
+        poll_interval: 1s
         event_signal_writes:
           - unit: remote
             signal: office_button_toggle

@@ -40,7 +40,7 @@ func TestRunMasterExchangesCoilsWithInMemorySlave(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		runMaster(ctx, modbusone.NewSerialContext(clientConnection, 19200), time.Second, commands, events)
+		runMaster(ctx, modbusone.NewSerialContext(clientConnection, 19200), entity.Modbus{Timeout: time.Second}, commands, events)
 	}()
 
 	commands <- WriteCoilCommand(1, 12, true)
@@ -97,7 +97,7 @@ func TestRunSlaveExchangesConfiguredCoilsWithMaster(t *testing.T) {
 	masterDone := make(chan struct{})
 	go func() {
 		defer close(masterDone)
-		runMaster(masterContext, modbusone.NewSerialContext(masterConnection, 19200), time.Second, masterCommands, masterEvents)
+		runMaster(masterContext, modbusone.NewSerialContext(masterConnection, 19200), entity.Modbus{Timeout: time.Second}, masterCommands, masterEvents)
 	}()
 
 	masterCommands <- WriteCoilCommand(1, 3, true)
@@ -134,6 +134,61 @@ func TestRunSlaveExchangesConfiguredCoilsWithMaster(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for slave shutdown")
 	}
+}
+
+func TestRunMasterPollsConfiguredStatePoints(t *testing.T) {
+	clientConnection, serverConnection := net.Pipe()
+	t.Cleanup(func() {
+		assert.NoError(t, clientConnection.Close())
+		assert.NoError(t, serverConnection.Close())
+	})
+
+	reads := make(chan struct{}, 2)
+	server := modbusone.NewRTUServer(modbusone.NewSerialContext(serverConnection, 19200), 1)
+	serverHandler := &modbusone.SimpleHandler{
+		ReadCoils: func(address, quantity uint16) ([]bool, error) {
+			assert.Equal(t, uint16(7), address)
+			assert.Equal(t, uint16(1), quantity)
+			select {
+			case reads <- struct{}{}:
+			default:
+			}
+			return []bool{true}, nil
+		},
+	}
+	serverDone := make(chan error, 1)
+	go func() { serverDone <- server.Serve(serverHandler) }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	events := make(chan Event, 2)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		runMaster(ctx, modbusone.NewSerialContext(clientConnection, 19200), entity.Modbus{
+			Timeout:      time.Second,
+			PollInterval: 10 * time.Millisecond,
+			StatePolls: []entity.ModbusStatePoll{{
+				UnitID: 1,
+				Coil:   7,
+			}},
+		}, nil, events)
+	}()
+
+	<-reads
+	pollEvent := receiveEvent(t, events)
+	assert.Equal(t, Event{Kind: CoilReadEventKind, UnitID: 1, Coil: 7, Value: true}, pollEvent)
+	<-reads
+	assert.Empty(t, events)
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for master shutdown")
+	}
+
+	<-serverDone
 }
 
 func TestCommandPDU(t *testing.T) {

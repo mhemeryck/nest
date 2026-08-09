@@ -63,10 +63,11 @@ func TestToEntityRoot(t *testing.T) {
 			Action: "toggle",
 		}},
 		Modbus: ModbusConfig{
-			Mode:     ModbusModeMaster,
-			Port:     "/dev/ttyNS0",
-			BaudRate: 19200,
-			Timeout:  500 * time.Millisecond,
+			Mode:         ModbusModeMaster,
+			Port:         "/dev/ttyNS0",
+			BaudRate:     19200,
+			Timeout:      500 * time.Millisecond,
+			PollInterval: time.Second,
 			EventSignalWrites: []ModbusEventSignalWriteConfig{{
 				Unit:   "controller_2",
 				Signal: "hall_button_toggle",
@@ -107,6 +108,7 @@ func TestToEntityRoot(t *testing.T) {
 		Port:         "/dev/ttyNS0",
 		BaudRate:     19200,
 		Timeout:      500 * time.Millisecond,
+		PollInterval: time.Second,
 		EventSignals: []entity.ModbusEventSignal{},
 		StatePoints:  []entity.ModbusStatePoint{},
 		EventSignalWrites: []entity.ModbusEventSignalWrite{{

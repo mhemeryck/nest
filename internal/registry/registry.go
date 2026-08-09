@@ -23,8 +23,15 @@ type Registry struct {
 	remoteTargetBindingsBySourceID    map[entity.ID][]entity.Binding
 	modbusEventSignalsByCoil          map[int]entity.ModbusEventSignal
 	modbusEventSignalWritesBySourceID map[entity.ID][]entity.ModbusEventSignalWrite
+	modbusStatePointsByEntityID       map[entity.ID][]entity.ModbusStatePoint
+	modbusStatePollsByCoil            map[modbusCoilKey]entity.ModbusStatePoll
 	relaysByID                        map[entity.RelayID]entity.Relay
 	relaysByDevice                    map[entity.SysfsDeviceID]entity.Relay
+}
+
+type modbusCoilKey struct {
+	unitID uint8
+	coil   uint16
 }
 
 func Build(root *entity.Root) *Registry {
@@ -45,6 +52,8 @@ func Build(root *entity.Root) *Registry {
 		remoteTargetBindingsBySourceID:    make(map[entity.ID][]entity.Binding),
 		modbusEventSignalsByCoil:          make(map[int]entity.ModbusEventSignal, len(root.Modbus.EventSignals)),
 		modbusEventSignalWritesBySourceID: make(map[entity.ID][]entity.ModbusEventSignalWrite),
+		modbusStatePointsByEntityID:       make(map[entity.ID][]entity.ModbusStatePoint),
+		modbusStatePollsByCoil:            make(map[modbusCoilKey]entity.ModbusStatePoll, len(root.Modbus.StatePolls)),
 		relaysByID:                        make(map[entity.RelayID]entity.Relay, len(root.Relays)),
 		relaysByDevice:                    make(map[entity.SysfsDeviceID]entity.Relay, len(root.Relays)),
 	}
@@ -86,6 +95,12 @@ func Build(root *entity.Root) *Registry {
 	for _, write := range root.Modbus.EventSignalWrites {
 		index.modbusEventSignalWritesBySourceID[write.Source] = append(index.modbusEventSignalWritesBySourceID[write.Source], write)
 	}
+	for _, point := range root.Modbus.StatePoints {
+		index.modbusStatePointsByEntityID[point.Entity] = append(index.modbusStatePointsByEntityID[point.Entity], point)
+	}
+	for _, poll := range root.Modbus.StatePolls {
+		index.modbusStatePollsByCoil[modbusCoilKey{unitID: poll.UnitID, coil: poll.Coil}] = poll
+	}
 
 	return index
 }
@@ -120,6 +135,7 @@ func copyModbus(modbus entity.Modbus) entity.Modbus {
 		Port:              modbus.Port,
 		BaudRate:          modbus.BaudRate,
 		Timeout:           modbus.Timeout,
+		PollInterval:      modbus.PollInterval,
 		UnitID:            modbus.UnitID,
 		EventSignals:      slices.Clone(modbus.EventSignals),
 		StatePoints:       slices.Clone(modbus.StatePoints),
@@ -182,6 +198,15 @@ func ModbusEventSignalByCoil(index *Registry, coil uint16) (entity.ModbusEventSi
 
 func ModbusEventSignalWritesBySource(index *Registry, sourceID entity.ID) []entity.ModbusEventSignalWrite {
 	return slices.Clone(index.modbusEventSignalWritesBySourceID[sourceID])
+}
+
+func ModbusStatePointsByEntity(index *Registry, entityID entity.ID) []entity.ModbusStatePoint {
+	return slices.Clone(index.modbusStatePointsByEntityID[entityID])
+}
+
+func ModbusStatePollByCoil(index *Registry, unitID uint8, coil uint16) (entity.ModbusStatePoll, bool) {
+	poll, ok := index.modbusStatePollsByCoil[modbusCoilKey{unitID: unitID, coil: coil}]
+	return poll, ok
 }
 
 func LightByID(index *Registry, lightID entity.LightID) (entity.Light, bool) {

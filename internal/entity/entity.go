@@ -65,6 +65,7 @@ type Modbus struct {
 	Port              string
 	BaudRate          int
 	Timeout           time.Duration
+	PollInterval      time.Duration
 	UnitID            int
 	EventSignals      []ModbusEventSignal
 	StatePoints       []ModbusStatePoint
@@ -100,6 +101,8 @@ type ModbusStatePoll struct {
 	Unit   string
 	Point  ModbusStatePointID
 	Entity ID
+	UnitID uint8
+	Coil   uint16
 }
 
 type DigitalInput struct {

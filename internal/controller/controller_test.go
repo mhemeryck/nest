@@ -288,6 +288,53 @@ func TestProjectedConfigPushButtonDispatchesModbusEventSignal(t *testing.T) {
 	assert.Equal(t, modbus.WriteCoilCommand(1, 1, true), <-commands)
 }
 
+func TestLightStateProjectsModbusSlaveStatePoint(t *testing.T) {
+	commands := make(chan modbus.Command, 1)
+	reg := registry.Build(&entity.Root{
+		Modbus: entity.Modbus{
+			StatePoints: []entity.ModbusStatePoint{{
+				Coil:   2,
+				Entity: entity.ID("remote.light.remote_light"),
+			}},
+		},
+	})
+
+	dispatchEvent(t.Context(), reg, nil, nil, commands, mqtt.Topics{}, event.Event{
+		Kind: event.LightStateKind,
+		LightState: &event.LightState{
+			LightID: entity.LightID("remote.light.remote_light"),
+			Value:   1,
+		},
+	})
+
+	assert.Equal(t, modbus.SetCoilStateCommand(2, true), <-commands)
+}
+
+func TestModbusCoilReadProducesRemoteLightState(t *testing.T) {
+	reg := registry.Build(&entity.Root{
+		Modbus: entity.Modbus{
+			StatePolls: []entity.ModbusStatePoll{{
+				Entity: entity.ID("remote.light.remote_light"),
+				UnitID: 1,
+				Coil:   2,
+			}},
+		},
+	})
+
+	semanticEvent, handled := semanticEventFromModbusEvent(reg, modbus.Event{
+		Kind:   modbus.CoilReadEventKind,
+		UnitID: 1,
+		Coil:   2,
+		Value:  true,
+	})
+
+	require.True(t, handled)
+	assert.Equal(t, event.LightStateKind, semanticEvent.Kind)
+	assert.Equal(t, entity.LightID("remote.light.remote_light"), semanticEvent.LightState.LightID)
+	assert.Equal(t, 1, semanticEvent.LightState.Value)
+	assert.Empty(t, semanticEvent.LightState.RelayID)
+}
+
 func TestProjectedConfigMQTTSourceEventDoesNotExecuteModbusBinding(t *testing.T) {
 	configRoot, err := config.Load(filepath.Join("..", "..", "test", "fixtures", "config.local-mqtt.yaml"), "remote")
 	require.NoError(t, err)

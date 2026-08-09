@@ -92,6 +92,9 @@ func validateModbusPhysicalConfig(modbus ModbusConfig) error {
 	if modbus.Timeout < 0 {
 		errs = errors.Join(errs, fmt.Errorf("modbus.timeout: must not be negative"))
 	}
+	if modbus.PollInterval < 0 {
+		errs = errors.Join(errs, fmt.Errorf("modbus.poll_interval: must not be negative"))
+	}
 	if modbus.Mode == ModbusModeSlave && (modbus.UnitID < 1 || modbus.UnitID > 247) {
 		errs = errors.Join(errs, fmt.Errorf("modbus.unit_id: must be between 1 and 247"))
 	}
@@ -358,8 +361,11 @@ func validateGlobalModbus(global *GlobalRoot) error {
 				errs = errors.Join(errs, fmt.Errorf("%s.unit: unknown unit %q", routePrefix, poll.Unit))
 				continue
 			}
-			if !modbusStatePointExists(target.Actors.Modbus.StatePoints, poll.Point) {
+			point, ok := modbusStatePointByID(target.Actors.Modbus.StatePoints, poll.Point)
+			if !ok {
 				errs = errors.Join(errs, fmt.Errorf("%s.point: unknown state point %q on unit %q", routePrefix, poll.Point, poll.Unit))
+			} else if point.Entity != poll.Entity {
+				errs = errors.Join(errs, fmt.Errorf("%s.entity: must match state point %q entity %q", routePrefix, poll.Point, point.Entity))
 			}
 		}
 	}
@@ -381,13 +387,18 @@ func modbusEventSignalExists(signals []ModbusEventSignalConfig, id string) bool 
 }
 
 func modbusStatePointExists(points []ModbusStatePointConfig, id string) bool {
+	_, ok := modbusStatePointByID(points, id)
+	return ok
+}
+
+func modbusStatePointByID(points []ModbusStatePointConfig, id string) (ModbusStatePointConfig, bool) {
 	for _, point := range points {
 		if point.ID == id {
-			return true
+			return point, true
 		}
 	}
 
-	return false
+	return ModbusStatePointConfig{}, false
 }
 
 func validateSysfs(sysfs SysfsConfig) error {
