@@ -1029,6 +1029,61 @@ func TestValidate(t *testing.T) {
 	}
 }
 
+func TestValidateRejectsDuplicateModbusCoils(t *testing.T) {
+	tests := []struct {
+		name         string
+		eventSignals []ModbusEventSignalConfig
+		statePoints  []ModbusStatePointConfig
+		message      string
+	}{
+		{
+			name: "event signals",
+			eventSignals: []ModbusEventSignalConfig{
+				{ID: "button_a", Coil: 1, Source: "local.button.button_a", Target: "local.light.light", Action: BindingActionToggle},
+				{ID: "button_b", Coil: 1, Source: "local.button.button_b", Target: "local.light.light", Action: BindingActionToggle},
+			},
+			message: "modbus.event_signals[1].coil: duplicates modbus.event_signals[0].coil at address 1",
+		},
+		{
+			name: "state points",
+			statePoints: []ModbusStatePointConfig{
+				{ID: "light_a", Coil: 1, Entity: "local.light.light_a"},
+				{ID: "light_b", Coil: 1, Entity: "local.light.light_b"},
+			},
+			message: "modbus.state_points[1].coil: duplicates modbus.state_points[0].coil at address 1",
+		},
+		{
+			name: "event signal and state point",
+			eventSignals: []ModbusEventSignalConfig{
+				{ID: "button", Coil: 1, Source: "local.button.button", Target: "local.light.light", Action: BindingActionToggle},
+			},
+			statePoints: []ModbusStatePointConfig{
+				{ID: "light", Coil: 1, Entity: "local.light.light"},
+			},
+			message: "modbus.state_points[0].coil: duplicates modbus.event_signals[0].coil at address 1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := Validate(&Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+				Modbus: ModbusConfig{
+					Mode:         ModbusModeSlave,
+					Port:         "/dev/ttyNS0",
+					BaudRate:     19200,
+					UnitID:       1,
+					EventSignals: tt.eventSignals,
+					StatePoints:  tt.statePoints,
+				},
+			})
+
+			require.ErrorContains(t, err, tt.message)
+		})
+	}
+}
+
 func TestValidateAcceptsValidFile(t *testing.T) {
 	file := Root{
 		Sysfs: SysfsConfig{Root: "/tmp"},

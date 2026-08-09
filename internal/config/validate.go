@@ -80,6 +80,7 @@ func validateModbusSlave(modbus ModbusConfig) error {
 		validateSlaveUnitID(modbus),
 		validateModbusEventSignals(modbus.EventSignals),
 		validateModbusStatePoints(modbus.StatePoints),
+		validateUniqueModbusCoils(modbus.EventSignals, modbus.StatePoints),
 	)
 }
 
@@ -194,6 +195,30 @@ func validateModbusStatePoints(points []ModbusStatePointConfig) error {
 	}
 
 	return errors.Join(errs, validateUniqueValues("modbus.state_points", "id", "id", ids))
+}
+
+func validateUniqueModbusCoils(signals []ModbusEventSignalConfig, points []ModbusStatePointConfig) error {
+	seen := make(map[int]string, len(signals)+len(points))
+	var errs error
+	register := func(field string, coil int) {
+		if coil < 0 || coil > 65535 {
+			return
+		}
+		if previous, exists := seen[coil]; exists {
+			errs = errors.Join(errs, fmt.Errorf("%s: duplicates %s at address %d", field, previous, coil))
+			return
+		}
+		seen[coil] = field
+	}
+
+	for i, signal := range signals {
+		register(fmt.Sprintf("modbus.event_signals[%d].coil", i), signal.Coil)
+	}
+	for i, point := range points {
+		register(fmt.Sprintf("modbus.state_points[%d].coil", i), point.Coil)
+	}
+
+	return errs
 }
 
 func validateModbusCoil(field string, coil int) error {
