@@ -34,6 +34,7 @@ Keep items here short so they are easy to scan and revisit later.
 
 - Reintroduce MQTT as a thin external interface once local semantics are stable.
 - Add Modbus RTU for inter-unit control after the local control loop is proven.
+- Investigate GPIO v2 ABI over UniPi sysfs.
 - Revisit Home Assistant auto-discovery once the external contract is stable.
 - If Home Assistant MQTT auto-discovery is added, expose the MQTT-facing options already modeled by `nest` rather than inventing a separate HA-specific configuration layer.
 - Expose an API for managing configuration so external tools can program controller state.
@@ -44,5 +45,6 @@ Keep items here short so they are easy to scan and revisit later.
 - Add a dedicated `validate` command instead of only a `-validate` flag if the CLI grows.
 - Add example configs for common unit roles such as input-only, relay-only, and local cover control.
 - Decide how much configuration should be checked against live sysfs state at startup.
+- Reproducible NixOS UniPi controller images.
 - Expose a local web UI for controller inspection and configuration.
 - Keep the web UI simple and server-driven, using something like `htmx` rather than a heavy frontend framework.
