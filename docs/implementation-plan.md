@@ -248,7 +248,7 @@ Current direction:
 - [ ] Map remote relay targets to Modbus coils
 - [x] Read coils for relay state feedback
 - [x] Write coils for relay control
-- [ ] Define retry and error behavior for transient serial failures
+- [x] Define no automatic retry behavior for transient transaction and serial failures
 - [ ] Decide whether output units execute commands directly or expose relay coils only
 
 **Deliverable**: `nest` has a tested Modbus RTU transport foundation suitable for merging, but it is not yet connected to production runtime control.
@@ -266,7 +266,10 @@ Current status:
 - Master state polls read slave state points immediately at startup and periodically thereafter.
 - Master coil reads normalize into remote light state observations for existing MQTT state publishing.
 - A configured Modbus actor stopping unexpectedly stops the runtime rather than leaving an unconsumed command channel behind.
-- State projection, retries, and production hardware verification remain incomplete.
+- Transaction failures emit failure events without automatic retries.
+- Failed state polls retry on the next configured polling interval.
+- Fatal serial or Modbus client failures stop the actor and runtime.
+- Production hardware verification remains deferred.
 
 Remaining work is grouped into five chunks:
 
@@ -308,10 +311,11 @@ Working assumption:
 
 ### 5. Hardening and Hardware Verification
 
-- [ ] Define retry and transient serial-error behavior.
-- [ ] Add a PTY-backed integration test for the production `modbus.Run` serial-opening path.
-- [ ] Test master and slave actors together across the serial abstraction.
-- [ ] Verify the complete path against physical RS-485 hardware.
+- [x] Define no automatic transaction retries: command failures emit events; failed polls retry on the next interval.
+- [x] Keep fatal serial and Modbus client failures actor-fatal until production evidence justifies reconnect behavior.
+- [x] Add a PTY-backed integration test for the production `modbus.Run` serial-opening path.
+- [x] Test master and slave actors together across the serial abstraction.
+- [ ] Verify the complete path against physical RS-485 hardware when a component migration requires it.
 
 ## Phase 9: Local Cover Controller
 
