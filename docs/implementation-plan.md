@@ -245,11 +245,11 @@ Current direction:
 
 - [x] Serial port configuration
 - [x] Modbus unit ID configuration
-- [ ] Map remote relay targets to Modbus coils
+- [x] Map remote semantic target actions to slave event-signal coils
 - [x] Read coils for relay state feedback
 - [x] Write coils for relay control
 - [x] Define no automatic retry behavior for transient transaction and serial failures
-- [ ] Decide whether output units execute commands directly or expose relay coils only
+- [x] Keep output-unit semantic execution local; no master-to-slave direct relay-coil writes
 
 **Deliverable**: `nest` has a tested Modbus RTU transport foundation suitable for merging, but it is not yet connected to production runtime control.
 
@@ -261,6 +261,8 @@ Current status:
 - Master coil reads and writes are proven against an in-memory ModbusOne RTU server.
 - The Modbus runtime starts from `internal/nest` and routes configured master event-signal writes through the controller.
 - Configured Modbus event signals can execute target-local light actions, but have not been verified on production RS-485 hardware.
+- Master-to-slave writes target slave event-signal coils rather than direct relay coils.
+- Slave controllers own semantic target execution and local relay writes.
 - The standalone slave RTU actor now serves configured event-signal and state-point coils and emits events for incoming event-signal writes.
 - Slave relay-backed light state now projects into configured state-point coils.
 - Master state polls read slave state points immediately at startup and periodically thereafter.
@@ -315,7 +317,7 @@ Working assumption:
 - [x] Keep fatal serial and Modbus client failures actor-fatal until production evidence justifies reconnect behavior.
 - [x] Add a PTY-backed integration test for the production `modbus.Run` serial-opening path.
 - [x] Test master and slave actors together across the serial abstraction.
-- [ ] Verify the complete path against physical RS-485 hardware when a component migration requires it.
+- [ ] ~~Verify the complete path against physical RS-485 hardware when a component migration requires it.~~
 
 ## Phase 9: Local Cover Controller
 
