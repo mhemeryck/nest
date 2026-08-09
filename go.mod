@@ -3,6 +3,7 @@ module github.com/mhemeryck/nest
 go 1.26
 
 require (
+	github.com/creack/pty v1.1.24
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
