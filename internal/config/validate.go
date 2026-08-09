@@ -329,6 +329,9 @@ func validateGlobalBindings(global *GlobalRoot) error {
 				}
 			} else {
 				transportErr = validateExecutionTransport(prefix+".execution_transport", binding.ExecutionTransport)
+				if binding.ExecutionTransport == string(entity.ExecutionTransportModbus) {
+					transportErr = errors.Join(transportErr, validateModbusBindingRoute(global, prefix, binding, sourceUnit, targetUnit))
+				}
 			}
 
 			key := binding.Source + "\x00" + binding.Target + "\x00" + binding.Action
@@ -352,6 +355,19 @@ func validateGlobalBindings(global *GlobalRoot) error {
 	}
 
 	return errs
+}
+
+func validateModbusBindingRoute(global *GlobalRoot, prefix string, binding GlobalBindingConfig, sourceUnit, targetUnit string) error {
+	for _, write := range global.Units[sourceUnit].Actors.Modbus.EventSignalWrites {
+		if write.Unit == targetUnit &&
+			write.Source == binding.Source &&
+			write.Target == binding.Target &&
+			write.Action == binding.Action {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("%s: missing matching Modbus event signal write", prefix)
 }
 
 func validateExecutionTransport(field string, value string) error {

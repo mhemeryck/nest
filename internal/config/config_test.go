@@ -319,6 +319,33 @@ func TestProjectUnitRejectsUnknownGlobalBindingEndpoints(t *testing.T) {
 	assert.Contains(t, err.Error(), `bindings[1].target: unknown light "controller_2.light.missing_light"`)
 }
 
+func TestValidateGlobalBindingsRejectsModbusBindingWithoutWriteRoute(t *testing.T) {
+	global := &GlobalRoot{
+		Units: map[string]UnitConfig{
+			"master": {
+				Entities: UnitEntitiesConfig{
+					Buttons: []UnitPushButtonConfig{{ID: "button"}},
+				},
+			},
+			"slave": {
+				Entities: UnitEntitiesConfig{
+					Lights: []UnitLightConfig{{ID: "light"}},
+				},
+			},
+		},
+		Bindings: []GlobalBindingConfig{{
+			Source:             "master.button.button",
+			Target:             "slave.light.light",
+			Action:             BindingActionToggle,
+			ExecutionTransport: "modbus",
+		}},
+	}
+
+	err := validateGlobalBindings(global)
+
+	require.ErrorContains(t, err, `bindings[0]: missing matching Modbus event signal write`)
+}
+
 func TestProjectUnitProjectsUnitModbusConfig(t *testing.T) {
 	global := &GlobalRoot{
 		Units: map[string]UnitConfig{
