@@ -888,6 +888,43 @@ func TestValidate(t *testing.T) {
 			message: `modbus.mode: unsupported mode "both"`,
 		},
 		{
+			name: "requires modbus mode when configured",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+				Modbus: ModbusConfig{
+					Port:     "/dev/ttyNS0",
+					BaudRate: 19200,
+				},
+			},
+			message: "modbus.mode: required when Modbus is configured",
+		},
+		{
+			name: "requires modbus port in slave mode",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+				Modbus: ModbusConfig{
+					Mode:     ModbusModeSlave,
+					BaudRate: 19200,
+					UnitID:   1,
+				},
+			},
+			message: "modbus.port: required",
+		},
+		{
+			name: "requires positive modbus baud rate when configured",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+				Modbus: ModbusConfig{
+					Mode: ModbusModeMaster,
+					Port: "/dev/ttyNS0",
+				},
+			},
+			message: "modbus.baudrate: must be positive",
+		},
+		{
 			name: "rejects slave modbus write routes",
 			file: Root{
 				Sysfs:  SysfsConfig{Root: "/tmp"},

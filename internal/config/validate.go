@@ -46,62 +46,118 @@ func Validate(f *Root) error {
 }
 
 func validateModbus(modbus ModbusConfig) error {
-	var errs error
-
 	switch modbus.Mode {
-	case "", ModbusModeMaster, ModbusModeSlave:
+	case "":
+		if modbusConfigured(modbus) {
+			return fmt.Errorf("modbus.mode: required when Modbus is configured")
+		}
+		return nil
+	case ModbusModeMaster:
+		return validateModbusMaster(modbus)
+	case ModbusModeSlave:
+		return validateModbusSlave(modbus)
 	default:
-		errs = errors.Join(errs, fmt.Errorf("modbus.mode: unsupported mode %q", modbus.Mode))
+		return fmt.Errorf("modbus.mode: unsupported mode %q", modbus.Mode)
 	}
+}
 
-	if modbus.Mode != ModbusModeSlave {
-		if len(modbus.EventSignals) > 0 {
-			errs = errors.Join(errs, fmt.Errorf("modbus.event_signals: requires slave mode"))
-		}
-		if len(modbus.StatePoints) > 0 {
-			errs = errors.Join(errs, fmt.Errorf("modbus.state_points: requires slave mode"))
-		}
-	}
-	if modbus.Mode != ModbusModeMaster {
-		if len(modbus.EventSignalWrites) > 0 {
-			errs = errors.Join(errs, fmt.Errorf("modbus.event_signal_writes: requires master mode"))
-		}
-		if len(modbus.StatePolls) > 0 {
-			errs = errors.Join(errs, fmt.Errorf("modbus.state_polls: requires master mode"))
-		}
-	}
-
-	errs = errors.Join(
-		errs,
-		validateModbusPhysicalConfig(modbus),
-		validateModbusEventSignals(modbus.EventSignals),
-		validateModbusStatePoints(modbus.StatePoints),
+func validateModbusMaster(modbus ModbusConfig) error {
+	return errors.Join(
+		validateModbusSerialConfig(modbus),
+		validateModbusDurations(modbus),
+		validateModbusSlaveEndpoints(modbus),
+		validateMasterUnitID(modbus),
 		validateModbusEventSignalWrites(modbus.EventSignalWrites),
 		validateModbusStatePolls(modbus.StatePolls),
 	)
-
-	return errs
 }
 
-func validateModbusPhysicalConfig(modbus ModbusConfig) error {
+func validateModbusSlave(modbus ModbusConfig) error {
+	return errors.Join(
+		validateModbusSerialConfig(modbus),
+		validateModbusDurations(modbus),
+		validateModbusMasterRoutes(modbus),
+		validateSlaveUnitID(modbus),
+		validateModbusEventSignals(modbus.EventSignals),
+		validateModbusStatePoints(modbus.StatePoints),
+	)
+}
+
+func modbusConfigured(modbus ModbusConfig) bool {
+	return modbus.Port != "" ||
+		modbus.BaudRate != 0 ||
+		modbus.Timeout != 0 ||
+		modbus.PollInterval != 0 ||
+		modbus.UnitID != 0 ||
+		len(modbus.EventSignals) != 0 ||
+		len(modbus.StatePoints) != 0 ||
+		len(modbus.EventSignalWrites) != 0 ||
+		len(modbus.StatePolls) != 0
+}
+
+func validateModbusSerialConfig(modbus ModbusConfig) error {
+	return errors.Join(
+		validateRequiredField("modbus.port", modbus.Port),
+		validateModbusBaudRate(modbus.BaudRate),
+	)
+}
+
+func validateModbusBaudRate(baudRate int) error {
+	if baudRate <= 0 {
+		return fmt.Errorf("modbus.baudrate: must be positive")
+	}
+
+	return nil
+}
+
+func validateModbusDurations(modbus ModbusConfig) error {
 	var errs error
 
-	if modbus.BaudRate < 0 {
-		errs = errors.Join(errs, fmt.Errorf("modbus.baudrate: must not be negative"))
-	}
 	if modbus.Timeout < 0 {
 		errs = errors.Join(errs, fmt.Errorf("modbus.timeout: must not be negative"))
 	}
 	if modbus.PollInterval < 0 {
 		errs = errors.Join(errs, fmt.Errorf("modbus.poll_interval: must not be negative"))
 	}
-	if modbus.Mode == ModbusModeSlave && (modbus.UnitID < 1 || modbus.UnitID > 247) {
-		errs = errors.Join(errs, fmt.Errorf("modbus.unit_id: must be between 1 and 247"))
+	return errs
+}
+
+func validateModbusSlaveEndpoints(modbus ModbusConfig) error {
+	var errs error
+	if len(modbus.EventSignals) > 0 {
+		errs = errors.Join(errs, fmt.Errorf("modbus.event_signals: requires slave mode"))
 	}
-	if modbus.Mode != ModbusModeSlave && modbus.UnitID != 0 {
-		errs = errors.Join(errs, fmt.Errorf("modbus.unit_id: requires slave mode"))
+	if len(modbus.StatePoints) > 0 {
+		errs = errors.Join(errs, fmt.Errorf("modbus.state_points: requires slave mode"))
 	}
 	return errs
+}
+
+func validateModbusMasterRoutes(modbus ModbusConfig) error {
+	var errs error
+	if len(modbus.EventSignalWrites) > 0 {
+		errs = errors.Join(errs, fmt.Errorf("modbus.event_signal_writes: requires master mode"))
+	}
+	if len(modbus.StatePolls) > 0 {
+		errs = errors.Join(errs, fmt.Errorf("modbus.state_polls: requires master mode"))
+	}
+	return errs
+}
+
+func validateSlaveUnitID(modbus ModbusConfig) error {
+	if modbus.UnitID < 1 || modbus.UnitID > 247 {
+		return fmt.Errorf("modbus.unit_id: must be between 1 and 247")
+	}
+
+	return nil
+}
+
+func validateMasterUnitID(modbus ModbusConfig) error {
+	if modbus.UnitID != 0 {
+		return fmt.Errorf("modbus.unit_id: requires slave mode")
+	}
+
+	return nil
 }
 
 func validateModbusEventSignals(signals []ModbusEventSignalConfig) error {
