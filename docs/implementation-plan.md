@@ -356,6 +356,29 @@ Working assumption:
 
 ## Phase 11: Light Control Migration
 
+### Pre-Migration: `evok2mqtt` Replacement
+
+- [ ] Capture Edison and Tesla MQTT topics, discovery, availability, retained state, and command behavior
+- [ ] Configure Nest as the MQTT replacement while the Python light controller remains local-control owner
+- [ ] Edison rollout with `evok2mqtt` stopped
+- [ ] Verify command behavior, restart and reconnect state convergence, broker-outage local control, and rollback
+- [ ] Tesla rollout after Edison acceptance
+- [ ] Preserve the current MQTT contract unless an intentional migration is documented
+
+Boundary:
+
+- Nest: MQTT integration and sysfs I/O
+- Python light controller: local button behavior and light-control semantics
+- Shared UniPi sysfs hardware boundary
+- No concurrent `evok2mqtt` and Nest MQTT integrations
+
+Acceptance:
+
+- Existing Home Assistant entities and commands
+- Local buttons with Nest or MQTT unavailable
+- State recovery after Nest restart and broker reconnection
+- Tested rollback to `evok2mqtt`
+
 - [ ] Start with one migrated light circuit
 - [ ] Enable relay writes only for selected migrated lights
 - [ ] Compare command execution and relay feedback through MQTT observability
