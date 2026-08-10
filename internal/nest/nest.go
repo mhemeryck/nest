@@ -44,7 +44,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	slog.Info("runtime started", "message", "press Ctrl+C to exit")
 
-	err = waitForShutdown(cancel, controllerDone, sysfsActor, mqttActor, modbusActor)
+	err = waitForShutdown(ctx, cancel, controllerDone, sysfsActor, mqttActor, modbusActor)
 
 	slog.Info("shutting down")
 	return err

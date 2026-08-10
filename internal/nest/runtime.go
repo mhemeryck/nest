@@ -33,6 +33,7 @@ func startController(
 }
 
 func waitForShutdown(
+	ctx context.Context,
 	cancel context.CancelFunc,
 	controllerDone <-chan struct{},
 	sysfsActor sysfsActor,
@@ -44,7 +45,9 @@ func waitForShutdown(
 	case <-controllerDone:
 		cancel()
 	case <-modbusActor.done:
-		shutdownErr = fmt.Errorf("modbus actor stopped")
+		if ctx.Err() == nil {
+			shutdownErr = fmt.Errorf("modbus actor stopped")
+		}
 		cancel()
 		<-controllerDone
 	}
