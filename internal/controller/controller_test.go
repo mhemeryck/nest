@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -368,6 +369,36 @@ func TestNormalizeModbusEventIgnoresNonTriggerWrites(t *testing.T) {
 	} {
 		_, handled := semanticEventFromModbusEvent(index, modbusEvent)
 		assert.False(t, handled, "event: %#v", modbusEvent)
+	}
+}
+
+func TestNormalizeModbusFailureEvents(t *testing.T) {
+	index := registry.Build(&entity.Root{})
+
+	for _, test := range []struct {
+		name        string
+		modbusEvent modbus.Event
+	}{
+		{
+			name:        "write",
+			modbusEvent: modbus.Event{Kind: modbus.WriteFailedEventKind, UnitID: 2, Coil: 10, Error: "timed out"},
+		},
+		{
+			name:        "read",
+			modbusEvent: modbus.Event{Kind: modbus.ReadFailedEventKind, UnitID: 3, Coil: 11, Error: "slave unavailable"},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			logs := captureLogs(t, func() {
+				_, handled := semanticEventFromModbusEvent(index, test.modbusEvent)
+				assert.False(t, handled)
+			})
+
+			assert.Contains(t, logs, "modbus coil "+test.name+" failed")
+			assert.Contains(t, logs, "unit_id="+strconv.Itoa(int(test.modbusEvent.UnitID)))
+			assert.Contains(t, logs, "coil="+strconv.Itoa(int(test.modbusEvent.Coil)))
+			assert.Contains(t, logs, test.modbusEvent.Error)
+		})
 	}
 }
 

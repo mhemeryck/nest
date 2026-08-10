@@ -216,6 +216,12 @@ func semanticSourceEventFromMQTTMessage(index *registry.Registry, mqttTopics mqt
 
 func semanticEventFromModbusEvent(index *registry.Registry, modbusEvent modbus.Event) (event.Event, bool) {
 	switch modbusEvent.Kind {
+	case modbus.WriteFailedEventKind:
+		slog.Error("modbus coil write failed", "unit_id", modbusEvent.UnitID, "coil", modbusEvent.Coil, "error", modbusEvent.Error)
+		return event.Event{}, false
+	case modbus.ReadFailedEventKind:
+		slog.Error("modbus coil read failed", "unit_id", modbusEvent.UnitID, "coil", modbusEvent.Coil, "error", modbusEvent.Error)
+		return event.Event{}, false
 	case modbus.CoilReadEventKind:
 		poll, ok := registry.ModbusStatePollByCoil(index, modbusEvent.UnitID, modbusEvent.Coil)
 		if !ok {
