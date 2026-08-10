@@ -37,6 +37,9 @@ func startConfiguredWorkers(ctx context.Context, configs []WorkerConfig, states 
 		workers.wg.Add(1)
 		go func(cfg WorkerConfig, commandCh <-chan Command) {
 			defer workers.wg.Done()
+			if !publishInitialRelayStates(ctx, cfg.Devices, states) {
+				return
+			}
 			pollWorker(ctx, cfg, commandCh, states)
 		}(cfg, commandCh)
 	}

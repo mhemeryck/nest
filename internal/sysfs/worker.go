@@ -55,6 +55,29 @@ func pollDevices(devices []*Device, ctx context.Context, states chan<- StateChan
 	}
 }
 
+func publishInitialRelayStates(ctx context.Context, devices []*Device, states chan<- StateChange) bool {
+	for _, device := range devices {
+		if device.Type != RelayOutput {
+			continue
+		}
+		value, err := readDevice(device)
+		if err != nil {
+			slog.Error("sysfs startup read failed", "device_id", device.Identifier, "path", device.Path, "error", err)
+			continue
+		}
+		if !publishState(ctx, states, StateChange{
+			Device:   *device,
+			OldValue: value,
+			NewValue: value,
+			Initial:  true,
+		}) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func handleCommand(devicesByID map[string]*Device, cmd Command, ctx context.Context, states chan<- StateChange) {
 	device, ok := devicesByID[cmd.DeviceID]
 	if !ok {

@@ -7,6 +7,7 @@ type StateChange struct {
 	OldValue Value
 	NewValue Value
 	IsRising bool
+	Initial  bool
 }
 
 type CommandKind string

@@ -311,6 +311,38 @@ func TestLightStateProjectsModbusSlaveStatePoint(t *testing.T) {
 	assert.Equal(t, modbus.SetCoilStateCommand(2, true), <-commands)
 }
 
+func TestInitialRelayStateProjectsModbusSlaveStatePoint(t *testing.T) {
+	semanticEvents := make(chan event.Event, 2)
+	commands := make(chan modbus.Command, 1)
+	reg := registry.Build(&entity.Root{
+		Relays: []entity.Relay{{
+			ID:          entity.RelayID("remote_light_relay"),
+			SysfsDevice: entity.SysfsDeviceID("ro_3_12"),
+		}},
+		Lights: []entity.Light{{
+			ID:    entity.LightID("remote.light.remote_light"),
+			Relay: entity.RelayID("remote_light_relay"),
+		}},
+		Modbus: entity.Modbus{StatePoints: []entity.ModbusStatePoint{{
+			Coil:   2,
+			Entity: entity.ID("remote.light.remote_light"),
+		}}},
+	})
+
+	normalizeStateChange(t.Context(), reg, semanticEvents, sysfs.StateChange{
+		Device:   sysfs.Device{Identifier: "ro_3_12", Type: sysfs.RelayOutput},
+		OldValue: sysfs.On,
+		NewValue: sysfs.On,
+		Initial:  true,
+	})
+
+	assert.Equal(t, event.RelayStateKind, (<-semanticEvents).Kind)
+	lightState := <-semanticEvents
+	assert.Equal(t, event.LightStateKind, lightState.Kind)
+	dispatchEvent(t.Context(), reg, nil, nil, commands, mqtt.Topics{}, lightState)
+	assert.Equal(t, modbus.SetCoilStateCommand(2, true), <-commands)
+}
+
 func TestModbusCoilReadProducesRemoteLightState(t *testing.T) {
 	reg := registry.Build(&entity.Root{
 		Modbus: entity.Modbus{

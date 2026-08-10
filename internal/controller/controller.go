@@ -316,6 +316,8 @@ func logUnmappedStateChange(stateChange sysfs.StateChange) {
 		sysfs.PrintableValue(stateChange.NewValue),
 		"rising",
 		stateChange.IsRising,
+		"initial",
+		stateChange.Initial,
 	)
 }
 
