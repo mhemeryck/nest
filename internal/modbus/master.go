@@ -238,11 +238,14 @@ func executeCommand(client *modbusone.RTUClient, command Command) Event {
 }
 
 func commandPDU(command Command) (modbusone.PDU, error) {
+	// ModbusOne's request builder rejects the valid maximum address 65535.
+	addressHigh := byte(command.Coil >> 8)
+	addressLow := byte(command.Coil)
 	switch command.Kind {
 	case WriteCoilCommandKind:
-		return modbusone.FcWriteSingleCoil.MakeRequestHeader(command.Coil, 1)
+		return modbusone.PDU{byte(modbusone.FcWriteSingleCoil), addressHigh, addressLow}, nil
 	case ReadCoilCommandKind:
-		return modbusone.FcReadCoils.MakeRequestHeader(command.Coil, 1)
+		return modbusone.PDU{byte(modbusone.FcReadCoils), addressHigh, addressLow, 0, 1}, nil
 	default:
 		return nil, fmt.Errorf("unsupported command kind %q", command.Kind)
 	}

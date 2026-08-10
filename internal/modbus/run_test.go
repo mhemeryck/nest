@@ -211,6 +211,16 @@ func TestCommandPDU(t *testing.T) {
 	assert.Equal(t, modbusone.PDU{byte(modbusone.FcReadCoils), 0, 12, 0, 1}, readPDU)
 }
 
+func TestCommandPDUSupportsMaximumCoilAddress(t *testing.T) {
+	writePDU, err := commandPDU(WriteCoilCommand(1, 65535, true))
+	require.NoError(t, err)
+	assert.Equal(t, modbusone.PDU{byte(modbusone.FcWriteSingleCoil), 0xff, 0xff}, writePDU)
+
+	readPDU, err := commandPDU(ReadCoilCommand(1, 65535))
+	require.NoError(t, err)
+	assert.Equal(t, modbusone.PDU{byte(modbusone.FcReadCoils), 0xff, 0xff, 0, 1}, readPDU)
+}
+
 func receiveEvent(t *testing.T, events <-chan Event) Event {
 	t.Helper()
 	select {
