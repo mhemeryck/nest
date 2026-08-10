@@ -439,6 +439,11 @@ func validateGlobalModbus(global *GlobalRoot) error {
 			}
 		}
 
+		for i, point := range unit.Actors.Modbus.StatePoints {
+			field := fmt.Sprintf("%s.state_points[%d].entity", prefix, i)
+			errs = errors.Join(errs, validateGlobalModbusStatePointEntity(global, field, point.Entity, unitID))
+		}
+
 		for i, write := range unit.Actors.Modbus.EventSignalWrites {
 			routePrefix := fmt.Sprintf("%s.event_signal_writes[%d]", prefix, i)
 			target, ok := global.Units[write.Unit]
@@ -482,6 +487,17 @@ func validateGlobalModbus(global *GlobalRoot) error {
 	}
 
 	return errs
+}
+
+func validateGlobalModbusStatePointEntity(global *GlobalRoot, field, value, unitID string) error {
+	if err := validateGlobalBindingEndpoint(global, field, value, entity.TypeLight); err != nil {
+		return err
+	}
+	if !entity.IsIDForUnit(value, unitID, entity.TypeLight) {
+		return fmt.Errorf("%s: must reference a light on unit %q", field, unitID)
+	}
+
+	return nil
 }
 
 func modbusEventSignalByID(signals []ModbusEventSignalConfig, id string) (ModbusEventSignalConfig, bool) {

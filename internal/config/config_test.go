@@ -394,6 +394,16 @@ func TestProjectUnitProjectsUnitModbusConfig(t *testing.T) {
 						}},
 					},
 				},
+				Entities: UnitEntitiesConfig{
+					Lights: []UnitLightConfig{{
+						ID: "remote_light",
+						Actuator: EndpointRefConfig{
+							Actor: "sysfs",
+							Kind:  "relay",
+							ID:    "remote_light_relay",
+						},
+					}},
+				},
 			},
 		},
 	}
@@ -481,6 +491,59 @@ func TestProjectUnitRejectsUnknownModbusRouteEndpoints(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `units.local.actors.modbus.event_signal_writes[0].signal: unknown event signal "missing_signal" on unit "remote"`)
 	assert.Contains(t, err.Error(), `units.local.actors.modbus.state_polls[0].point: unknown state point "missing_point" on unit "remote"`)
+}
+
+func TestValidateGlobalModbusRejectsInvalidStatePointEntities(t *testing.T) {
+	tests := []struct {
+		name    string
+		entity  string
+		message string
+	}{
+		{
+			name:    "missing light",
+			entity:  "remote.light.missing",
+			message: `units.remote.actors.modbus.state_points[0].entity: unknown light "remote.light.missing"`,
+		},
+		{
+			name:    "non-local light",
+			entity:  "local.light.local_light",
+			message: `units.remote.actors.modbus.state_points[0].entity: must reference a light on unit "remote"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			global := &GlobalRoot{
+				Units: map[string]UnitConfig{
+					"local": {
+						Actors: UnitActorsConfig{Modbus: UnitModbusConfig{
+							Mode:     ModbusModeMaster,
+							Port:     "/dev/ttyNS0",
+							BaudRate: 19200,
+						}},
+						Entities: UnitEntitiesConfig{Lights: []UnitLightConfig{{ID: "local_light"}}},
+					},
+					"remote": {
+						Actors: UnitActorsConfig{Modbus: UnitModbusConfig{
+							Mode:     ModbusModeSlave,
+							Port:     "/dev/ttyNS0",
+							BaudRate: 19200,
+							UnitID:   1,
+							StatePoints: []ModbusStatePointConfig{{
+								ID:     "light_state",
+								Entity: tt.entity,
+							}},
+						}},
+						Entities: UnitEntitiesConfig{Lights: []UnitLightConfig{{ID: "remote_light"}}},
+					},
+				},
+			}
+
+			err := validateGlobalModbus(global)
+
+			require.ErrorContains(t, err, tt.message)
+		})
+	}
 }
 
 func TestValidateGlobalModbusRejectsMismatchedEventSignalWriteMetadata(t *testing.T) {
