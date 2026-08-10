@@ -414,6 +414,7 @@ func validateGlobalBindingEndpoint(global *GlobalRoot, field string, value strin
 func validateGlobalModbus(global *GlobalRoot) error {
 	var errs error
 	var masterUnit string
+	masterBaudRate := 0
 	modbusConfigured := false
 	seenSlaveIDs := make(map[int]string)
 
@@ -426,6 +427,7 @@ func validateGlobalModbus(global *GlobalRoot) error {
 				errs = errors.Join(errs, fmt.Errorf("%s.mode: multiple master units, already configured on %q", prefix, masterUnit))
 			} else {
 				masterUnit = unitID
+				masterBaudRate = unit.Actors.Modbus.BaudRate
 			}
 		}
 		if unit.Actors.Modbus.Mode == ModbusModeSlave {
@@ -484,6 +486,17 @@ func validateGlobalModbus(global *GlobalRoot) error {
 	}
 	if modbusConfigured && masterUnit == "" {
 		errs = errors.Join(errs, fmt.Errorf("modbus: exactly one master unit is required when Modbus is configured"))
+	}
+	if masterUnit != "" && masterBaudRate > 0 {
+		for unitID, unit := range global.Units {
+			if unit.Actors.Modbus.Mode == ModbusModeSlave && unit.Actors.Modbus.BaudRate > 0 && unit.Actors.Modbus.BaudRate != masterBaudRate {
+				errs = errors.Join(errs, fmt.Errorf(
+					"units.%s.actors.modbus.baudrate: must match master baud rate %d",
+					unitID,
+					masterBaudRate,
+				))
+			}
+		}
 	}
 
 	return errs

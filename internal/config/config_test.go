@@ -660,6 +660,26 @@ func TestProjectUnitRejectsModbusWithoutMaster(t *testing.T) {
 	assert.Contains(t, err.Error(), "exactly one master unit is required")
 }
 
+func TestProjectUnitRejectsModbusBaudRateMismatch(t *testing.T) {
+	_, err := ProjectUnit(&GlobalRoot{
+		Units: map[string]UnitConfig{
+			"master": {Actors: UnitActorsConfig{Modbus: UnitModbusConfig{
+				Mode:     ModbusModeMaster,
+				Port:     "/dev/ttyNS0",
+				BaudRate: 19200,
+			}}},
+			"slave": {Actors: UnitActorsConfig{Modbus: UnitModbusConfig{
+				Mode:     ModbusModeSlave,
+				Port:     "/dev/ttyNS0",
+				BaudRate: 9600,
+				UnitID:   1,
+			}}},
+		},
+	}, "master")
+
+	require.ErrorContains(t, err, `units.slave.actors.modbus.baudrate: must match master baud rate 19200`)
+}
+
 func TestProjectUnitRejectsUnsupportedEntityEndpoints(t *testing.T) {
 	_, err := ProjectUnit(&GlobalRoot{
 		Units: map[string]UnitConfig{
