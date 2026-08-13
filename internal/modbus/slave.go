@@ -79,8 +79,7 @@ func writeSlaveEventSignals(state *slaveState, address uint16, values []bool) ([
 	state.mu.Lock()
 	defer state.mu.Unlock()
 
-	events := make([]Event, 0, len(values))
-	for offset, value := range values {
+	for offset := range values {
 		coil := address + uint16(offset)
 		if _, ok := state.eventSignals[coil]; !ok {
 			if _, statePoint := state.statePoints[coil]; statePoint {
@@ -88,6 +87,11 @@ func writeSlaveEventSignals(state *slaveState, address uint16, values []bool) ([
 			}
 			return nil, fmt.Errorf("coil address %d is not a configured event signal", coil)
 		}
+	}
+
+	events := make([]Event, 0, len(values))
+	for offset, value := range values {
+		coil := address + uint16(offset)
 		state.coils[coil] = value
 		events = append(events, Event{
 			Kind:  WriteSucceededEventKind,

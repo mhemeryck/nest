@@ -146,6 +146,21 @@ func TestRunSlaveExchangesConfiguredCoilsWithMaster(t *testing.T) {
 	}
 }
 
+func TestWriteSlaveEventSignalsDoesNotPartiallyUpdateCoils(t *testing.T) {
+	state, err := newSlaveState(entity.Modbus{
+		EventSignals: []entity.ModbusEventSignal{{ID: "button", Coil: 3}},
+		StatePoints:  []entity.ModbusStatePoint{{ID: "light", Coil: 4}},
+	})
+	require.NoError(t, err)
+
+	_, err = writeSlaveEventSignals(state, 3, []bool{true, true})
+	require.EqualError(t, err, "state point coil 4 cannot be written")
+
+	values, err := readSlaveCoils(state, 3, 1)
+	require.NoError(t, err)
+	assert.Equal(t, []bool{false}, values)
+}
+
 func TestRunMasterPollsConfiguredStatePoints(t *testing.T) {
 	clientConnection, serverConnection := net.Pipe()
 	t.Cleanup(func() {

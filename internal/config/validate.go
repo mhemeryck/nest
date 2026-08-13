@@ -65,11 +65,20 @@ func validateModbusMaster(modbus ModbusConfig) error {
 	return errors.Join(
 		validateModbusSerialConfig(modbus),
 		validateModbusDurations(modbus),
+		validateModbusMasterTimeout(modbus.Timeout),
 		validateModbusSlaveEndpoints(modbus),
 		validateMasterUnitID(modbus),
 		validateModbusEventSignalWrites(modbus.EventSignalWrites),
 		validateModbusStatePolls(modbus.StatePolls),
 	)
+}
+
+func validateModbusMasterTimeout(timeout time.Duration) error {
+	if timeout <= 0 {
+		return fmt.Errorf("modbus.timeout: must be positive in master mode")
+	}
+
+	return nil
 }
 
 func validateModbusSlave(modbus ModbusConfig) error {

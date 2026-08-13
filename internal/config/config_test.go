@@ -1099,6 +1099,19 @@ func TestValidate(t *testing.T) {
 			message: "modbus.timeout: must not be negative",
 		},
 		{
+			name: "requires positive master modbus timeout",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+				Modbus: ModbusConfig{
+					Mode:     ModbusModeMaster,
+					Port:     "/dev/ttyNS0",
+					BaudRate: 19200,
+				},
+			},
+			message: "modbus.timeout: must be positive in master mode",
+		},
+		{
 			name: "rejects zero slave unit id",
 			file: Root{
 				Sysfs:  SysfsConfig{Root: "/tmp"},
