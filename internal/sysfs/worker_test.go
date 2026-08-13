@@ -82,6 +82,9 @@ func TestWorkerCommandTogglesRelay(t *testing.T) {
 		<-doneSysfs
 		close(states)
 	}()
+	startup := <-states
+	assert.True(t, startup.Initial)
+	assert.Equal(t, Off, startup.NewValue)
 
 	commands <- Command{Kind: ToggleCommand, DeviceID: "ro_1_01"}
 
@@ -114,6 +117,9 @@ func TestWorkerCommandTogglesRelayFromActualSysfsState(t *testing.T) {
 		<-doneSysfs
 		close(states)
 	}()
+	startup := <-states
+	assert.True(t, startup.Initial)
+	assert.Equal(t, On, startup.NewValue)
 
 	commands <- Command{Kind: ToggleCommand, DeviceID: "ro_1_01"}
 
@@ -168,6 +174,26 @@ func TestPollDevicesIgnoresReadErrors(t *testing.T) {
 		require.Failf(t, "unexpected state event", "%+v", event)
 	default:
 	}
+}
+
+func TestPublishInitialRelayStatesPublishesRelayObservations(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ro_value")
+	require.NoError(t, writeValue(path, On))
+	states := make(chan StateChange, 2)
+
+	published := publishInitialRelayStates(t.Context(), []*Device{
+		{Identifier: "di_1_01", Type: DigitalInput, Value: On},
+		{Identifier: "ro_1_01", Path: path, Type: RelayOutput, Value: Off},
+	}, states)
+
+	require.True(t, published)
+	assert.Equal(t, StateChange{
+		Device:   Device{Identifier: "ro_1_01", Path: path, Type: RelayOutput, Value: On},
+		OldValue: On,
+		NewValue: On,
+		Initial:  true,
+	}, <-states)
+	assert.Empty(t, states)
 }
 
 func TestPublishStateReturnsFalseWhenStopping(t *testing.T) {

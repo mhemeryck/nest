@@ -242,3 +242,53 @@ func TestLookupHelpersReturnCopies(t *testing.T) {
 	assert.Equal(t, root.RemoteSourceBindings, RemoteSourceBindingsBySource(reg, entity.ID("controller_1.button.office_button")))
 	assert.Equal(t, root.RemoteTargetBindings, RemoteTargetBindingsBySource(reg, entity.ID("controller_2.button.hall_button")))
 }
+
+func TestModbusEventSignalByCoil(t *testing.T) {
+	root := &entity.Root{
+		Modbus: entity.Modbus{
+			EventSignals: []entity.ModbusEventSignal{{
+				ID:     entity.ModbusEventSignalID("office_button_signal"),
+				Coil:   12,
+				Source: entity.ID("controller_1.button.office_button"),
+				Target: entity.ID("controller_2.light.office_light"),
+				Action: entity.ActionToggle,
+			}},
+		},
+	}
+	reg := Build(root)
+
+	signal, ok := ModbusEventSignalByCoil(reg, 12)
+	require.True(t, ok)
+	assert.Equal(t, root.Modbus.EventSignals[0], signal)
+
+	_, ok = ModbusEventSignalByCoil(reg, 13)
+	assert.False(t, ok)
+}
+
+func TestModbusStatePointAndPollLookups(t *testing.T) {
+	root := &entity.Root{
+		Modbus: entity.Modbus{
+			StatePoints: []entity.ModbusStatePoint{{
+				ID:     entity.ModbusStatePointID("office_light_state"),
+				Coil:   12,
+				Entity: entity.ID("remote.light.office_light"),
+			}},
+			StatePolls: []entity.ModbusStatePoll{{
+				Unit:   "remote",
+				Point:  entity.ModbusStatePointID("office_light_state"),
+				Entity: entity.ID("remote.light.office_light"),
+				UnitID: 1,
+				Coil:   12,
+			}},
+		},
+	}
+	reg := Build(root)
+
+	assert.Equal(t, root.Modbus.StatePoints, ModbusStatePointsByEntity(reg, entity.ID("remote.light.office_light")))
+	poll, ok := ModbusStatePollByCoil(reg, 1, 12)
+	require.True(t, ok)
+	assert.Equal(t, root.Modbus.StatePolls[0], poll)
+
+	_, ok = ModbusStatePollByCoil(reg, 1, 13)
+	assert.False(t, ok)
+}

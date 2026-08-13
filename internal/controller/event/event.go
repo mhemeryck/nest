@@ -42,6 +42,7 @@ type DigitalInput struct {
 type PushButton struct {
 	ButtonID entity.PushButtonID
 	Name     string
+	Delivery entity.ExecutionTransport
 }
 
 type Light struct {

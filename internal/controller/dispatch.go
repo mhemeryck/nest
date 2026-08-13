@@ -6,6 +6,7 @@ import (
 
 	"github.com/mhemeryck/nest/internal/controller/event"
 	"github.com/mhemeryck/nest/internal/entity"
+	"github.com/mhemeryck/nest/internal/modbus"
 	"github.com/mhemeryck/nest/internal/mqtt"
 	"github.com/mhemeryck/nest/internal/registry"
 	"github.com/mhemeryck/nest/internal/sysfs"
@@ -16,6 +17,7 @@ func dispatchEvent(
 	reg *registry.Registry,
 	sysfsCommands chan<- sysfs.Command,
 	mqttCommands chan<- mqtt.Command,
+	modbusCommands chan<- modbus.Command,
 	mqttTopics mqtt.Topics,
 	busEvent event.Event,
 ) []event.Event {
@@ -23,6 +25,7 @@ func dispatchEvent(
 	derivedEvents := bindingEventsFromEvent(reg, busEvent)
 	dispatchSysfsCommand(ctx, reg, sysfsCommands, busEvent)
 	dispatchMQTTCommand(ctx, reg, mqttCommands, mqttTopics, busEvent)
+	dispatchModbusCommand(ctx, reg, modbusCommands, busEvent)
 
 	return derivedEvents
 }
@@ -43,6 +46,39 @@ func dispatchMQTTCommand(ctx context.Context, reg *registry.Registry, commands c
 	case event.MQTTConnectedKind:
 		if err := publishMQTTStartup(ctx, reg, commands); err != nil {
 			slog.Error("mqtt startup publish failed", "error", err)
+		}
+	}
+}
+
+func dispatchModbusCommand(ctx context.Context, reg *registry.Registry, commands chan<- modbus.Command, busEvent event.Event) {
+	if commands == nil {
+		return
+	}
+
+	switch busEvent.Kind {
+	case event.PushButtonPressedKind:
+		dispatchModbusEventSignalWrites(ctx, reg, commands, *busEvent.PushButton)
+	case event.LightStateKind:
+		dispatchModbusStatePoints(ctx, reg, commands, *busEvent.LightState)
+	}
+}
+
+func dispatchModbusEventSignalWrites(ctx context.Context, reg *registry.Registry, commands chan<- modbus.Command, pushButton event.PushButton) {
+	for _, write := range registry.ModbusEventSignalWritesBySource(reg, entity.ID(pushButton.ButtonID)) {
+		select {
+		case <-ctx.Done():
+			return
+		case commands <- modbus.WriteCoilCommand(write.UnitID, write.Coil, true):
+		}
+	}
+}
+
+func dispatchModbusStatePoints(ctx context.Context, reg *registry.Registry, commands chan<- modbus.Command, lightState event.LightState) {
+	for _, point := range registry.ModbusStatePointsByEntity(reg, entity.ID(lightState.LightID)) {
+		select {
+		case <-ctx.Done():
+			return
+		case commands <- modbus.SetCoilStateCommand(uint16(point.Coil), lightState.Value != 0):
 		}
 	}
 }

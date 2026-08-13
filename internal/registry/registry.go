@@ -7,42 +7,55 @@ import (
 )
 
 type Registry struct {
-	sysfsRoot                      string
-	sysfsPollIntervals             entity.PollIntervals
-	mqtt                           entity.MQTT
-	modbus                         entity.Modbus
-	lights                         []entity.Light
-	remoteTargetBindings           []entity.Binding
-	digitalInputsByDevice          map[entity.SysfsDeviceID]entity.DigitalInput
-	pushButtonsByID                map[entity.PushButtonID]entity.PushButton
-	pushButtonsByInputID           map[entity.DigitalInputID][]entity.PushButton
-	lightsByID                     map[entity.LightID]entity.Light
-	lightsByRelayID                map[entity.RelayID][]entity.Light
-	bindingsBySourceID             map[entity.ID][]entity.Binding
-	remoteSourceBindingsBySourceID map[entity.ID][]entity.Binding
-	remoteTargetBindingsBySourceID map[entity.ID][]entity.Binding
-	relaysByID                     map[entity.RelayID]entity.Relay
-	relaysByDevice                 map[entity.SysfsDeviceID]entity.Relay
+	sysfsRoot                         string
+	sysfsPollIntervals                entity.PollIntervals
+	mqtt                              entity.MQTT
+	modbus                            entity.Modbus
+	lights                            []entity.Light
+	remoteTargetBindings              []entity.Binding
+	digitalInputsByDevice             map[entity.SysfsDeviceID]entity.DigitalInput
+	pushButtonsByID                   map[entity.PushButtonID]entity.PushButton
+	pushButtonsByInputID              map[entity.DigitalInputID][]entity.PushButton
+	lightsByID                        map[entity.LightID]entity.Light
+	lightsByRelayID                   map[entity.RelayID][]entity.Light
+	bindingsBySourceID                map[entity.ID][]entity.Binding
+	remoteSourceBindingsBySourceID    map[entity.ID][]entity.Binding
+	remoteTargetBindingsBySourceID    map[entity.ID][]entity.Binding
+	modbusEventSignalsByCoil          map[int]entity.ModbusEventSignal
+	modbusEventSignalWritesBySourceID map[entity.ID][]entity.ModbusEventSignalWrite
+	modbusStatePointsByEntityID       map[entity.ID][]entity.ModbusStatePoint
+	modbusStatePollsByCoil            map[modbusCoilKey]entity.ModbusStatePoll
+	relaysByID                        map[entity.RelayID]entity.Relay
+	relaysByDevice                    map[entity.SysfsDeviceID]entity.Relay
+}
+
+type modbusCoilKey struct {
+	unitID uint8
+	coil   uint16
 }
 
 func Build(root *entity.Root) *Registry {
 	index := &Registry{
-		sysfsRoot:                      root.SysfsRoot,
-		sysfsPollIntervals:             root.SysfsPollIntervals,
-		mqtt:                           root.MQTT,
-		modbus:                         copyModbus(root.Modbus),
-		lights:                         slices.Clone(root.Lights),
-		remoteTargetBindings:           slices.Clone(root.RemoteTargetBindings),
-		digitalInputsByDevice:          make(map[entity.SysfsDeviceID]entity.DigitalInput, len(root.DigitalInputs)),
-		pushButtonsByID:                make(map[entity.PushButtonID]entity.PushButton, len(root.PushButtons)),
-		pushButtonsByInputID:           make(map[entity.DigitalInputID][]entity.PushButton),
-		lightsByID:                     make(map[entity.LightID]entity.Light, len(root.Lights)),
-		lightsByRelayID:                make(map[entity.RelayID][]entity.Light),
-		bindingsBySourceID:             make(map[entity.ID][]entity.Binding),
-		remoteSourceBindingsBySourceID: make(map[entity.ID][]entity.Binding),
-		remoteTargetBindingsBySourceID: make(map[entity.ID][]entity.Binding),
-		relaysByID:                     make(map[entity.RelayID]entity.Relay, len(root.Relays)),
-		relaysByDevice:                 make(map[entity.SysfsDeviceID]entity.Relay, len(root.Relays)),
+		sysfsRoot:                         root.SysfsRoot,
+		sysfsPollIntervals:                root.SysfsPollIntervals,
+		mqtt:                              root.MQTT,
+		modbus:                            copyModbus(root.Modbus),
+		lights:                            slices.Clone(root.Lights),
+		remoteTargetBindings:              slices.Clone(root.RemoteTargetBindings),
+		digitalInputsByDevice:             make(map[entity.SysfsDeviceID]entity.DigitalInput, len(root.DigitalInputs)),
+		pushButtonsByID:                   make(map[entity.PushButtonID]entity.PushButton, len(root.PushButtons)),
+		pushButtonsByInputID:              make(map[entity.DigitalInputID][]entity.PushButton),
+		lightsByID:                        make(map[entity.LightID]entity.Light, len(root.Lights)),
+		lightsByRelayID:                   make(map[entity.RelayID][]entity.Light),
+		bindingsBySourceID:                make(map[entity.ID][]entity.Binding),
+		remoteSourceBindingsBySourceID:    make(map[entity.ID][]entity.Binding),
+		remoteTargetBindingsBySourceID:    make(map[entity.ID][]entity.Binding),
+		modbusEventSignalsByCoil:          make(map[int]entity.ModbusEventSignal, len(root.Modbus.EventSignals)),
+		modbusEventSignalWritesBySourceID: make(map[entity.ID][]entity.ModbusEventSignalWrite),
+		modbusStatePointsByEntityID:       make(map[entity.ID][]entity.ModbusStatePoint),
+		modbusStatePollsByCoil:            make(map[modbusCoilKey]entity.ModbusStatePoll, len(root.Modbus.StatePolls)),
+		relaysByID:                        make(map[entity.RelayID]entity.Relay, len(root.Relays)),
+		relaysByDevice:                    make(map[entity.SysfsDeviceID]entity.Relay, len(root.Relays)),
 	}
 
 	for _, input := range root.DigitalInputs {
@@ -76,6 +89,19 @@ func Build(root *entity.Root) *Registry {
 		index.remoteTargetBindingsBySourceID[binding.Source] = append(index.remoteTargetBindingsBySourceID[binding.Source], binding)
 	}
 
+	for _, signal := range root.Modbus.EventSignals {
+		index.modbusEventSignalsByCoil[signal.Coil] = signal
+	}
+	for _, write := range root.Modbus.EventSignalWrites {
+		index.modbusEventSignalWritesBySourceID[write.Source] = append(index.modbusEventSignalWritesBySourceID[write.Source], write)
+	}
+	for _, point := range root.Modbus.StatePoints {
+		index.modbusStatePointsByEntityID[point.Entity] = append(index.modbusStatePointsByEntityID[point.Entity], point)
+	}
+	for _, poll := range root.Modbus.StatePolls {
+		index.modbusStatePollsByCoil[modbusCoilKey{unitID: poll.UnitID, coil: poll.Coil}] = poll
+	}
+
 	return index
 }
 
@@ -106,6 +132,11 @@ func RemoteTargetBindings(reg *Registry) []entity.Binding {
 func copyModbus(modbus entity.Modbus) entity.Modbus {
 	return entity.Modbus{
 		Mode:              modbus.Mode,
+		Port:              modbus.Port,
+		BaudRate:          modbus.BaudRate,
+		Timeout:           modbus.Timeout,
+		PollInterval:      modbus.PollInterval,
+		UnitID:            modbus.UnitID,
 		EventSignals:      slices.Clone(modbus.EventSignals),
 		StatePoints:       slices.Clone(modbus.StatePoints),
 		EventSignalWrites: slices.Clone(modbus.EventSignalWrites),
@@ -158,6 +189,24 @@ func RemoteTargetBindingsByButton(index *Registry, buttonID entity.PushButtonID)
 
 func RemoteTargetBindingsBySource(index *Registry, sourceID entity.ID) []entity.Binding {
 	return slices.Clone(index.remoteTargetBindingsBySourceID[sourceID])
+}
+
+func ModbusEventSignalByCoil(index *Registry, coil uint16) (entity.ModbusEventSignal, bool) {
+	signal, ok := index.modbusEventSignalsByCoil[int(coil)]
+	return signal, ok
+}
+
+func ModbusEventSignalWritesBySource(index *Registry, sourceID entity.ID) []entity.ModbusEventSignalWrite {
+	return slices.Clone(index.modbusEventSignalWritesBySourceID[sourceID])
+}
+
+func ModbusStatePointsByEntity(index *Registry, entityID entity.ID) []entity.ModbusStatePoint {
+	return slices.Clone(index.modbusStatePointsByEntityID[entityID])
+}
+
+func ModbusStatePollByCoil(index *Registry, unitID uint8, coil uint16) (entity.ModbusStatePoll, bool) {
+	poll, ok := index.modbusStatePollsByCoil[modbusCoilKey{unitID: unitID, coil: coil}]
+	return poll, ok
 }
 
 func LightByID(index *Registry, lightID entity.LightID) (entity.Light, bool) {

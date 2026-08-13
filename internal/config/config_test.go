@@ -45,10 +45,47 @@ func TestLoadLocalMQTTFixtureProjectsRemoteSourceBinding(t *testing.T) {
 	assert.True(t, file.MQTT.Enabled)
 	require.Len(t, file.RemoteSourceBindings, 1)
 	assert.Equal(t, BindingConfig{
-		Source: "local.button.office_button",
-		Target: "remote.light.remote_light",
-		Action: BindingActionToggle,
+		Source:             "local.button.office_button",
+		Target:             "remote.light.remote_light",
+		Action:             BindingActionToggle,
+		ExecutionTransport: "modbus",
 	}, file.RemoteSourceBindings[0])
+}
+
+func TestLoadLocalMQTTFixtureProjectsPhysicalModbusConfig(t *testing.T) {
+	path := filepath.Join("..", "..", "test", "fixtures", "config.local-mqtt.yaml")
+
+	local, err := Load(path, "local")
+	require.NoError(t, err)
+	assert.Equal(t, ModbusConfig{
+		Mode:         ModbusModeMaster,
+		Port:         "/dev/ttyNS0",
+		BaudRate:     19200,
+		Timeout:      500 * time.Millisecond,
+		PollInterval: time.Second,
+		EventSignalWrites: []ModbusEventSignalWriteConfig{{
+			Unit:   "remote",
+			Signal: "office_button_toggle",
+			Source: "local.button.office_button",
+			Target: "remote.light.remote_light",
+			Action: BindingActionToggle,
+			UnitID: 1,
+			Coil:   1,
+		}},
+		StatePolls: []ModbusStatePollConfig{{
+			Unit:   "remote",
+			Point:  "remote_light_state",
+			Entity: "remote.light.remote_light",
+			UnitID: 1,
+			Coil:   2,
+		}},
+	}, local.Modbus)
+
+	remote, err := Load(path, "remote")
+	require.NoError(t, err)
+	assert.Equal(t, 1, remote.Modbus.UnitID)
+	assert.Equal(t, 1, remote.Modbus.EventSignals[0].Coil)
+	assert.Equal(t, 2, remote.Modbus.StatePoints[0].Coil)
 }
 
 func TestLoadLocalMQTTFixtureProjectsRemoteTargetBinding(t *testing.T) {
@@ -61,9 +98,10 @@ func TestLoadLocalMQTTFixtureProjectsRemoteTargetBinding(t *testing.T) {
 	assert.True(t, file.MQTT.Enabled)
 	require.Len(t, file.RemoteTargetBindings, 1)
 	assert.Equal(t, BindingConfig{
-		Source: "local.button.office_button",
-		Target: "remote.light.remote_light",
-		Action: BindingActionToggle,
+		Source:             "local.button.office_button",
+		Target:             "remote.light.remote_light",
+		Action:             BindingActionToggle,
+		ExecutionTransport: "modbus",
 	}, file.RemoteTargetBindings[0])
 }
 
@@ -212,9 +250,10 @@ func TestProjectUnitProjectsRemoteBindingsByPerspective(t *testing.T) {
 			},
 		},
 		Bindings: []GlobalBindingConfig{{
-			Source: "controller_1.button.office_button",
-			Target: "controller_2.light.hall_light",
-			Action: "toggle",
+			Source:             "controller_1.button.office_button",
+			Target:             "controller_2.light.hall_light",
+			Action:             "toggle",
+			ExecutionTransport: "mqtt",
 		}},
 	}
 
@@ -226,14 +265,16 @@ func TestProjectUnitProjectsRemoteBindingsByPerspective(t *testing.T) {
 	assert.Empty(t, sourceLocal.Bindings)
 	assert.Empty(t, targetLocal.Bindings)
 	assert.Equal(t, []BindingConfig{{
-		Source: "controller_1.button.office_button",
-		Target: "controller_2.light.hall_light",
-		Action: "toggle",
+		Source:             "controller_1.button.office_button",
+		Target:             "controller_2.light.hall_light",
+		Action:             "toggle",
+		ExecutionTransport: "mqtt",
 	}}, sourceLocal.RemoteSourceBindings)
 	assert.Equal(t, []BindingConfig{{
-		Source: "controller_1.button.office_button",
-		Target: "controller_2.light.hall_light",
-		Action: "toggle",
+		Source:             "controller_1.button.office_button",
+		Target:             "controller_2.light.hall_light",
+		Action:             "toggle",
+		ExecutionTransport: "mqtt",
 	}}, targetLocal.RemoteTargetBindings)
 }
 
@@ -278,13 +319,44 @@ func TestProjectUnitRejectsUnknownGlobalBindingEndpoints(t *testing.T) {
 	assert.Contains(t, err.Error(), `bindings[1].target: unknown light "controller_2.light.missing_light"`)
 }
 
+func TestValidateGlobalBindingsRejectsModbusBindingWithoutWriteRoute(t *testing.T) {
+	global := &GlobalRoot{
+		Units: map[string]UnitConfig{
+			"master": {
+				Entities: UnitEntitiesConfig{
+					Buttons: []UnitPushButtonConfig{{ID: "button"}},
+				},
+			},
+			"slave": {
+				Entities: UnitEntitiesConfig{
+					Lights: []UnitLightConfig{{ID: "light"}},
+				},
+			},
+		},
+		Bindings: []GlobalBindingConfig{{
+			Source:             "master.button.button",
+			Target:             "slave.light.light",
+			Action:             BindingActionToggle,
+			ExecutionTransport: "modbus",
+		}},
+	}
+
+	err := validateGlobalBindings(global)
+
+	require.ErrorContains(t, err, `bindings[0]: missing matching Modbus event signal write`)
+}
+
 func TestProjectUnitProjectsUnitModbusConfig(t *testing.T) {
 	global := &GlobalRoot{
 		Units: map[string]UnitConfig{
 			"local": {
 				Actors: UnitActorsConfig{
 					Modbus: UnitModbusConfig{
-						Mode: ModbusModeMaster,
+						Mode:         ModbusModeMaster,
+						Port:         "/dev/ttyNS0",
+						BaudRate:     19200,
+						Timeout:      500 * time.Millisecond,
+						PollInterval: time.Second,
 						EventSignalWrites: []ModbusEventSignalWriteConfig{{
 							Unit:   "remote",
 							Signal: "office_button_toggle",
@@ -303,18 +375,34 @@ func TestProjectUnitProjectsUnitModbusConfig(t *testing.T) {
 			"remote": {
 				Actors: UnitActorsConfig{
 					Modbus: UnitModbusConfig{
-						Mode: ModbusModeSlave,
+						Mode:     ModbusModeSlave,
+						Port:     "/dev/ttyNS0",
+						BaudRate: 19200,
+						Timeout:  500 * time.Millisecond,
+						UnitID:   1,
 						EventSignals: []ModbusEventSignalConfig{{
 							ID:     "office_button_toggle",
+							Coil:   1,
 							Source: "local.button.office_button",
 							Target: "remote.light.remote_light",
 							Action: BindingActionToggle,
 						}},
 						StatePoints: []ModbusStatePointConfig{{
 							ID:     "remote_light_state",
+							Coil:   2,
 							Entity: "remote.light.remote_light",
 						}},
 					},
+				},
+				Entities: UnitEntitiesConfig{
+					Lights: []UnitLightConfig{{
+						ID: "remote_light",
+						Actuator: EndpointRefConfig{
+							Actor: "sysfs",
+							Kind:  "relay",
+							ID:    "remote_light_relay",
+						},
+					}},
 				},
 			},
 		},
@@ -326,30 +414,44 @@ func TestProjectUnitProjectsUnitModbusConfig(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, ModbusModeMaster, local.Modbus.Mode)
+	assert.Equal(t, "/dev/ttyNS0", local.Modbus.Port)
+	assert.Equal(t, 19200, local.Modbus.BaudRate)
+	assert.Equal(t, 500*time.Millisecond, local.Modbus.Timeout)
+	assert.Equal(t, time.Second, local.Modbus.PollInterval)
 	assert.Equal(t, []ModbusEventSignalWriteConfig{{
 		Unit:   "remote",
 		Signal: "office_button_toggle",
 		Source: "local.button.office_button",
 		Target: "remote.light.remote_light",
 		Action: BindingActionToggle,
+		UnitID: 1,
+		Coil:   1,
 	}}, local.Modbus.EventSignalWrites)
 	assert.Equal(t, []ModbusStatePollConfig{{
 		Unit:   "remote",
 		Point:  "remote_light_state",
 		Entity: "remote.light.remote_light",
+		UnitID: 1,
+		Coil:   2,
 	}}, local.Modbus.StatePolls)
 	assert.Empty(t, local.Modbus.EventSignals)
 	assert.Empty(t, local.Modbus.StatePoints)
 
 	assert.Equal(t, ModbusModeSlave, remote.Modbus.Mode)
+	assert.Equal(t, "/dev/ttyNS0", remote.Modbus.Port)
+	assert.Equal(t, 19200, remote.Modbus.BaudRate)
+	assert.Equal(t, 500*time.Millisecond, remote.Modbus.Timeout)
+	assert.Equal(t, 1, remote.Modbus.UnitID)
 	assert.Equal(t, []ModbusEventSignalConfig{{
 		ID:     "office_button_toggle",
+		Coil:   1,
 		Source: "local.button.office_button",
 		Target: "remote.light.remote_light",
 		Action: BindingActionToggle,
 	}}, remote.Modbus.EventSignals)
 	assert.Equal(t, []ModbusStatePointConfig{{
 		ID:     "remote_light_state",
+		Coil:   2,
 		Entity: "remote.light.remote_light",
 	}}, remote.Modbus.StatePoints)
 	assert.Empty(t, remote.Modbus.EventSignalWrites)
@@ -389,6 +491,193 @@ func TestProjectUnitRejectsUnknownModbusRouteEndpoints(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `units.local.actors.modbus.event_signal_writes[0].signal: unknown event signal "missing_signal" on unit "remote"`)
 	assert.Contains(t, err.Error(), `units.local.actors.modbus.state_polls[0].point: unknown state point "missing_point" on unit "remote"`)
+}
+
+func TestValidateGlobalModbusRejectsInvalidStatePointEntities(t *testing.T) {
+	tests := []struct {
+		name    string
+		entity  string
+		message string
+	}{
+		{
+			name:    "missing light",
+			entity:  "remote.light.missing",
+			message: `units.remote.actors.modbus.state_points[0].entity: unknown light "remote.light.missing"`,
+		},
+		{
+			name:    "non-local light",
+			entity:  "local.light.local_light",
+			message: `units.remote.actors.modbus.state_points[0].entity: must reference a light on unit "remote"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			global := &GlobalRoot{
+				Units: map[string]UnitConfig{
+					"local": {
+						Actors: UnitActorsConfig{Modbus: UnitModbusConfig{
+							Mode:     ModbusModeMaster,
+							Port:     "/dev/ttyNS0",
+							BaudRate: 19200,
+						}},
+						Entities: UnitEntitiesConfig{Lights: []UnitLightConfig{{ID: "local_light"}}},
+					},
+					"remote": {
+						Actors: UnitActorsConfig{Modbus: UnitModbusConfig{
+							Mode:     ModbusModeSlave,
+							Port:     "/dev/ttyNS0",
+							BaudRate: 19200,
+							UnitID:   1,
+							StatePoints: []ModbusStatePointConfig{{
+								ID:     "light_state",
+								Entity: tt.entity,
+							}},
+						}},
+						Entities: UnitEntitiesConfig{Lights: []UnitLightConfig{{ID: "remote_light"}}},
+					},
+				},
+			}
+
+			err := validateGlobalModbus(global)
+
+			require.ErrorContains(t, err, tt.message)
+		})
+	}
+}
+
+func TestValidateGlobalModbusRejectsMismatchedEventSignalWriteMetadata(t *testing.T) {
+	tests := []struct {
+		name         string
+		write        ModbusEventSignalWriteConfig
+		signalAction string
+		message      string
+	}{
+		{
+			name: "source",
+			write: ModbusEventSignalWriteConfig{
+				Source: "local.button.hallway_button",
+				Target: "remote.light.remote_light",
+				Action: BindingActionToggle,
+			},
+			message: `event_signal_writes[0].source: must match event signal "office_button_toggle" source "local.button.office_button"`,
+		},
+		{
+			name: "target",
+			write: ModbusEventSignalWriteConfig{
+				Source: "local.button.office_button",
+				Target: "remote.light.hallway_light",
+				Action: BindingActionToggle,
+			},
+			message: `event_signal_writes[0].target: must match event signal "office_button_toggle" target "remote.light.remote_light"`,
+		},
+		{
+			name: "action",
+			write: ModbusEventSignalWriteConfig{
+				Source: "local.button.office_button",
+				Target: "remote.light.remote_light",
+				Action: BindingActionToggle,
+			},
+			signalAction: "press",
+			message:      `event_signal_writes[0].action: must match event signal "office_button_toggle" action "press"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.write.Unit = "remote"
+			tt.write.Signal = "office_button_toggle"
+			if tt.signalAction == "" {
+				tt.signalAction = BindingActionToggle
+			}
+			global := &GlobalRoot{
+				Units: map[string]UnitConfig{
+					"local": {
+						Actors: UnitActorsConfig{
+							Modbus: UnitModbusConfig{
+								Mode:              ModbusModeMaster,
+								EventSignalWrites: []ModbusEventSignalWriteConfig{tt.write},
+							},
+						},
+					},
+					"remote": {
+						Actors: UnitActorsConfig{
+							Modbus: UnitModbusConfig{
+								Mode:   ModbusModeSlave,
+								UnitID: 1,
+								EventSignals: []ModbusEventSignalConfig{{
+									ID:     "office_button_toggle",
+									Source: "local.button.office_button",
+									Target: "remote.light.remote_light",
+									Action: tt.signalAction,
+								}},
+							},
+						},
+					},
+				},
+			}
+
+			err := validateGlobalModbus(global)
+
+			require.ErrorContains(t, err, tt.message)
+		})
+	}
+}
+
+func TestProjectUnitRejectsMultipleModbusMasters(t *testing.T) {
+	_, err := ProjectUnit(&GlobalRoot{
+		Units: map[string]UnitConfig{
+			"master_a": {Actors: UnitActorsConfig{Modbus: UnitModbusConfig{Mode: ModbusModeMaster}}},
+			"master_b": {Actors: UnitActorsConfig{Modbus: UnitModbusConfig{Mode: ModbusModeMaster}}},
+		},
+	}, "master_a")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "multiple master units")
+}
+
+func TestProjectUnitRejectsDuplicateModbusSlaveIDs(t *testing.T) {
+	_, err := ProjectUnit(&GlobalRoot{
+		Units: map[string]UnitConfig{
+			"master":  {Actors: UnitActorsConfig{Modbus: UnitModbusConfig{Mode: ModbusModeMaster}}},
+			"slave_a": {Actors: UnitActorsConfig{Modbus: UnitModbusConfig{Mode: ModbusModeSlave, UnitID: 1}}},
+			"slave_b": {Actors: UnitActorsConfig{Modbus: UnitModbusConfig{Mode: ModbusModeSlave, UnitID: 1}}},
+		},
+	}, "master")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicates slave unit")
+}
+
+func TestProjectUnitRejectsModbusWithoutMaster(t *testing.T) {
+	_, err := ProjectUnit(&GlobalRoot{
+		Units: map[string]UnitConfig{
+			"slave": {Actors: UnitActorsConfig{Modbus: UnitModbusConfig{Mode: ModbusModeSlave, UnitID: 1}}},
+		},
+	}, "slave")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "exactly one master unit is required")
+}
+
+func TestProjectUnitRejectsModbusBaudRateMismatch(t *testing.T) {
+	_, err := ProjectUnit(&GlobalRoot{
+		Units: map[string]UnitConfig{
+			"master": {Actors: UnitActorsConfig{Modbus: UnitModbusConfig{
+				Mode:     ModbusModeMaster,
+				Port:     "/dev/ttyNS0",
+				BaudRate: 19200,
+			}}},
+			"slave": {Actors: UnitActorsConfig{Modbus: UnitModbusConfig{
+				Mode:     ModbusModeSlave,
+				Port:     "/dev/ttyNS0",
+				BaudRate: 9600,
+				UnitID:   1,
+			}}},
+		},
+	}, "master")
+
+	require.ErrorContains(t, err, `units.slave.actors.modbus.baudrate: must match master baud rate 19200`)
 }
 
 func TestProjectUnitRejectsUnsupportedEntityEndpoints(t *testing.T) {
@@ -709,6 +998,43 @@ func TestValidate(t *testing.T) {
 			message: `modbus.mode: unsupported mode "both"`,
 		},
 		{
+			name: "requires modbus mode when configured",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+				Modbus: ModbusConfig{
+					Port:     "/dev/ttyNS0",
+					BaudRate: 19200,
+				},
+			},
+			message: "modbus.mode: required when Modbus is configured",
+		},
+		{
+			name: "requires modbus port in slave mode",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+				Modbus: ModbusConfig{
+					Mode:     ModbusModeSlave,
+					BaudRate: 19200,
+					UnitID:   1,
+				},
+			},
+			message: "modbus.port: required",
+		},
+		{
+			name: "requires positive modbus baud rate when configured",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+				Modbus: ModbusConfig{
+					Mode: ModbusModeMaster,
+					Port: "/dev/ttyNS0",
+				},
+			},
+			message: "modbus.baudrate: must be positive",
+		},
+		{
 			name: "rejects slave modbus write routes",
 			file: Root{
 				Sysfs:  SysfsConfig{Root: "/tmp"},
@@ -760,6 +1086,61 @@ func TestValidate(t *testing.T) {
 			},
 			message: `modbus.event_signals[0].source: must be a button semantic id "local.light.office_light"`,
 		},
+		{
+			name: "rejects negative modbus timeout",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+				Modbus: ModbusConfig{
+					Mode:    ModbusModeMaster,
+					Timeout: -time.Millisecond,
+				},
+			},
+			message: "modbus.timeout: must not be negative",
+		},
+		{
+			name: "requires positive master modbus timeout",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+				Modbus: ModbusConfig{
+					Mode:     ModbusModeMaster,
+					Port:     "/dev/ttyNS0",
+					BaudRate: 19200,
+				},
+			},
+			message: "modbus.timeout: must be positive in master mode",
+		},
+		{
+			name: "rejects zero slave unit id",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+				Modbus: ModbusConfig{
+					Mode:   ModbusModeSlave,
+					UnitID: 0,
+				},
+			},
+			message: "modbus.unit_id: must be between 1 and 247",
+		},
+		{
+			name: "rejects out of range modbus coil",
+			file: Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+				Modbus: ModbusConfig{
+					Mode: ModbusModeSlave,
+					EventSignals: []ModbusEventSignalConfig{{
+						ID:     "signal",
+						Coil:   65536,
+						Source: "local.button.button",
+						Target: "local.light.light",
+						Action: BindingActionToggle,
+					}},
+				},
+			},
+			message: "modbus.event_signals[0].coil: must be between 0 and 65535",
+		},
 	}
 
 	for _, tt := range tests {
@@ -767,6 +1148,61 @@ func TestValidate(t *testing.T) {
 			err := Validate(&tt.file)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.message)
+		})
+	}
+}
+
+func TestValidateRejectsDuplicateModbusCoils(t *testing.T) {
+	tests := []struct {
+		name         string
+		eventSignals []ModbusEventSignalConfig
+		statePoints  []ModbusStatePointConfig
+		message      string
+	}{
+		{
+			name: "event signals",
+			eventSignals: []ModbusEventSignalConfig{
+				{ID: "button_a", Coil: 1, Source: "local.button.button_a", Target: "local.light.light", Action: BindingActionToggle},
+				{ID: "button_b", Coil: 1, Source: "local.button.button_b", Target: "local.light.light", Action: BindingActionToggle},
+			},
+			message: "modbus.event_signals[1].coil: duplicates modbus.event_signals[0].coil at address 1",
+		},
+		{
+			name: "state points",
+			statePoints: []ModbusStatePointConfig{
+				{ID: "light_a", Coil: 1, Entity: "local.light.light_a"},
+				{ID: "light_b", Coil: 1, Entity: "local.light.light_b"},
+			},
+			message: "modbus.state_points[1].coil: duplicates modbus.state_points[0].coil at address 1",
+		},
+		{
+			name: "event signal and state point",
+			eventSignals: []ModbusEventSignalConfig{
+				{ID: "button", Coil: 1, Source: "local.button.button", Target: "local.light.light", Action: BindingActionToggle},
+			},
+			statePoints: []ModbusStatePointConfig{
+				{ID: "light", Coil: 1, Entity: "local.light.light"},
+			},
+			message: "modbus.state_points[0].coil: duplicates modbus.event_signals[0].coil at address 1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := Validate(&Root{
+				Sysfs:  SysfsConfig{Root: "/tmp"},
+				Relays: []RelayConfig{{ID: "relay", Name: "Relay", Device: "ro_3_14"}},
+				Modbus: ModbusConfig{
+					Mode:         ModbusModeSlave,
+					Port:         "/dev/ttyNS0",
+					BaudRate:     19200,
+					UnitID:       1,
+					EventSignals: tt.eventSignals,
+					StatePoints:  tt.statePoints,
+				},
+			})
+
+			require.ErrorContains(t, err, tt.message)
 		})
 	}
 }

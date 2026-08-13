@@ -133,7 +133,6 @@ func subscribeSourceEvents(ctx context.Context, client client, topics []string, 
 	}
 
 	for _, topic := range topics {
-		topic := topic
 		token := client.Subscribe(topic, 0, func(_ paho.Client, message paho.Message) {
 			if message.Retained() {
 				slog.Warn("ignoring retained mqtt source event", "topic", message.Topic())

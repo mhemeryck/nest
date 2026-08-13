@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"slices"
+
 	"github.com/mhemeryck/nest/internal/controller/event"
 	"github.com/mhemeryck/nest/internal/entity"
 	"github.com/mhemeryck/nest/internal/registry"
@@ -17,7 +19,7 @@ func bindingEventsFromEvent(index *registry.Registry, busEvent event.Event) []ev
 
 func lightEventsFromPushButton(index *registry.Registry, pushButton event.PushButton) []event.Event {
 	bindings := registry.BindingsByButton(index, pushButton.ButtonID)
-	bindings = append(bindings, registry.RemoteTargetBindingsByButton(index, pushButton.ButtonID)...)
+	bindings = append(bindings, remoteTargetBindingsBySourceAndTransport(index, entity.ID(pushButton.ButtonID), pushButton.Delivery)...)
 	lightEvents := make([]event.Event, 0, len(bindings))
 	for _, binding := range bindings {
 		name := ""
@@ -37,4 +39,11 @@ func lightEventsFromPushButton(index *registry.Registry, pushButton event.PushBu
 	}
 
 	return lightEvents
+}
+
+func remoteTargetBindingsBySourceAndTransport(index *registry.Registry, sourceID entity.ID, delivery entity.ExecutionTransport) []entity.Binding {
+	bindings := registry.RemoteTargetBindingsBySource(index, sourceID)
+	return slices.DeleteFunc(bindings, func(binding entity.Binding) bool {
+		return binding.ExecutionTransport != delivery
+	})
 }

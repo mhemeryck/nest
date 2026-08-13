@@ -63,7 +63,11 @@ func TestToEntityRoot(t *testing.T) {
 			Action: "toggle",
 		}},
 		Modbus: ModbusConfig{
-			Mode: ModbusModeMaster,
+			Mode:         ModbusModeMaster,
+			Port:         "/dev/ttyNS0",
+			BaudRate:     19200,
+			Timeout:      500 * time.Millisecond,
+			PollInterval: time.Second,
 			EventSignalWrites: []ModbusEventSignalWriteConfig{{
 				Unit:   "controller_2",
 				Signal: "hall_button_toggle",
@@ -101,6 +105,10 @@ func TestToEntityRoot(t *testing.T) {
 	assert.Equal(t, []entity.Binding{{Source: entity.ID("controller_2.button.hall_button"), Target: entity.ID("controller_1.light.office_light"), Action: entity.ActionToggle}}, root.RemoteTargetBindings)
 	assert.Equal(t, entity.Modbus{
 		Mode:         entity.ModbusModeMaster,
+		Port:         "/dev/ttyNS0",
+		BaudRate:     19200,
+		Timeout:      500 * time.Millisecond,
+		PollInterval: time.Second,
 		EventSignals: []entity.ModbusEventSignal{},
 		StatePoints:  []entity.ModbusStatePoint{},
 		EventSignalWrites: []entity.ModbusEventSignalWrite{{

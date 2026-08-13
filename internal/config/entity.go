@@ -78,6 +78,11 @@ func ToEntityRoot(root *Root) *entity.Root {
 func modbusFromConfig(modbus ModbusConfig) entity.Modbus {
 	converted := entity.Modbus{
 		Mode:              entity.ModbusMode(modbus.Mode),
+		Port:              modbus.Port,
+		BaudRate:          modbus.BaudRate,
+		Timeout:           modbus.Timeout,
+		PollInterval:      modbus.PollInterval,
+		UnitID:            modbus.UnitID,
 		EventSignals:      make([]entity.ModbusEventSignal, 0, len(modbus.EventSignals)),
 		StatePoints:       make([]entity.ModbusStatePoint, 0, len(modbus.StatePoints)),
 		EventSignalWrites: make([]entity.ModbusEventSignalWrite, 0, len(modbus.EventSignalWrites)),
@@ -87,6 +92,7 @@ func modbusFromConfig(modbus ModbusConfig) entity.Modbus {
 	for _, signal := range modbus.EventSignals {
 		converted.EventSignals = append(converted.EventSignals, entity.ModbusEventSignal{
 			ID:     entity.ModbusEventSignalID(signal.ID),
+			Coil:   signal.Coil,
 			Source: entity.ID(signal.Source),
 			Target: entity.ID(signal.Target),
 			Action: entity.Action(signal.Action),
@@ -96,6 +102,7 @@ func modbusFromConfig(modbus ModbusConfig) entity.Modbus {
 	for _, point := range modbus.StatePoints {
 		converted.StatePoints = append(converted.StatePoints, entity.ModbusStatePoint{
 			ID:     entity.ModbusStatePointID(point.ID),
+			Coil:   point.Coil,
 			Entity: entity.ID(point.Entity),
 		})
 	}
@@ -107,6 +114,8 @@ func modbusFromConfig(modbus ModbusConfig) entity.Modbus {
 			Source: entity.ID(write.Source),
 			Target: entity.ID(write.Target),
 			Action: entity.Action(write.Action),
+			UnitID: write.UnitID,
+			Coil:   write.Coil,
 		})
 	}
 
@@ -115,6 +124,8 @@ func modbusFromConfig(modbus ModbusConfig) entity.Modbus {
 			Unit:   poll.Unit,
 			Point:  entity.ModbusStatePointID(poll.Point),
 			Entity: entity.ID(poll.Entity),
+			UnitID: poll.UnitID,
+			Coil:   poll.Coil,
 		})
 	}
 
@@ -123,9 +134,10 @@ func modbusFromConfig(modbus ModbusConfig) entity.Modbus {
 
 func bindingFromConfig(binding BindingConfig) entity.Binding {
 	return entity.Binding{
-		Source: entity.ID(binding.Source),
-		Target: entity.ID(binding.Target),
-		Action: entity.Action(binding.Action),
+		Source:             entity.ID(binding.Source),
+		Target:             entity.ID(binding.Target),
+		Action:             entity.Action(binding.Action),
+		ExecutionTransport: entity.ExecutionTransport(binding.ExecutionTransport),
 	}
 }
 

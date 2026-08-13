@@ -40,6 +40,11 @@ type MQTTConfig struct {
 
 type ModbusConfig struct {
 	Mode              string                         `yaml:"mode"`
+	Port              string                         `yaml:"port"`
+	BaudRate          int                            `yaml:"baudrate"`
+	Timeout           time.Duration                  `yaml:"timeout"`
+	PollInterval      time.Duration                  `yaml:"poll_interval"`
+	UnitID            int                            `yaml:"unit_id"`
 	EventSignals      []ModbusEventSignalConfig      `yaml:"event_signals"`
 	StatePoints       []ModbusStatePointConfig       `yaml:"state_points"`
 	EventSignalWrites []ModbusEventSignalWriteConfig `yaml:"event_signal_writes"`
@@ -48,6 +53,7 @@ type ModbusConfig struct {
 
 type ModbusEventSignalConfig struct {
 	ID     string `yaml:"id"`
+	Coil   int    `yaml:"coil"`
 	Source string `yaml:"source"`
 	Target string `yaml:"target"`
 	Action string `yaml:"action"`
@@ -55,6 +61,7 @@ type ModbusEventSignalConfig struct {
 
 type ModbusStatePointConfig struct {
 	ID     string `yaml:"id"`
+	Coil   int    `yaml:"coil"`
 	Entity string `yaml:"entity"`
 }
 
@@ -64,12 +71,16 @@ type ModbusEventSignalWriteConfig struct {
 	Source string `yaml:"source"`
 	Target string `yaml:"target"`
 	Action string `yaml:"action"`
+	UnitID uint8  `yaml:"-"`
+	Coil   uint16 `yaml:"-"`
 }
 
 type ModbusStatePollConfig struct {
 	Unit   string `yaml:"unit"`
 	Point  string `yaml:"point"`
 	Entity string `yaml:"entity"`
+	UnitID uint8  `yaml:"-"`
+	Coil   uint16 `yaml:"-"`
 }
 
 type DigitalInputConfig struct {
@@ -96,9 +107,10 @@ type LightConfig struct {
 }
 
 type BindingConfig struct {
-	Source string `yaml:"source"`
-	Target string `yaml:"target"`
-	Action string `yaml:"action"`
+	Source             string `yaml:"source"`
+	Target             string `yaml:"target"`
+	Action             string `yaml:"action"`
+	ExecutionTransport string `yaml:"execution_transport"`
 }
 
 const BindingActionToggle = "toggle"

@@ -46,40 +46,128 @@ func Validate(f *Root) error {
 }
 
 func validateModbus(modbus ModbusConfig) error {
-	var errs error
-
 	switch modbus.Mode {
-	case "", ModbusModeMaster, ModbusModeSlave:
+	case "":
+		if modbusConfigured(modbus) {
+			return fmt.Errorf("modbus.mode: required when Modbus is configured")
+		}
+		return nil
+	case ModbusModeMaster:
+		return validateModbusMaster(modbus)
+	case ModbusModeSlave:
+		return validateModbusSlave(modbus)
 	default:
-		errs = errors.Join(errs, fmt.Errorf("modbus.mode: unsupported mode %q", modbus.Mode))
+		return fmt.Errorf("modbus.mode: unsupported mode %q", modbus.Mode)
 	}
+}
 
-	if modbus.Mode != ModbusModeSlave {
-		if len(modbus.EventSignals) > 0 {
-			errs = errors.Join(errs, fmt.Errorf("modbus.event_signals: requires slave mode"))
-		}
-		if len(modbus.StatePoints) > 0 {
-			errs = errors.Join(errs, fmt.Errorf("modbus.state_points: requires slave mode"))
-		}
-	}
-	if modbus.Mode != ModbusModeMaster {
-		if len(modbus.EventSignalWrites) > 0 {
-			errs = errors.Join(errs, fmt.Errorf("modbus.event_signal_writes: requires master mode"))
-		}
-		if len(modbus.StatePolls) > 0 {
-			errs = errors.Join(errs, fmt.Errorf("modbus.state_polls: requires master mode"))
-		}
-	}
-
-	errs = errors.Join(
-		errs,
-		validateModbusEventSignals(modbus.EventSignals),
-		validateModbusStatePoints(modbus.StatePoints),
+func validateModbusMaster(modbus ModbusConfig) error {
+	return errors.Join(
+		validateModbusSerialConfig(modbus),
+		validateModbusDurations(modbus),
+		validateModbusMasterTimeout(modbus.Timeout),
+		validateModbusSlaveEndpoints(modbus),
+		validateMasterUnitID(modbus),
 		validateModbusEventSignalWrites(modbus.EventSignalWrites),
 		validateModbusStatePolls(modbus.StatePolls),
 	)
+}
 
+func validateModbusMasterTimeout(timeout time.Duration) error {
+	if timeout <= 0 {
+		return fmt.Errorf("modbus.timeout: must be positive in master mode")
+	}
+
+	return nil
+}
+
+func validateModbusSlave(modbus ModbusConfig) error {
+	return errors.Join(
+		validateModbusSerialConfig(modbus),
+		validateModbusDurations(modbus),
+		validateModbusMasterRoutes(modbus),
+		validateSlaveUnitID(modbus),
+		validateModbusEventSignals(modbus.EventSignals),
+		validateModbusStatePoints(modbus.StatePoints),
+		validateUniqueModbusCoils(modbus.EventSignals, modbus.StatePoints),
+	)
+}
+
+func modbusConfigured(modbus ModbusConfig) bool {
+	return modbus.Port != "" ||
+		modbus.BaudRate != 0 ||
+		modbus.Timeout != 0 ||
+		modbus.PollInterval != 0 ||
+		modbus.UnitID != 0 ||
+		len(modbus.EventSignals) != 0 ||
+		len(modbus.StatePoints) != 0 ||
+		len(modbus.EventSignalWrites) != 0 ||
+		len(modbus.StatePolls) != 0
+}
+
+func validateModbusSerialConfig(modbus ModbusConfig) error {
+	return errors.Join(
+		validateRequiredField("modbus.port", modbus.Port),
+		validateModbusBaudRate(modbus.BaudRate),
+	)
+}
+
+func validateModbusBaudRate(baudRate int) error {
+	if baudRate <= 0 {
+		return fmt.Errorf("modbus.baudrate: must be positive")
+	}
+
+	return nil
+}
+
+func validateModbusDurations(modbus ModbusConfig) error {
+	var errs error
+
+	if modbus.Timeout < 0 {
+		errs = errors.Join(errs, fmt.Errorf("modbus.timeout: must not be negative"))
+	}
+	if modbus.PollInterval < 0 {
+		errs = errors.Join(errs, fmt.Errorf("modbus.poll_interval: must not be negative"))
+	}
 	return errs
+}
+
+func validateModbusSlaveEndpoints(modbus ModbusConfig) error {
+	var errs error
+	if len(modbus.EventSignals) > 0 {
+		errs = errors.Join(errs, fmt.Errorf("modbus.event_signals: requires slave mode"))
+	}
+	if len(modbus.StatePoints) > 0 {
+		errs = errors.Join(errs, fmt.Errorf("modbus.state_points: requires slave mode"))
+	}
+	return errs
+}
+
+func validateModbusMasterRoutes(modbus ModbusConfig) error {
+	var errs error
+	if len(modbus.EventSignalWrites) > 0 {
+		errs = errors.Join(errs, fmt.Errorf("modbus.event_signal_writes: requires master mode"))
+	}
+	if len(modbus.StatePolls) > 0 {
+		errs = errors.Join(errs, fmt.Errorf("modbus.state_polls: requires master mode"))
+	}
+	return errs
+}
+
+func validateSlaveUnitID(modbus ModbusConfig) error {
+	if modbus.UnitID < 1 || modbus.UnitID > 247 {
+		return fmt.Errorf("modbus.unit_id: must be between 1 and 247")
+	}
+
+	return nil
+}
+
+func validateMasterUnitID(modbus ModbusConfig) error {
+	if modbus.UnitID != 0 {
+		return fmt.Errorf("modbus.unit_id: requires slave mode")
+	}
+
+	return nil
 }
 
 func validateModbusEventSignals(signals []ModbusEventSignalConfig) error {
@@ -90,6 +178,7 @@ func validateModbusEventSignals(signals []ModbusEventSignalConfig) error {
 		errs = errors.Join(
 			errs,
 			validateID(prefix+".id", signal.ID),
+			validateModbusCoil(prefix+".coil", signal.Coil),
 			validateButtonSemanticID(prefix+".source", signal.Source),
 			validateLightSemanticID(prefix+".target", signal.Target),
 			validateModbusBindingAction(prefix+".action", signal.Action),
@@ -108,12 +197,45 @@ func validateModbusStatePoints(points []ModbusStatePointConfig) error {
 		errs = errors.Join(
 			errs,
 			validateID(prefix+".id", point.ID),
+			validateModbusCoil(prefix+".coil", point.Coil),
 			validateLightSemanticID(prefix+".entity", point.Entity),
 		)
 		ids = append(ids, point.ID)
 	}
 
 	return errors.Join(errs, validateUniqueValues("modbus.state_points", "id", "id", ids))
+}
+
+func validateUniqueModbusCoils(signals []ModbusEventSignalConfig, points []ModbusStatePointConfig) error {
+	seen := make(map[int]string, len(signals)+len(points))
+	var errs error
+	register := func(field string, coil int) {
+		if coil < 0 || coil > 65535 {
+			return
+		}
+		if previous, exists := seen[coil]; exists {
+			errs = errors.Join(errs, fmt.Errorf("%s: duplicates %s at address %d", field, previous, coil))
+			return
+		}
+		seen[coil] = field
+	}
+
+	for i, signal := range signals {
+		register(fmt.Sprintf("modbus.event_signals[%d].coil", i), signal.Coil)
+	}
+	for i, point := range points {
+		register(fmt.Sprintf("modbus.state_points[%d].coil", i), point.Coil)
+	}
+
+	return errs
+}
+
+func validateModbusCoil(field string, coil int) error {
+	if coil < 0 || coil > 65535 {
+		return fmt.Errorf("%s: must be between 0 and 65535", field)
+	}
+
+	return nil
 }
 
 func validateModbusEventSignalWrites(writes []ModbusEventSignalWriteConfig) error {
@@ -205,8 +327,22 @@ func validateGlobalBindings(global *GlobalRoot) error {
 		sourceErr := validateGlobalBindingEndpoint(global, prefix+".source", binding.Source, entity.TypeButton)
 		targetErr := validateGlobalBindingEndpoint(global, prefix+".target", binding.Target, entity.TypeLight)
 		actionErr := validateModbusBindingAction(prefix+".action", binding.Action)
+		transportErr := error(nil)
 
 		if sourceErr == nil && targetErr == nil && actionErr == nil {
+			sourceUnit := strings.Split(binding.Source, ".")[0]
+			targetUnit := strings.Split(binding.Target, ".")[0]
+			if sourceUnit == targetUnit {
+				if binding.ExecutionTransport != "" {
+					transportErr = fmt.Errorf("%s.execution_transport: only valid for cross-unit bindings", prefix)
+				}
+			} else {
+				transportErr = validateExecutionTransport(prefix+".execution_transport", binding.ExecutionTransport)
+				if binding.ExecutionTransport == string(entity.ExecutionTransportModbus) {
+					transportErr = errors.Join(transportErr, validateModbusBindingRoute(global, prefix, binding, sourceUnit, targetUnit))
+				}
+			}
+
 			key := binding.Source + "\x00" + binding.Target + "\x00" + binding.Action
 			if _, ok := seen[key]; ok {
 				errs = errors.Join(
@@ -224,10 +360,31 @@ func validateGlobalBindings(global *GlobalRoot) error {
 			}
 		}
 
-		errs = errors.Join(errs, sourceErr, targetErr, actionErr)
+		errs = errors.Join(errs, sourceErr, targetErr, actionErr, transportErr)
 	}
 
 	return errs
+}
+
+func validateModbusBindingRoute(global *GlobalRoot, prefix string, binding GlobalBindingConfig, sourceUnit, targetUnit string) error {
+	for _, write := range global.Units[sourceUnit].Actors.Modbus.EventSignalWrites {
+		if write.Unit == targetUnit &&
+			write.Source == binding.Source &&
+			write.Target == binding.Target &&
+			write.Action == binding.Action {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("%s: missing matching Modbus event signal write", prefix)
+}
+
+func validateExecutionTransport(field string, value string) error {
+	if value != string(entity.ExecutionTransportMQTT) && value != string(entity.ExecutionTransportModbus) {
+		return fmt.Errorf("%s: must be %q or %q", field, entity.ExecutionTransportMQTT, entity.ExecutionTransportModbus)
+	}
+
+	return nil
 }
 
 func validateGlobalBindingEndpoint(global *GlobalRoot, field string, value string, entityType entity.Type) error {
@@ -265,8 +422,39 @@ func validateGlobalBindingEndpoint(global *GlobalRoot, field string, value strin
 
 func validateGlobalModbus(global *GlobalRoot) error {
 	var errs error
+	var masterUnit string
+	masterBaudRate := 0
+	modbusConfigured := false
+	seenSlaveIDs := make(map[int]string)
+
 	for unitID, unit := range global.Units {
 		prefix := fmt.Sprintf("units.%s.actors.modbus", unitID)
+		errs = errors.Join(errs, validateModbus(unit.Actors.Modbus))
+		if unit.Actors.Modbus.Mode == ModbusModeMaster {
+			modbusConfigured = true
+			if masterUnit != "" {
+				errs = errors.Join(errs, fmt.Errorf("%s.mode: multiple master units, already configured on %q", prefix, masterUnit))
+			} else {
+				masterUnit = unitID
+				masterBaudRate = unit.Actors.Modbus.BaudRate
+			}
+		}
+		if unit.Actors.Modbus.Mode == ModbusModeSlave {
+			modbusConfigured = true
+			if unit.Actors.Modbus.UnitID != 0 {
+				if previous, ok := seenSlaveIDs[unit.Actors.Modbus.UnitID]; ok {
+					errs = errors.Join(errs, fmt.Errorf("%s.unit_id: duplicates slave unit %q", prefix, previous))
+				} else {
+					seenSlaveIDs[unit.Actors.Modbus.UnitID] = unitID
+				}
+			}
+		}
+
+		for i, point := range unit.Actors.Modbus.StatePoints {
+			field := fmt.Sprintf("%s.state_points[%d].entity", prefix, i)
+			errs = errors.Join(errs, validateGlobalModbusStatePointEntity(global, field, point.Entity, unitID))
+		}
+
 		for i, write := range unit.Actors.Modbus.EventSignalWrites {
 			routePrefix := fmt.Sprintf("%s.event_signal_writes[%d]", prefix, i)
 			target, ok := global.Units[write.Unit]
@@ -274,8 +462,19 @@ func validateGlobalModbus(global *GlobalRoot) error {
 				errs = errors.Join(errs, fmt.Errorf("%s.unit: unknown unit %q", routePrefix, write.Unit))
 				continue
 			}
-			if !modbusEventSignalExists(target.Actors.Modbus.EventSignals, write.Signal) {
+			signal, ok := modbusEventSignalByID(target.Actors.Modbus.EventSignals, write.Signal)
+			if !ok {
 				errs = errors.Join(errs, fmt.Errorf("%s.signal: unknown event signal %q on unit %q", routePrefix, write.Signal, write.Unit))
+				continue
+			}
+			if write.Source != signal.Source {
+				errs = errors.Join(errs, fmt.Errorf("%s.source: must match event signal %q source %q", routePrefix, write.Signal, signal.Source))
+			}
+			if write.Target != signal.Target {
+				errs = errors.Join(errs, fmt.Errorf("%s.target: must match event signal %q target %q", routePrefix, write.Signal, signal.Target))
+			}
+			if write.Action != signal.Action {
+				errs = errors.Join(errs, fmt.Errorf("%s.action: must match event signal %q action %q", routePrefix, write.Signal, signal.Action))
 			}
 		}
 
@@ -286,8 +485,25 @@ func validateGlobalModbus(global *GlobalRoot) error {
 				errs = errors.Join(errs, fmt.Errorf("%s.unit: unknown unit %q", routePrefix, poll.Unit))
 				continue
 			}
-			if !modbusStatePointExists(target.Actors.Modbus.StatePoints, poll.Point) {
+			point, ok := modbusStatePointByID(target.Actors.Modbus.StatePoints, poll.Point)
+			if !ok {
 				errs = errors.Join(errs, fmt.Errorf("%s.point: unknown state point %q on unit %q", routePrefix, poll.Point, poll.Unit))
+			} else if point.Entity != poll.Entity {
+				errs = errors.Join(errs, fmt.Errorf("%s.entity: must match state point %q entity %q", routePrefix, poll.Point, point.Entity))
+			}
+		}
+	}
+	if modbusConfigured && masterUnit == "" {
+		errs = errors.Join(errs, fmt.Errorf("modbus: exactly one master unit is required when Modbus is configured"))
+	}
+	if masterUnit != "" && masterBaudRate > 0 {
+		for unitID, unit := range global.Units {
+			if unit.Actors.Modbus.Mode == ModbusModeSlave && unit.Actors.Modbus.BaudRate > 0 && unit.Actors.Modbus.BaudRate != masterBaudRate {
+				errs = errors.Join(errs, fmt.Errorf(
+					"units.%s.actors.modbus.baudrate: must match master baud rate %d",
+					unitID,
+					masterBaudRate,
+				))
 			}
 		}
 	}
@@ -295,24 +511,40 @@ func validateGlobalModbus(global *GlobalRoot) error {
 	return errs
 }
 
-func modbusEventSignalExists(signals []ModbusEventSignalConfig, id string) bool {
+func validateGlobalModbusStatePointEntity(global *GlobalRoot, field, value, unitID string) error {
+	if err := validateGlobalBindingEndpoint(global, field, value, entity.TypeLight); err != nil {
+		return err
+	}
+	if !entity.IsIDForUnit(value, unitID, entity.TypeLight) {
+		return fmt.Errorf("%s: must reference a light on unit %q", field, unitID)
+	}
+
+	return nil
+}
+
+func modbusEventSignalByID(signals []ModbusEventSignalConfig, id string) (ModbusEventSignalConfig, bool) {
 	for _, signal := range signals {
 		if signal.ID == id {
-			return true
+			return signal, true
 		}
 	}
 
-	return false
+	return ModbusEventSignalConfig{}, false
 }
 
 func modbusStatePointExists(points []ModbusStatePointConfig, id string) bool {
+	_, ok := modbusStatePointByID(points, id)
+	return ok
+}
+
+func modbusStatePointByID(points []ModbusStatePointConfig, id string) (ModbusStatePointConfig, bool) {
 	for _, point := range points {
 		if point.ID == id {
-			return true
+			return point, true
 		}
 	}
 
-	return false
+	return ModbusStatePointConfig{}, false
 }
 
 func validateSysfs(sysfs SysfsConfig) error {

@@ -12,18 +12,21 @@ type (
 	RelayID             string
 	Action              string
 	LightAction         string
+	ExecutionTransport  string
 	ModbusMode          string
 	ModbusEventSignalID string
 	ModbusStatePointID  string
 )
 
 const (
-	ActionToggle      Action      = "toggle"
-	LightActionToggle LightAction = "toggle"
-	LightActionOn     LightAction = "on"
-	LightActionOff    LightAction = "off"
-	ModbusModeMaster  ModbusMode  = "master"
-	ModbusModeSlave   ModbusMode  = "slave"
+	ActionToggle             Action             = "toggle"
+	LightActionToggle        LightAction        = "toggle"
+	LightActionOn            LightAction        = "on"
+	LightActionOff           LightAction        = "off"
+	ModbusModeMaster         ModbusMode         = "master"
+	ModbusModeSlave          ModbusMode         = "slave"
+	ExecutionTransportMQTT   ExecutionTransport = "mqtt"
+	ExecutionTransportModbus ExecutionTransport = "modbus"
 )
 
 type Root struct {
@@ -59,6 +62,11 @@ type MQTT struct {
 
 type Modbus struct {
 	Mode              ModbusMode
+	Port              string
+	BaudRate          int
+	Timeout           time.Duration
+	PollInterval      time.Duration
+	UnitID            int
 	EventSignals      []ModbusEventSignal
 	StatePoints       []ModbusStatePoint
 	EventSignalWrites []ModbusEventSignalWrite
@@ -67,6 +75,7 @@ type Modbus struct {
 
 type ModbusEventSignal struct {
 	ID     ModbusEventSignalID
+	Coil   int
 	Source ID
 	Target ID
 	Action Action
@@ -74,6 +83,7 @@ type ModbusEventSignal struct {
 
 type ModbusStatePoint struct {
 	ID     ModbusStatePointID
+	Coil   int
 	Entity ID
 }
 
@@ -83,12 +93,16 @@ type ModbusEventSignalWrite struct {
 	Source ID
 	Target ID
 	Action Action
+	UnitID uint8
+	Coil   uint16
 }
 
 type ModbusStatePoll struct {
 	Unit   string
 	Point  ModbusStatePointID
 	Entity ID
+	UnitID uint8
+	Coil   uint16
 }
 
 type DigitalInput struct {
@@ -115,7 +129,8 @@ type Light struct {
 }
 
 type Binding struct {
-	Source ID
-	Target ID
-	Action Action
+	Source             ID
+	Target             ID
+	Action             Action
+	ExecutionTransport ExecutionTransport
 }

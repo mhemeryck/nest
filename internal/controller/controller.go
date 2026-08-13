@@ -9,6 +9,7 @@ import (
 
 	"github.com/mhemeryck/nest/internal/controller/event"
 	"github.com/mhemeryck/nest/internal/entity"
+	"github.com/mhemeryck/nest/internal/modbus"
 	"github.com/mhemeryck/nest/internal/mqtt"
 	"github.com/mhemeryck/nest/internal/registry"
 	"github.com/mhemeryck/nest/internal/sysfs"
@@ -19,17 +20,19 @@ func Run(
 	reg *registry.Registry,
 	sysfsCommands chan<- sysfs.Command,
 	mqttCommands chan<- mqtt.Command,
+	modbusCommands chan<- modbus.Command,
 	mqttTopics mqtt.Topics,
 	stateChanges <-chan sysfs.StateChange,
 	mqttEvents <-chan mqtt.Event,
+	modbusEvents <-chan modbus.Event,
 	done chan<- struct{},
 ) {
 	defer close(done)
 	semanticEvents := make(chan event.Event, 32)
 	normalizerDone := make(chan struct{})
-	go normalizeEvents(ctx, reg, mqttTopics, stateChanges, mqttEvents, semanticEvents, normalizerDone)
+	go normalizeEvents(ctx, reg, mqttTopics, stateChanges, mqttEvents, modbusEvents, semanticEvents, normalizerDone)
 
-	dispatchEvents(ctx, reg, sysfsCommands, mqttCommands, mqttTopics, semanticEvents)
+	dispatchEvents(ctx, reg, sysfsCommands, mqttCommands, modbusCommands, mqttTopics, semanticEvents)
 	<-normalizerDone
 }
 
@@ -39,6 +42,7 @@ func normalizeEvents(
 	mqttTopics mqtt.Topics,
 	stateChanges <-chan sysfs.StateChange,
 	mqttEvents <-chan mqtt.Event,
+	modbusEvents <-chan modbus.Event,
 	semanticEvents chan<- event.Event,
 	done chan<- struct{},
 ) {
@@ -63,6 +67,16 @@ func normalizeEvents(
 			if handled {
 				publishSemanticEvent(ctx, semanticEvents, semanticEvent)
 			}
+		case modbusEvent, ok := <-modbusEvents:
+			if !ok {
+				modbusEvents = nil
+				continue
+			}
+
+			semanticEvent, handled := semanticEventFromModbusEvent(index, modbusEvent)
+			if handled {
+				publishSemanticEvent(ctx, semanticEvents, semanticEvent)
+			}
 		}
 	}
 }
@@ -72,6 +86,7 @@ func dispatchEvents(
 	reg *registry.Registry,
 	sysfsCommands chan<- sysfs.Command,
 	mqttCommands chan<- mqtt.Command,
+	modbusCommands chan<- modbus.Command,
 	mqttTopics mqtt.Topics,
 	semanticEvents <-chan event.Event,
 ) {
@@ -80,7 +95,7 @@ func dispatchEvents(
 
 	for {
 		if semanticEvent, remainingEvents, ok := popEvent(dispatchQueue); ok {
-			dispatchQueue = append(remainingEvents, dispatchEvent(ctx, reg, sysfsCommands, mqttCommands, mqttTopics, semanticEvent)...)
+			dispatchQueue = append(remainingEvents, dispatchEvent(ctx, reg, sysfsCommands, mqttCommands, modbusCommands, mqttTopics, semanticEvent)...)
 			continue
 		}
 
@@ -191,20 +206,73 @@ func semanticSourceEventFromMQTTMessage(index *registry.Registry, mqttTopics mqt
 		slog.Warn("unhandled mqtt message topic", "topic", message.Topic)
 		return event.Event{}, false
 	}
-	if len(registry.RemoteTargetBindingsBySource(index, sourceEvent.SourceID)) == 0 {
+	semanticEvent, handled := semanticEventFromSourceEvent(index, sourceEvent.SourceID, sourceEvent.Event, entity.ExecutionTransportMQTT)
+	if !handled && len(registry.RemoteTargetBindingsBySource(index, sourceEvent.SourceID)) == 0 {
 		slog.Warn("mqtt source event has no target-local binding", "source_id", sourceEvent.SourceID)
+	}
+
+	return semanticEvent, handled
+}
+
+func semanticEventFromModbusEvent(index *registry.Registry, modbusEvent modbus.Event) (event.Event, bool) {
+	switch modbusEvent.Kind {
+	case modbus.WriteFailedEventKind:
+		slog.Error("modbus coil write failed", "unit_id", modbusEvent.UnitID, "coil", modbusEvent.Coil, "error", modbusEvent.Error)
+		return event.Event{}, false
+	case modbus.ReadFailedEventKind:
+		slog.Error("modbus coil read failed", "unit_id", modbusEvent.UnitID, "coil", modbusEvent.Coil, "error", modbusEvent.Error)
+		return event.Event{}, false
+	case modbus.CoilReadEventKind:
+		poll, ok := registry.ModbusStatePollByCoil(index, modbusEvent.UnitID, modbusEvent.Coil)
+		if !ok {
+			return event.Event{}, false
+		}
+		value := 0
+		if modbusEvent.Value {
+			value = 1
+		}
+		return event.Event{
+			Kind: event.LightStateKind,
+			LightState: &event.LightState{
+				LightID: entity.LightID(poll.Entity),
+				Value:   value,
+			},
+		}, true
+	case modbus.WriteSucceededEventKind:
+		if !modbusEvent.Value {
+			return event.Event{}, false
+		}
+	default:
+		return event.Event{}, false
+	}
+
+	signal, ok := registry.ModbusEventSignalByCoil(index, modbusEvent.Coil)
+	if !ok {
+		return event.Event{}, false
+	}
+
+	// Initial Modbus event signals represent remote button presses.
+	return semanticEventFromSourceEvent(index, signal.Source, "pressed", entity.ExecutionTransportModbus)
+}
+
+func semanticEventFromSourceEvent(index *registry.Registry, sourceID entity.ID, sourceEvent string, delivery entity.ExecutionTransport) (event.Event, bool) {
+	if len(remoteTargetBindingsBySourceAndTransport(index, sourceID, delivery)) == 0 {
 		return event.Event{}, false
 	}
 
 	semanticEvent := event.Event{
 		PushButton: &event.PushButton{
-			ButtonID: entity.PushButtonID(sourceEvent.SourceID),
+			ButtonID: entity.PushButtonID(sourceID),
+			Delivery: delivery,
 		},
 	}
-	if sourceEvent.Event == "pressed" {
+	switch sourceEvent {
+	case "pressed":
 		semanticEvent.Kind = event.PushButtonPressedKind
-	} else {
+	case "released":
 		semanticEvent.Kind = event.PushButtonReleasedKind
+	default:
+		return event.Event{}, false
 	}
 
 	return semanticEvent, true
@@ -248,6 +316,8 @@ func logUnmappedStateChange(stateChange sysfs.StateChange) {
 		sysfs.PrintableValue(stateChange.NewValue),
 		"rising",
 		stateChange.IsRising,
+		"initial",
+		stateChange.Initial,
 	)
 }
 
