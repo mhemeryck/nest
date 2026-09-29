@@ -12,9 +12,19 @@ MQTT should be added early as a passive observability and contract-discovery int
 Each unit should publish state topics and a retained autodiscovery document that describes the command and state topics it exposes.
 Command topics may be advertised before command handling is enabled, but the discovery payload must make that disabled state explicit.
 
-The first control migration should be covers on a non-critical unit.
+The next deployment milestone is local cover control with Home Assistant integration on the cover unit.
 The existing light setup is operational and spans multiple physical units, so it should remain on the current controller while Modbus RTU and the longer-term hardware direction mature.
-Covers are a suitable first migration target because their buttons and motor relays are on the same physical unit and can replace the existing `hausmaus` plus `covers` path as one standalone controller.
+Covers are a suitable first migration target because their buttons and motor relays are on the same physical unit.
+Nest will replace the current `evok2mqtt` plus `covers` path, including the Home Assistant automations that implement physical button behavior.
+
+Current deployment baseline:
+
+- No Nest deployment yet
+- Production functionality split across the existing repositories
+- Cover unit recently switched from `hausmaus` to `evok2mqtt` after network recovery problems
+- Cover state can drift between the bridge, separate cover service, and Home Assistant
+- Local controller ownership and reconnect state convergence are the immediate priorities
+- Other `evok2mqtt` replacements deferred until the cover deployment is accepted
 
 ## Phase 1: Sysfs Layer
 
@@ -319,25 +329,68 @@ Working assumption:
 - [x] Test master and slave actors together across the serial abstraction.
 - [ ] ~~Verify the complete path against physical RS-485 hardware when a component migration requires it.~~
 
-## Phase 9: Local Cover Controller
+## Phase 9: Local Covers With Home Assistant Integration
+
+Next deployment milestone.
+See [Covers](covers.md) for the model, existing hardware mappings, behavior, and acceptance scenarios.
+
+### Model and Configuration
 
 - [ ] Define a config-driven cover model with separate open and close actuator references
 - [ ] Configure local up and down relay endpoints
-- [ ] Configure local open and close button inputs
+- [ ] Keep buttons as independent entities connected to covers through bindings
+- [ ] Support press and release bindings with initiating-source information
+- [ ] Validate actuator ownership and conflicting output assignments
+- [ ] Translate the twelve cover mappings from `homelab` into Nest configuration
+- [ ] Configure movement timeouts and reversal delays
+
+### Controller and Output Execution
+
 - [ ] Implement press-and-hold open button behavior
 - [ ] Implement press-and-hold close button behavior
 - [ ] Stop on button release
 - [ ] Stop remote motion when either physical button is pressed
-- [ ] Define deterministic behavior when both buttons are active
-- [ ] Implement open, close, stop, and remote movement commands
-- [ ] Enforce up/down relay interlocks and stop before reversing
-- [ ] Ensure both relays are off during startup and shutdown
-- [ ] Add motion timeout handling
-- [ ] Add unit tests for the state machine and safety rules
-- [ ] Run the controller on an isolated, non-critical unit with `hausmaus` and `covers` disabled
-- [ ] Replace the legacy `hausmaus` plus `covers` control path on that unit
+- [ ] Require release and a fresh press after physical interruption of remote motion
+- [ ] Stop on simultaneous buttons and require both released before restarting
+- [ ] Ignore remote movement requests while physical buttons are held; always accept stop
+- [ ] Implement open, close, stop, and bounded remote movement
+- [ ] Prevent repeated commands from extending the active movement timeout
+- [ ] Report output-command completion and failure, including unchanged output values
+- [ ] Confirm the opposite output is off before energizing a direction
+- [ ] Enforce stop completion and configured delay before reversing
+- [ ] Prevent opposite-direction activation after a failed stop
+- [ ] Establish both outputs off before accepting movement at startup
+- [ ] Sample initial button state without treating held buttons as fresh presses
+- [ ] Complete cover stop handling before cancelling output workers at shutdown
+- [ ] Handle input-read failures explicitly rather than relying on a future release event
+- [ ] Keep position unknown; do not infer an endpoint from stopped motion
 
-**Deliverable**: `nest` can safely control and observe covers on one physical unit without depending on Modbus, MQTT, Home Assistant, `hausmaus`, or the legacy `covers` service.
+### Home Assistant Contract
+
+- [ ] Add cover components to per-unit Home Assistant discovery
+- [ ] Accept `OPEN`, `CLOSE`, and `STOP` through the same cover controller as local bindings
+- [ ] Publish retained canonical cover state and availability
+- [ ] Ignore retained command messages
+- [ ] Republish current cover snapshots after reconnect without waiting for another hardware change
+- [ ] Keep local control and timers independent of MQTT connectivity
+- [ ] Omit percentage reporting and position commands in this milestone
+
+### Verification and Deployment
+
+- [ ] Test state transitions, competing requests, stale timers, reversal, and timeout
+- [ ] Test output failures and startup/shutdown ordering
+- [ ] Exercise local control against simulated sysfs
+- [ ] Verify discovery, commands, and reconnect convergence with the local HA/MQTT stack
+- [ ] Run lint, vet, race tests, and build checks
+- [ ] Verify physical input mappings, relay directions, and movement timings on one cover
+- [ ] Document service installation, configuration, logs, and rollback
+- [ ] Disable legacy control for the trial cover without overlapping output ownership
+- [ ] Expand from one verified cover to the remaining covers on the unit
+- [ ] Replace legacy HA cover definitions and remove migrated button-control automations
+- [ ] Retire `covers` and replaced `evok2mqtt` responsibilities after checking other unit devices
+
+**Deliverable**: Nest owns local cover behavior and hardware access on one physical unit, with HA open/close/stop and state integration.
+Local operation continues without Modbus, MQTT, Home Assistant, or the legacy services.
 
 **Migration boundary:**
 
@@ -345,18 +398,28 @@ Working assumption:
 - Existing light controllers remain unchanged on other units.
 - MQTT and Home Assistant are external command and state interfaces, not local cover-control dependencies.
 
-## Phase 10: Cover Refinement
+## Phase 10: Cover Position Estimation and Recovery
 
 - [ ] Add time-based position tracking
-- [ ] Add timing calibration and `max_time` handling
-- [ ] Define behavior when position is unknown after restart
-- [ ] Add recovery behavior after restart or interrupted movement
+- [ ] Calibrate separate open and close travel times
+- [ ] Update estimates from locally confirmed relay activity
+- [ ] Track estimate validity separately from motion state
+- [ ] Publish estimated percentage position to Home Assistant
+- [ ] Persist estimates in a versioned local state file keyed by semantic cover ID
+- [ ] Use atomic file replacement and define persistence failure handling
+- [ ] Record movement-in-progress and calibration context needed for recovery
+- [ ] Restore valid stopped estimates; invalidate missing, incompatible, or interrupted state
+- [ ] Define full-travel endpoint estimation and recovery after interrupted movement
+- [ ] Never resume movement automatically from persisted state
+- [ ] Add percentage-position commands when useful
 
 **Notes:**
 
 - Covers should build on the same config and event model defined earlier.
 - Safety rules must ensure up/down relays are never active simultaneously.
 - The cover state machine should remain independent of sysfs so it can be moved to better-suited hardware later.
+- A saved position is an estimate, not confirmation of physical position after unobserved movement.
+- A local state file is the initial persistence direction; SQLite deferred unless broader transactional state needs justify it.
 
 **Deliverable**: Cover entities behave predictably under real-world timing and interruption scenarios.
 
@@ -418,15 +481,11 @@ Press-to-move behavior is deferred until the standalone migration is stable.
 
 ## Phase 13: Cover MQTT Commands
 
-- [ ] Subscribe to cover command topics advertised in Home Assistant discovery
-- [ ] Require explicit configuration before cover commands are enabled
-- [ ] Reflect cover command enablement in the discovery payload
-- [ ] Accept a minimal command set for migrated covers
-- [ ] Publish resulting cover state changes after command execution
+Basic cover discovery, open/close/stop commands, state, availability, and reconnect recovery moved into Phase 9.
+Home Assistant integration is required for the first cover deployment, not a later milestone.
+Percentage reporting and eventual position commands belong to Phase 10.
 
 Light command handling and discovery are already covered by Phase 6.
-
-**Deliverable**: Home Assistant can control migrated covers through MQTT without becoming a local cover-control dependency.
 
 ## Phase 14: MQTT and Home Assistant Expansion
 
