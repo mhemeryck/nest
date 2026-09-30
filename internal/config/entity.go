@@ -60,6 +60,14 @@ func ToEntityRoot(root *Root) *entity.Root {
 		})
 	}
 
+	for _, cover := range root.Covers {
+		entities.Covers = append(entities.Covers, entity.Cover{
+			ID: entity.CoverID(cover.ID), Name: cover.Name,
+			OpenRelay: entity.RelayID(cover.OpenRelay), CloseRelay: entity.RelayID(cover.CloseRelay),
+			MovementTimeout: cover.MovementTimeout, ReversalDelay: cover.ReversalDelay,
+		})
+	}
+
 	for _, binding := range root.Bindings {
 		entities.Bindings = append(entities.Bindings, bindingFromConfig(binding))
 	}

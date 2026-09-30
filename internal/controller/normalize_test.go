@@ -67,8 +67,11 @@ func TestPushButtonEventsFromStateChangeMapsFallingEdgeToRelease(t *testing.T) {
 
 func TestLightEventsFromPushButton(t *testing.T) {
 	index := registry.Build(&entity.Root{
-		Lights:   []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
-		Bindings: []entity.Binding{{Source: entity.ID("office_button"), Target: entity.ID("office_light"), Action: entity.ActionToggle}},
+		Lights: []entity.Light{{ID: entity.LightID("office_light"), Name: "Office light", Relay: entity.RelayID("office_light_relay")}},
+		Bindings: []entity.Binding{
+			{Source: entity.ID("office_button"), Target: entity.ID("office_light"), Action: entity.ActionToggle},
+			{Source: entity.ID("office_button"), Target: entity.ID("local.cover.office"), Action: entity.ActionHoldOpen},
+		},
 	})
 
 	events := lightEventsFromPushButton(index, event.PushButton{ButtonID: entity.PushButtonID("office_button")})
@@ -135,9 +138,9 @@ func TestSemanticEventFromMQTTEventRejectsInvalidLightCommandPayload(t *testing.
 func TestSemanticEventFromMQTTEventMapsSourceEventToPushButtonEvent(t *testing.T) {
 	root := &entity.Root{
 		RemoteTargetBindings: []entity.Binding{{
-			Source: entity.ID("controller_2.button.hall_button"),
-			Target: entity.ID("controller_1.light.office_light"),
-			Action: entity.ActionToggle,
+			Source:             entity.ID("controller_2.button.hall_button"),
+			Target:             entity.ID("controller_1.light.office_light"),
+			Action:             entity.ActionToggle,
 			ExecutionTransport: entity.ExecutionTransportMQTT,
 		}},
 	}

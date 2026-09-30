@@ -12,6 +12,9 @@ type Registry struct {
 	mqtt                              entity.MQTT
 	modbus                            entity.Modbus
 	lights                            []entity.Light
+	covers                            []entity.Cover
+	coversByID                        map[entity.CoverID]entity.Cover
+	coversByRelayID                   map[entity.RelayID]entity.Cover
 	remoteTargetBindings              []entity.Binding
 	digitalInputsByDevice             map[entity.SysfsDeviceID]entity.DigitalInput
 	pushButtonsByID                   map[entity.PushButtonID]entity.PushButton
@@ -41,6 +44,9 @@ func Build(root *entity.Root) *Registry {
 		mqtt:                              root.MQTT,
 		modbus:                            copyModbus(root.Modbus),
 		lights:                            slices.Clone(root.Lights),
+		covers:                            slices.Clone(root.Covers),
+		coversByID:                        make(map[entity.CoverID]entity.Cover, len(root.Covers)),
+		coversByRelayID:                   make(map[entity.RelayID]entity.Cover),
 		remoteTargetBindings:              slices.Clone(root.RemoteTargetBindings),
 		digitalInputsByDevice:             make(map[entity.SysfsDeviceID]entity.DigitalInput, len(root.DigitalInputs)),
 		pushButtonsByID:                   make(map[entity.PushButtonID]entity.PushButton, len(root.PushButtons)),
@@ -70,6 +76,12 @@ func Build(root *entity.Root) *Registry {
 	for _, light := range root.Lights {
 		index.lightsByID[light.ID] = light
 		index.lightsByRelayID[light.Relay] = append(index.lightsByRelayID[light.Relay], light)
+	}
+
+	for _, cover := range root.Covers {
+		index.coversByID[cover.ID] = cover
+		index.coversByRelayID[cover.OpenRelay] = cover
+		index.coversByRelayID[cover.CloseRelay] = cover
 	}
 
 	for _, relay := range root.Relays {
@@ -123,6 +135,20 @@ func Modbus(reg *Registry) entity.Modbus {
 
 func Lights(reg *Registry) []entity.Light {
 	return slices.Clone(reg.lights)
+}
+
+func Covers(reg *Registry) []entity.Cover {
+	return slices.Clone(reg.covers)
+}
+
+func CoverByID(reg *Registry, id entity.CoverID) (entity.Cover, bool) {
+	cover, ok := reg.coversByID[id]
+	return cover, ok
+}
+
+func CoverByRelay(reg *Registry, id entity.RelayID) (entity.Cover, bool) {
+	cover, ok := reg.coversByRelayID[id]
+	return cover, ok
 }
 
 func RemoteTargetBindings(reg *Registry) []entity.Binding {
