@@ -336,13 +336,13 @@ See [Covers](covers.md) for the model, existing hardware mappings, behavior, and
 
 ### Model and Configuration
 
-- [ ] Define a config-driven cover model with separate open and close actuator references
-- [ ] Configure local up and down relay endpoints
-- [ ] Keep buttons as independent entities connected to covers through bindings
+- [x] Define a config-driven cover model with separate open and close actuator references
+- [x] Configure local up and down relay endpoints
+- [x] Keep buttons as independent entities connected to covers through bindings
 - [ ] Support press and release bindings with initiating-source information
-- [ ] Validate actuator ownership and conflicting output assignments
+- [x] Validate actuator ownership and conflicting output assignments
 - [ ] Translate the twelve cover mappings from `homelab` into Nest configuration
-- [ ] Configure movement timeouts and reversal delays
+- [x] Configure movement timeouts and reversal delays
 
 ### Controller and Output Execution
 

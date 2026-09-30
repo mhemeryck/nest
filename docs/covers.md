@@ -34,7 +34,41 @@ Bindings connect their press/release events to cover actions; buttons are not fi
 Multiple buttons may bind to one cover.
 
 Bindings preserve the initiating source and held-button intent so the controller can distinguish local operation from a remote movement request.
-Exact binding schema to be settled during model implementation using the existing semantic source/target pattern.
+Use `hold_open` or `hold_close` with the existing semantic `source` and `target` fields.
+Each binding describes both edges: press requests held movement; release clears that source's intent.
+One button may select only one direction per cover.
+Cover bindings must remain on the same unit and omit `execution_transport`.
+
+Configuration and registry support are implemented; controller execution remains pending.
+Both timing fields require explicit positive durations; the values below are illustrative commissioning placeholders.
+
+```yaml
+# Under units.shady.entities
+covers:
+  - id: office
+    name: Office
+    open_actuator:
+      actor: sysfs
+      kind: relay
+      id: office_up
+    close_actuator:
+      actor: sysfs
+      kind: relay
+      id: office_down
+    movement_timeout: 30s
+    reversal_delay: 500ms
+
+# At the global root
+bindings:
+  - source: shady.button.office_up
+    target: shady.cover.office
+    action: hold_open
+  - source: shady.button.office_down
+    target: shady.cover.office
+    action: hold_close
+```
+
+Actuators must reference distinct local sysfs relays, with no ownership shared with lights or other covers.
 
 ```text
 button press/release → binding ─┐

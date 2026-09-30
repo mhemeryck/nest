@@ -9,6 +9,7 @@ type (
 	DigitalInputID      string
 	PushButtonID        string
 	LightID             string
+	CoverID             string
 	RelayID             string
 	Action              string
 	LightAction         string
@@ -19,6 +20,8 @@ type (
 )
 
 const (
+	ActionHoldOpen           Action             = "hold_open"
+	ActionHoldClose          Action             = "hold_close"
 	ActionToggle             Action             = "toggle"
 	LightActionToggle        LightAction        = "toggle"
 	LightActionOn            LightAction        = "on"
@@ -37,6 +40,7 @@ type Root struct {
 	DigitalInputs        []DigitalInput
 	PushButtons          []PushButton
 	Lights               []Light
+	Covers               []Cover
 	Relays               []Relay
 	Bindings             []Binding
 	RemoteSourceBindings []Binding
@@ -133,4 +137,13 @@ type Binding struct {
 	Target             ID
 	Action             Action
 	ExecutionTransport ExecutionTransport
+}
+
+type Cover struct {
+	ID              CoverID
+	Name            string
+	OpenRelay       RelayID
+	CloseRelay      RelayID
+	MovementTimeout time.Duration
+	ReversalDelay   time.Duration
 }
