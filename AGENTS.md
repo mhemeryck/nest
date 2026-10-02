@@ -7,6 +7,7 @@
 - One sentence per line in Markdown prose
 - Compact scan-oriented comments, lists, and headings
 - Specs: ASD-STE100 Simplified Technical English; active voice, consistent terms, one idea per sentence
+- Format all Markdown files with dprint; run `nest-format` after edits
 
 ## Git
 

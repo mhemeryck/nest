@@ -6,14 +6,17 @@
     package = pkgs.go_1_26;
   };
 
-  packages = [
-    pkgs.nushell
-    pkgs.golangci-lint
-    pkgs.goreleaser
-    pkgs.openspec
+  packages = with pkgs; [
+    nushell
+    dprint
+    golangci-lint
+    goreleaser
+    openspec
   ];
 
   scripts = {
+    nest-format.exec = "dprint fmt";
+    nest-format-check.exec = "dprint check";
     nest-test.exec = "go test -race ./...";
     nest-lint.exec = "golangci-lint run ./...";
     nest-vet.exec = "go vet ./...";
@@ -22,6 +25,7 @@
       package = pkgs.nushell;
       binary = "nu";
       exec = ''
+        nest-format-check
         nest-lint
         nest-vet
         nest-test

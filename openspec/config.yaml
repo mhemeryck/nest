@@ -4,6 +4,7 @@ context: |
   Nest is a Go 1.26 home automation controller for Unipi hardware.
   Runtime integrations include sysfs, MQTT, Home Assistant discovery, and Modbus RTU.
   Follow AGENTS.md for code, architecture, testing, Git, and writing conventions.
+  Format all Markdown files with dprint; run nest-format after artifact edits.
   Keep parsed configuration, domain entities, runtime registries, and integration types separate.
   Controllers own semantic behavior; actors own external protocol details.
   Local hardware control must operate independently of MQTT and Home Assistant connectivity.

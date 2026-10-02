@@ -103,7 +103,7 @@ In both branches, never create the root as a side effect: do not run `openspec i
 
    **If delta specs exist:**
    - Compare each delta spec with its corresponding main spec at `<planningHome.root>/openspec/specs/<capability-path>/spec.md` (use the store-aware `planningHome.root` from step 2, not a hardcoded repo path)
-   - A missing main spec is **not automatically** "already synced". For a new capability, the main spec is an *output* of the sync, not an input:
+   - A missing main spec is **not automatically** "already synced". For a new capability, the main spec is an _output_ of the sync, not an input:
      - If the delta has MODIFIED or RENAMED requirements, report that only ADDED requirements can create a new main spec and mark that capability as sync-blocked. Never invent a requirement that has no current version.
      - Otherwise, if the delta has only REMOVED requirements and the change's `.openspec.yaml` declares `retire_capabilities: true`, the capability is already retired: count it as already synced, warn that there is nothing left to remove, and do not recreate the main spec. Apply this rule both now and when verifying a completed sync.
      - Otherwise, if the delta has no ADDED requirements, report that no sync is possible and mark that capability as sync-blocked. For a REMOVED-only delta, warn that there is no main spec to remove from and leave the main-spec tree unchanged. `openspec archive` refuses the unmarked REMOVED-only case with `Spec must have at least one requirement`.
@@ -204,6 +204,7 @@ All artifacts complete. All tasks complete.
 **Specs:** Sync skipped (user chose to skip)
 
 **Warnings:**
+
 - Archived with 2 incomplete artifacts
 - Archived with 3 incomplete tasks
 - Delta spec sync was skipped (user chose to skip)
@@ -222,12 +223,14 @@ Review the archive if this was not intentional.
 Target archive directory already exists.
 
 **Options:**
+
 1. Rename the existing archive
 2. Delete the existing archive if it's a duplicate
 3. Wait until a different date to archive
 ```
 
 **Guardrails**
+
 - Announce the selected change; prompt for selection when it is ambiguous
 - Use artifact graph (openspec status --json) for completion checking
 - Don't block archive on warnings - just inform and confirm

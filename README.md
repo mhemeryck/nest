@@ -13,6 +13,8 @@ nest-check
 ```
 
 Individual checks: `nest-lint`, `nest-vet`, `nest-test`, and `nest-build`
+Format all Markdown files with `nest-format`; verify formatting with `nest-format-check`.
+`nest-check` includes the Markdown formatting check.
 `nest-test` includes race detection.
 The shell includes Nushell, Go 1.26, gopls, Delve, golangci-lint, GoReleaser, and OpenSpec.
 `nest-check` uses Nushell.
