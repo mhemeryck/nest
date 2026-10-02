@@ -22,6 +22,7 @@ rules:
     - Keep the scope small enough for a verifiable increment.
     - Resolve material behavior and scope questions with the user before drafting requirements.
   specs:
+    - Write specs in ASD-STE100 Simplified Technical English; use active voice, consistent terms, and one idea per sentence.
     - Capture agreed behavior with concrete scenarios, including relevant failure cases.
     - Do not convert historical plans wholesale or present pending behavior as implemented.
   design:

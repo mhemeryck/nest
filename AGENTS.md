@@ -6,6 +6,7 @@
 - Full sentences only for narrative or necessary precision
 - One sentence per line in Markdown prose
 - Compact scan-oriented comments, lists, and headings
+- Specs: ASD-STE100 Simplified Technical English; active voice, consistent terms, one idea per sentence
 
 ## Git
 
