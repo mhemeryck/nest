@@ -60,6 +60,18 @@
 - `assert`: non-fatal checks
 - `require`: prerequisite checks
 
+## Specification Workflow
+
+- Use OpenSpec for agreed behavioral changes
+- Start with collaborative exploration of one focused behavior
+- Historical plans and existing code: evidence for discussion, not automatic requirements
+- Resolve material behavior questions with the user before drafting a proposal
+- Concrete scenarios before implementation; revise artifacts as new evidence emerges
+- Accepted specs in `openspec/specs/`; proposed changes in `openspec/changes/`
+- Verify implementation against scenarios before archiving
+- Run `nest-check` inside `devenv shell` before task completion
+- Nushell for development scripts and shell examples
+
 ## Layout
 
 - `/cmd/`: entry points
