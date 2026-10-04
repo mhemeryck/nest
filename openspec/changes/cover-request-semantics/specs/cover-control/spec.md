@@ -2,7 +2,8 @@
 
 ## Purpose
 
-Define consistent cover request behavior across physical inputs and integrations while keeping each cover's direction outputs mutually exclusive.
+Define bounded cover movement, position reporting, and consistent request behavior across physical inputs and integrations.
+Keep each cover's direction outputs mutually exclusive.
 
 ## ADDED Requirements
 
@@ -46,7 +47,8 @@ Release handling SHALL NOT depend on which source started movement.
 
 ### Requirement: Direction request while stopped
 
-A stopped cover SHALL start the requested direction when it receives a new open or close request.
+A ready, stopped cover SHALL start the requested direction when it receives a new open or close request.
+The cover SHALL be ready only after both outputs have successful OFF results and no output fault remains.
 The controller SHALL NOT require all physical buttons to be released before accepting that request.
 
 #### Scenario: Fresh press while the other button remains held
@@ -155,3 +157,284 @@ Movement or conflicting requests for one cover SHALL NOT prevent an unrelated co
 - **WHEN** cover A receives a close request
 - **THEN** cover A stops
 - **AND** cover B continues opening
+
+### Requirement: Full-travel duration independent of position
+
+The controller SHALL use one global full-travel duration for all covers.
+Each cover SHALL have an independent movement timer.
+The timer SHALL start after successful direction activation.
+The controller SHALL request both outputs off when the timer expires.
+Estimated position SHALL NOT prevent movement or shorten the full-travel duration.
+The same duration SHALL apply to opening, closing, physical holds, and integration requests.
+
+#### Scenario: Incorrect estimated endpoint
+
+- **GIVEN** a ready cover has estimated position 100% but is physically partly closed
+- **WHEN** an open request arrives and activation succeeds
+- **THEN** the cover receives a full-travel opening run
+- **AND** estimated position 100% does not end the run early
+
+#### Scenario: Independent deadlines with a shared duration
+
+- **GIVEN** cover A starts opening
+- **WHEN** cover B starts closing later
+- **THEN** each cover has a deadline based on its own activation time
+- **AND** both runs use the same full-travel duration
+
+#### Scenario: Delayed activation
+
+- **WHEN** a direction command is pending
+- **THEN** the full-travel timer has not started
+- **WHEN** direction activation succeeds
+- **THEN** the full-travel timer starts
+
+### Requirement: Estimated position and completed endpoints
+
+The controller SHALL estimate known position during movement and keep the estimate between 0% and 100%.
+Reaching an estimated endpoint SHALL NOT complete movement.
+After full-travel completion and successful switch-off, the controller SHALL report the endpoint for the completed direction.
+Opening SHALL establish state `open` and position 100%.
+Closing SHALL establish state `closed` and position 0%.
+After an early stop and successful switch-off, the controller SHALL report `stopped` and preserve the estimated position.
+Unknown position SHALL remain unknown until a full-travel run completes successfully.
+
+#### Scenario: Estimate reaches the endpoint early
+
+- **GIVEN** a cover is opening with a known position
+- **WHEN** its estimate reaches 100% before timer expiry
+- **THEN** the reported movement state remains `opening`
+- **AND** movement continues until a stop condition occurs
+
+#### Scenario: Complete opening
+
+- **WHEN** the opening timer expires
+- **THEN** the controller requests both outputs off
+- **WHEN** both OFF writes succeed
+- **THEN** the controller reports `open` and position 100%
+
+#### Scenario: Complete closing from unknown position
+
+- **GIVEN** position is unknown
+- **WHEN** a closing run completes and both OFF writes succeed
+- **THEN** the controller reports `closed` and position 0%
+
+#### Scenario: Early stop with known position
+
+- **GIVEN** a cover is moving with a known position estimate
+- **WHEN** a stop request ends movement before full-travel completion and both OFF writes succeed
+- **THEN** the controller reports `stopped` with the estimated position
+- **AND** the controller does not establish an endpoint from the early stop
+
+#### Scenario: Early stop with unknown position
+
+- **GIVEN** a cover is moving with unknown position
+- **WHEN** an early stop completes successfully
+- **THEN** the controller reports `stopped` with unknown position
+
+### Requirement: Output write completion
+
+Successful output write completion SHALL count as confirmation of the requested output state.
+The output integration SHALL return success or failure for every command, including commands that leave the value unchanged.
+Confirmation SHALL NOT require an immediate read-back or physical relay-contact feedback.
+The controller SHALL report final cover state only after successful OFF results for both outputs.
+The controller SHALL treat a missing output result as failure after a bounded operation timeout.
+
+#### Scenario: Output already off
+
+- **GIVEN** an output is already off
+- **WHEN** the integration executes an OFF command successfully
+- **THEN** it returns a successful completion result
+
+#### Scenario: Pending switch-off
+
+- **WHEN** a full-travel run ends but one OFF result is pending
+- **THEN** the controller does not report successful endpoint completion
+
+#### Scenario: Missing activation result
+
+- **WHEN** activation has no completion result before the operation timeout
+- **THEN** the controller treats activation as failed and requests both outputs off
+- **AND** the controller does not establish an endpoint
+
+### Requirement: Pending requests preserve event ordering
+
+Cover control SHALL preserve existing event queue behavior and sequential request processing.
+Pending output operations SHALL NOT block event processing.
+A stop processed during activation SHALL cancel movement intent and request both outputs off.
+An opposite-direction request processed during activation SHALL cancel movement without automatically reversing it.
+Late results for cancelled activation SHALL NOT start a movement timer or resume movement.
+The controller SHALL discard direction requests processed while switch-off is pending.
+Output execution SHALL preserve ordering so a late activation cannot undo switch-off.
+
+#### Scenario: Stop during activation
+
+- **GIVEN** opening activation is pending
+- **WHEN** the controller processes a stop request
+- **THEN** it cancels opening intent and requests both outputs off
+- **WHEN** the cancelled activation result arrives
+- **THEN** it does not start the travel timer or restart opening
+
+#### Scenario: Opposite request during activation
+
+- **GIVEN** opening activation is pending
+- **WHEN** the controller processes a close request
+- **THEN** it cancels opening and requests both outputs off
+- **AND** closing does not start automatically
+
+#### Scenario: Direction request during switch-off
+
+- **GIVEN** both OFF commands have been sent and completion is pending
+- **WHEN** an open or close request is processed
+- **THEN** the controller discards the request
+- **AND** it does not execute that request after switch-off completes
+
+### Requirement: Per-cover output fault recovery
+
+An output operation failure SHALL put the affected cover into a fault state.
+While faulted, the controller SHALL reject direction requests, accept stop requests, and report the cover as unavailable.
+The controller SHALL retry both OFF commands at a bounded interval.
+Failed switch-off SHALL NOT produce a successful final state report.
+Successful OFF results for both outputs SHALL automatically clear the output fault.
+Recovery SHALL NOT resume interrupted movement.
+A fault on one cover SHALL NOT prevent unrelated covers from operating.
+
+#### Scenario: OFF write fails
+
+- **WHEN** an OFF write fails during stopping
+- **THEN** the affected cover becomes unavailable
+- **AND** the controller retries both OFF commands without reporting a successful stop
+- **AND** unrelated covers continue operating
+
+#### Scenario: Requests during a fault
+
+- **GIVEN** a cover has an output fault
+- **WHEN** direction and stop requests arrive
+- **THEN** the controller rejects direction requests and accepts stop requests
+
+#### Scenario: Automatic recovery
+
+- **GIVEN** a cover is faulted after an output failure
+- **WHEN** both OFF writes succeed
+- **THEN** the controller clears the fault and permits new direction requests
+- **AND** interrupted movement does not resume automatically
+
+### Requirement: Best-effort position persistence
+
+The controller SHALL persist position after successful stopping and record unfinished movement for restart detection.
+After a clean shutdown, the controller SHALL restore the last saved position when available.
+Detected unclean shutdown, unfinished movement, missing records, or untrusted records SHALL produce unknown position.
+Persistence failures SHALL be logged and SHALL NOT block local cover control.
+A stale saved position SHALL NOT restrict movement or prevent a completed run from establishing the endpoint.
+
+#### Scenario: Clean restart
+
+- **GIVEN** a clean shutdown saved position 60%
+- **WHEN** the controller restarts and restores the record
+- **THEN** estimated position is 60%
+- **AND** the controller does not resume movement
+
+#### Scenario: Detected unclean restart
+
+- **WHEN** restart detects an unclean shutdown or an unfinished movement record
+- **THEN** position is unknown even if an older position value exists
+
+#### Scenario: Persistence failure during operation
+
+- **WHEN** a position or movement-record write fails
+- **THEN** the controller logs the failure and continues local control
+
+#### Scenario: Undetected stale position
+
+- **GIVEN** a persistence failure leaves a stale endpoint record that restart cannot identify as untrusted
+- **WHEN** a direction request arrives after startup readiness
+- **THEN** the controller permits a full-travel run despite the restored endpoint estimate
+- **WHEN** that run completes and both OFF writes succeed
+- **THEN** the controller reports the endpoint for the completed direction
+
+### Requirement: Startup and shutdown output handling
+
+At startup, the controller SHALL request both outputs off for each cover before accepting movement for that cover.
+Startup SHALL NOT resume saved movement.
+Shutdown SHALL reject new movement requests and request both outputs off.
+Shutdown SHALL wait for output results within a bounded shutdown period.
+The controller SHALL save final shutdown position only after successful switch-off.
+Failed or interrupted switch-off SHALL leave movement recorded as unfinished when persistence succeeds.
+
+#### Scenario: Startup readiness
+
+- **WHEN** the controller starts
+- **THEN** it requests both outputs off for each cover
+- **AND** each cover rejects movement until both OFF results succeed
+
+#### Scenario: Clean shutdown during movement
+
+- **WHEN** shutdown starts during movement
+- **THEN** the controller rejects new movement and requests both outputs off
+- **WHEN** both OFF results succeed within the shutdown period
+- **THEN** the controller saves the final position for clean restart
+
+#### Scenario: Shutdown cannot confirm switch-off
+
+- **WHEN** switch-off fails or remains incomplete at the shutdown deadline
+- **THEN** the controller does not save a successfully stopped position
+- **AND** successful persistence leaves the movement marked unfinished
+
+### Requirement: Bound input failures to affected covers
+
+A detected read failure of a bound physical input during movement SHALL request both outputs off for the affected cover.
+This rule SHALL apply regardless of which source started movement.
+An input failure SHALL NOT stop unrelated covers.
+A missed release without a detected failure SHALL remain bounded by the full-travel timer.
+
+#### Scenario: Bound input fails during integration-started movement
+
+- **GIVEN** an integration request started cover A and cover B is also moving
+- **WHEN** a physical input bound only to cover A has a detected read failure
+- **THEN** the controller requests both outputs of cover A off
+- **AND** cover B continues moving
+
+#### Scenario: Release is missed without a detected failure
+
+- **GIVEN** a physical press started movement
+- **WHEN** its release is not observed and no input failure is detected
+- **THEN** the full-travel timer still requests both outputs off at its deadline
+
+### Requirement: MQTT-independent control and reconnect reporting
+
+Local movement, timers, and output recovery SHALL operate independently of MQTT connectivity.
+On reconnect, the controller SHALL publish current cover state and position when known.
+Reconnect SHALL NOT restart movement or reset movement timers.
+
+#### Scenario: Disconnect during movement
+
+- **GIVEN** a cover is moving
+- **WHEN** MQTT disconnects
+- **THEN** local requests remain effective and the movement deadline remains active
+
+#### Scenario: Reconnect during movement
+
+- **GIVEN** a cover is moving with a known position
+- **WHEN** MQTT reconnects
+- **THEN** the controller publishes current state and estimated position
+- **AND** it preserves the active movement deadline without restarting movement
+
+#### Scenario: Reconnect with unknown position
+
+- **WHEN** MQTT reconnects while position is unknown
+- **THEN** the controller publishes current cover state without inventing a numeric position
+
+### Requirement: Retained MQTT request handling
+
+The controller SHALL ignore retained MQTT open and close commands.
+The controller SHALL accept retained MQTT stop commands under the normal stop rules.
+
+#### Scenario: Retained movement command replay
+
+- **WHEN** MQTT delivers a retained open or close command
+- **THEN** the command does not start movement
+
+#### Scenario: Retained stop command
+
+- **GIVEN** a cover is moving
+- **WHEN** MQTT delivers a retained stop command
+- **THEN** the controller requests both outputs off
