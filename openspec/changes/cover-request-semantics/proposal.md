@@ -19,6 +19,7 @@ Bounded full-travel runs let the motor reach its physical limit and correct the 
 - Use one global full-travel duration with independent timers for each cover
 - Keep movement independent of estimated endpoints; establish position after a completed full-travel run
 - Use successful output writes as confirmation without immediate read-back
+- Confirm both outputs OFF before every activation, without an explicit reversal delay
 - Handle pending operations, output failures, OFF retries, and automatic recovery
 - Restore position after clean shutdown; keep persistence failures independent of local control
 - Define startup, shutdown, and detected input-failure behavior
@@ -48,25 +49,39 @@ None
 
 Source context: collaborative exploration, `../covers/covers.py`, and the historical cover plan at `14bf97a855d52cac134fdc5af227395fe50d6b86`.
 The scenarios record agreed target behavior, not behavior already implemented on this branch.
-Design and implementation tasks remain pending.
+The design records the reviewed implementation approach.
+Implementation tasks remain pending.
 
 Hardware assumption:
 
 - Motor limit switches stop physical movement while direction relays can remain energized
 
-Design work:
+Reviewed design decisions:
 
-- Full-travel duration value, output-operation timeout, OFF retry interval, and bounded shutdown period
-- Output command ordering and result correlation within the existing event flow
-- Persistence format and clean-shutdown detection
-- Position estimation from elapsed time rather than rounded periodic increments
-- Home Assistant discovery and representation of unknown position, pending operations, and faults
+- Preserve the central semantic-event dispatch model
+- Keep semantic cover state, operation phase, estimated position, and output fault in one runtime model
+- Return output completion and input failures through the existing sysfs states channel
+- Correlate commands and results; preserve per-output execution order
+- Keep sysfs command admission bounded and non-blocking; isolate saturated worker queues
+- Give each cover exclusive ownership of its two relays
+- Handle stored deadlines with a controller-owned timer, not per-operation context cancellation
+- Estimate position from elapsed time
+- Stage shutdown so output execution and feedback remain available
+- Dispatch consumer-independent semantic events to persistence and MQTT integrations
+- Keep MQTT reporting bounded and non-blocking; coalesce pending cover observations
 
-Remaining behavior questions:
+Resolved behavior questions:
 
-- Startup sampling of held physical buttons
-- Any hardware requirement for a delay before starting the other direction after confirmed switch-off
-- Reporting after recovery from a failed switch-off following full-travel completion
+- Startup button sampling belongs to input initialization, outside cover-specific behavior
+- No explicit reversal delay; confirm both outputs OFF before energizing either direction
+- During preparation, preserve same-direction intent and cancel it on stop or opposite-direction requests
+- Discard direction requests during stopping or recovery, not preparation
+- After output recovery, report the endpoint if full travel completed
+- After an output failure before full-travel completion, report stopped with unknown position
+
+Deferred deployment values:
+
+- Full-travel duration, output-operation timeout, OFF retry interval, shutdown period, and persistence location
 
 Idempotency currently covers repeated same-direction requests while moving.
 Duplicate delivery after intervening requests needs separate discussion.

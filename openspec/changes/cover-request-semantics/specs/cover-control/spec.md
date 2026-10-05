@@ -126,6 +126,21 @@ A stop request for a stopped cover SHALL leave it stopped.
 
 The open and close outputs of one cover MUST NOT be energized simultaneously.
 This invariant SHALL hold independently of request origin and request sequence.
+Before each activation, the controller SHALL command both outputs OFF and wait for both successful results.
+The controller SHALL NOT add an explicit direction-reversal delay after confirmed switch-off.
+Each cover SHALL exclusively own two distinct direction outputs.
+
+#### Scenario: Preparation before activation
+
+- **GIVEN** a ready cover with both outputs already off
+- **WHEN** a direction request starts a new run
+- **THEN** the controller commands both outputs OFF again
+- **AND** it activates the requested output only after both commands succeed
+
+#### Scenario: Conflicting output ownership
+
+- **WHEN** configuration assigns a cover output to another cover or a light
+- **THEN** configuration validation rejects the assignment
 
 #### Scenario: Competing direction requests
 
@@ -260,11 +275,36 @@ The controller SHALL treat a missing output result as failure after a bounded op
 
 Cover control SHALL preserve existing event queue behavior and sequential request processing.
 Pending output operations SHALL NOT block event processing.
+Preparation SHALL be distinct from stopping and recovery, even while its OFF results are pending.
+Same-direction requests during preparation or activation SHALL preserve the pending start without restarting pending operations.
+A stop or opposite-direction request during preparation SHALL cancel movement intent and enter stopping.
 A stop processed during activation SHALL cancel movement intent and request both outputs off.
 An opposite-direction request processed during activation SHALL cancel movement without automatically reversing it.
 Late results for cancelled activation SHALL NOT start a movement timer or resume movement.
-The controller SHALL discard direction requests processed while switch-off is pending.
+The controller SHALL discard direction requests processed during stopping or recovery.
 Output execution SHALL preserve ordering so a late activation cannot undo switch-off.
+
+#### Scenario: Same-direction request during preparation
+
+- **GIVEN** opening preparation is waiting for both OFF results
+- **WHEN** another open request arrives
+- **THEN** the controller preserves opening intent and the pending operations
+- **AND** it activates opening only after both preparation OFF results succeed
+
+#### Scenario: Opposite request during preparation
+
+- **GIVEN** opening preparation is waiting for both OFF results
+- **WHEN** a close request arrives
+- **THEN** the controller cancels opening intent and enters stopping
+- **AND** neither direction starts after switch-off completes
+- **AND** movement requires a subsequent direction request
+
+#### Scenario: Stop during preparation
+
+- **GIVEN** opening preparation is waiting for both OFF results
+- **WHEN** a stop request arrives
+- **THEN** the controller cancels opening intent and enters stopping
+- **AND** late preparation results do not activate opening
 
 #### Scenario: Stop during activation
 
@@ -283,7 +323,7 @@ Output execution SHALL preserve ordering so a late activation cannot undo switch
 
 #### Scenario: Direction request during switch-off
 
-- **GIVEN** both OFF commands have been sent and completion is pending
+- **GIVEN** the cover is stopping or recovering with OFF completion pending
 - **WHEN** an open or close request is processed
 - **THEN** the controller discards the request
 - **AND** it does not execute that request after switch-off completes
@@ -297,6 +337,22 @@ Failed switch-off SHALL NOT produce a successful final state report.
 Successful OFF results for both outputs SHALL automatically clear the output fault.
 Recovery SHALL NOT resume interrupted movement.
 A fault on one cover SHALL NOT prevent unrelated covers from operating.
+After recovery from failed switch-off following full-travel completion, the controller SHALL report the completed endpoint.
+After recovery from an output failure before full-travel completion, the controller SHALL report stopped with unknown position.
+
+#### Scenario: Recovery after completed opening
+
+- **GIVEN** a full opening run completed but switch-off failed
+- **WHEN** retries successfully switch both outputs off
+- **THEN** the controller reports open with position 100% and restores availability
+- **AND** it does not resume movement
+
+#### Scenario: Recovery after incomplete movement
+
+- **GIVEN** an output failure occurred before full-travel completion
+- **WHEN** retries successfully switch both outputs off
+- **THEN** the controller reports stopped with unknown position and restores availability
+- **AND** it requires a new direction request to move
 
 #### Scenario: OFF write fails
 
@@ -318,9 +374,34 @@ A fault on one cover SHALL NOT prevent unrelated covers from operating.
 - **THEN** the controller clears the fault and permits new direction requests
 - **AND** interrupted movement does not resume automatically
 
+### Requirement: Non-blocking output command admission
+
+Output command admission SHALL be bounded and SHALL NOT block controller request or deadline processing.
+A saturated worker queue SHALL NOT block command routing to unrelated workers.
+Rejected commands SHALL produce correlated output failures and SHALL NOT execute later.
+Admission SHALL NOT count as output state confirmation.
+Admitted commands SHALL preserve per-output execution order.
+Rejected OFF commands SHALL leave the cover faulted until successful switch-off through bounded retries.
+
+#### Scenario: Saturated worker during OFF retries
+
+- **GIVEN** cover A's worker remains blocked until OFF retries saturate its command queue
+- **AND** cover B uses an unrelated worker
+- **WHEN** cover B receives a stop request or reaches its movement deadline
+- **THEN** the controller requests both outputs of cover B off without waiting for cover A's worker
+- **AND** cover A remains unavailable and retries rejected OFF commands at the bounded interval
+- **AND** admission of an OFF command does not report a successful stop
+
+#### Scenario: Rejected activation
+
+- **GIVEN** preparation completed successfully
+- **WHEN** admission rejects the requested ON command
+- **THEN** the controller treats activation as failed and requests both outputs off
+- **AND** the rejected ON command never executes later
+
 ### Requirement: Best-effort position persistence
 
-The controller SHALL persist position after successful stopping and record unfinished movement for restart detection.
+The persistence integration SHALL persist position after successful stopping and record unfinished movement for restart detection.
 After a clean shutdown, the controller SHALL restore the last saved position when available.
 Detected unclean shutdown, unfinished movement, missing records, or untrusted records SHALL produce unknown position.
 Persistence failures SHALL be logged and SHALL NOT block local cover control.
@@ -341,7 +422,8 @@ A stale saved position SHALL NOT restrict movement or prevent a completed run fr
 #### Scenario: Persistence failure during operation
 
 - **WHEN** a position or movement-record write fails
-- **THEN** the controller logs the failure and continues local control
+- **THEN** the persistence integration logs the failure
+- **AND** local control continues
 
 #### Scenario: Undetected stale position
 
@@ -357,7 +439,7 @@ At startup, the controller SHALL request both outputs off for each cover before 
 Startup SHALL NOT resume saved movement.
 Shutdown SHALL reject new movement requests and request both outputs off.
 Shutdown SHALL wait for output results within a bounded shutdown period.
-The controller SHALL save final shutdown position only after successful switch-off.
+The persistence integration SHALL save final shutdown position only after successful switch-off.
 Failed or interrupted switch-off SHALL leave movement recorded as unfinished when persistence succeeds.
 
 #### Scenario: Startup readiness
@@ -402,8 +484,16 @@ A missed release without a detected failure SHALL remain bounded by the full-tra
 ### Requirement: MQTT-independent control and reconnect reporting
 
 Local movement, timers, and output recovery SHALL operate independently of MQTT connectivity.
+MQTT publication backpressure SHALL NOT block local request or deadline processing.
 On reconnect, the controller SHALL publish current cover state and position when known.
 Reconnect SHALL NOT restart movement or reset movement timers.
+
+#### Scenario: MQTT cannot accept publications
+
+- **GIVEN** MQTT reporting is backlogged
+- **WHEN** a local stop request or movement deadline is processed
+- **THEN** the controller requests both outputs off without waiting for MQTT publication
+- **AND** pending cover reporting retains the latest observation
 
 #### Scenario: Disconnect during movement
 
