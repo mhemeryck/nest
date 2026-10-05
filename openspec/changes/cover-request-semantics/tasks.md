@@ -14,11 +14,13 @@
 - [ ] 2.3 Make explicit ON/OFF writes independent of preliminary reads; verify write success after read failure and unchanged toggle behavior
 - [ ] 2.4 Preserve worker ordering and report input failures; verify ON followed by OFF execution and affected-input identification
 - [ ] 2.5 Add bounded non-blocking command admission and router rejection; verify correlated failures, rejected commands never execute, and per-output FIFO ordering
+- [ ] 2.6 Wire one sequential sysfs output worker per cover from registry ownership; verify both relays share its FIFO queue and unrelated covers use separate workers
+- [ ] 2.7 Exclude cover relays from type-grouped workers; verify existing device routing, single-owner polling, and unchanged per-relay polling intervals
 
 ## 3. Cover transitions and semantic events
 
 - [ ] 3.1 Add the unified runtime model and consumer-independent semantic events; verify phase, state, position, and fault transition tests
-- [ ] 3.2 Implement startup and prepare-before-activate interlocking; verify both OFF results precede every ON command
+- [ ] 3.2 Implement controller-owned startup and prepare-before-activate interlocking across both cover relays; verify both OFF results precede every ON command
 - [ ] 3.3 Implement request handling and cancellation; verify same-direction, opposite-direction, and stop requests during preparation and activation, release handling, and direction rejection during stopping or recovery
 - [ ] 3.4 Correlate results by command and generation; verify cancelled, duplicate, and stale results cannot advance newer operations
 - [ ] 3.5 Implement stopping and output recovery; verify complete-travel endpoints, incomplete-travel uncertainty, and independent-cover scenarios
@@ -54,8 +56,8 @@
 
 ## 8. Integration verification
 
-- [ ] 8.1 Exercise multi-cover control through fake sysfs and MQTT actors; verify ordering, delayed results, failures, and independent progress
-- [ ] 8.2 Keep one sysfs worker blocked through OFF retry queue saturation; verify another worker receives stop and deadline OFF commands, rejected activation never executes, and admission never confirms switch-off
+- [ ] 8.1 Exercise simultaneous multi-cover runs through fake sysfs and MQTT actors; verify at most one direction relay per cover is ON after every hardware write under rapid competing requests, cancellation, delayed results, failures, timeouts, and recovery
+- [ ] 8.2 Keep one cover worker blocked through OFF retry queue saturation; verify another cover completes preparation, activation, and stop or deadline switch-off before the blocked operation returns, rejected activation never executes, and admission never confirms switch-off
 - [ ] 8.3 Document timing values, persistence location, and migration steps; verify example configuration passes validation
 - [ ] 8.4 Run nest-format and nest-check inside devenv shell; verify formatting, lint, vet, race tests, and builds pass
 - [ ] 8.5 Validate the change with openspec and compare delivered behavior with scenarios; record verification before archive

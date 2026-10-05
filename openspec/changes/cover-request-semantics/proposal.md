@@ -63,6 +63,8 @@ Reviewed design decisions:
 - Return output completion and input failures through the existing sysfs states channel
 - Correlate commands and results; preserve per-output execution order
 - Keep sysfs command admission bounded and non-blocking; isolate saturated worker queues
+- Use one sequential sysfs output worker per cover, owning both direction relays
+- Keep direction interlocking in the central cover controller; worker ordering alone does not enforce it
 - Give each cover exclusive ownership of its two relays
 - Handle stored deadlines with a controller-owned timer, not per-operation context cancellation
 - Estimate position from elapsed time
@@ -76,6 +78,7 @@ Resolved behavior questions:
 - No explicit reversal delay; confirm both outputs OFF before energizing either direction
 - During preparation, preserve same-direction intent and cancel it on stop or opposite-direction requests
 - Discard direction requests during stopping or recovery, not preparation
+- A blocked output operation on one cover must not prevent another cover from starting or stopping
 - After output recovery, report the endpoint if full travel completed
 - After an output failure before full-travel completion, report stopped with unknown position
 

@@ -126,6 +126,7 @@ A stop request for a stopped cover SHALL leave it stopped.
 
 The open and close outputs of one cover MUST NOT be energized simultaneously.
 This invariant SHALL hold independently of request origin and request sequence.
+The cover controller SHALL enforce this invariant across both direction outputs.
 Before each activation, the controller SHALL command both outputs OFF and wait for both successful results.
 The controller SHALL NOT add an explicit direction-reversal delay after confirmed switch-off.
 Each cover SHALL exclusively own two distinct direction outputs.
@@ -158,6 +159,7 @@ Each cover SHALL exclusively own two distinct direction outputs.
 
 Request handling and direction exclusivity SHALL apply independently to each cover.
 Movement or conflicting requests for one cover SHALL NOT prevent an unrelated cover from moving.
+A blocked output operation for one cover SHALL NOT prevent another cover from activating or switching off its outputs.
 
 #### Scenario: Two covers move simultaneously
 
@@ -172,6 +174,14 @@ Movement or conflicting requests for one cover SHALL NOT prevent an unrelated co
 - **WHEN** cover A receives a close request
 - **THEN** cover A stops
 - **AND** cover B continues opening
+
+#### Scenario: Blocked output operation on one cover
+
+- **GIVEN** an output operation for cover A remains blocked
+- **WHEN** cover B receives an open request
+- **THEN** cover B completes preparation and activates opening without waiting for cover A's operation
+- **WHEN** cover B receives a stop request or reaches its movement deadline
+- **THEN** cover B switches both outputs off without waiting for cover A's operation
 
 ### Requirement: Full-travel duration independent of position
 

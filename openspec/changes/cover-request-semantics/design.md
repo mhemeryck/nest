@@ -9,6 +9,8 @@ This document records the reviewed design direction, not implemented behavior.
 The loop processes derived events through a local queue.
 MQTT and Modbus receive commands from dispatch targets.
 Sysfs routes commands to sequential device workers.
+Current worker configuration groups devices by type, so all relay outputs share one worker.
+This change gives each cover a dedicated output worker for its two direction relays.
 
 Sysfs currently reports initial relay observations and changed values through `StateChange`.
 It does not report unchanged command success or command failures.
@@ -27,7 +29,8 @@ The runtime currently cancels the controller and actors together.
 
 **Non-Goals:**
 
-- Replacement event bus or per-cover control goroutines
+- Replacement event bus or per-cover semantic-control goroutines
+- Shared hardware worker pool or general-purpose I/O scheduler
 - Cover-specific startup button sampling
 - Physical relay-contact feedback
 - Position-target commands or new Modbus cover transport
@@ -46,7 +49,8 @@ Handlers record pending operations instead of waiting for hardware results.
 Unrelated covers can progress while an operation remains pending.
 
 Alternative: per-cover goroutines.
-These introduce extra ownership and ordering rules without a concrete need.
+Per-cover semantic-control goroutines introduce extra ownership and ordering rules without a concrete need.
+Dedicated sysfs output workers execute hardware operations but do not own cover transitions.
 
 ### 2. One model with distinct state responsibilities
 
@@ -104,9 +108,24 @@ Alternative: infer command success from observed changes.
 That cannot distinguish unchanged success, pending execution, and failure.
 A separate result channel is unnecessary.
 
-### 4. Preserve ordering and exclusive output ownership
+### 4. Per-cover output workers, interlocking, and ownership
 
-Retain per-device FIFO execution for admitted commands through the sysfs router and worker queues.
+Build one sequential sysfs output worker per cover, with both direction relays routed to its bounded command queue.
+Translate registry ownership into sysfs worker configuration during runtime wiring.
+Keep cover transitions and direction interlocking in the central controller.
+The worker executes hardware operations and returns results without waiting for semantic state transitions.
+FIFO execution alone cannot prevent both direction relays from becoming energized.
+The controller must confirm both OFF writes before submitting the selected ON command.
+Exclusive ownership prevents lights or another cover from bypassing this interlock.
+
+Preserve FIFO execution for admitted commands across both relays of a cover.
+Give unrelated covers separate workers so blocked I/O on one cover cannot occupy another cover's worker.
+Retain existing type-grouped workers for devices outside cover ownership.
+Exclude cover-owned relays from those workers to avoid duplicate execution or polling.
+Each cover worker polls its own relays at the configured relay interval.
+Do not increase per-relay polling frequency when partitioning workers.
+Waiting workers use Go goroutines, not a dedicated operating-system thread per cover.
+
 Make controller command admission bounded and non-blocking.
 Reject commands when admission capacity is exhausted; treat rejection as an output operation failure.
 The router must reject a command to a full worker queue without waiting for that worker.
@@ -123,10 +142,18 @@ Each switch-off attempt uses new identifiers and a generation.
 Require both successful OFF results from the current attempt before recovery or activation.
 Do not accumulate retries while the current attempt remains pending before its timeout.
 
+Verify direction exclusivity after every simulated hardware write, including cancelled and timed-out operations that execute late.
+Test rapid competing requests, failures, delayed results, and recovery without assuming stale commands never execute.
+Block one cover worker and verify another cover can start and stop before the blocked operation returns.
+
 Add typed cover IDs, two relay references, and cover actions through config, entities, and registries.
 Validate distinct relays and exclusive ownership across covers and lights.
 Physical bindings map presses to direction requests and releases to stop requests.
 Input initialization owns startup sampling policy.
+
+Alternative: a shared fixed-size worker pool with per-device scheduling.
+Blocked operations can occupy every pool slot and prevent unrelated covers from executing commands.
+Dedicated cover workers provide the required isolation without a shared fairness scheduler.
 
 ### 5. Stored deadlines and elapsed-time estimates
 
