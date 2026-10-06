@@ -14,9 +14,10 @@ const (
 )
 
 type GlobalRoot struct {
-	Actors   GlobalActorsConfig    `yaml:"actors"`
-	Units    map[string]UnitConfig `yaml:"units"`
-	Bindings []GlobalBindingConfig `yaml:"bindings"`
+	CoverControl CoverControlConfig    `yaml:"cover_control"`
+	Actors       GlobalActorsConfig    `yaml:"actors"`
+	Units        map[string]UnitConfig `yaml:"units"`
+	Bindings     []GlobalBindingConfig `yaml:"bindings"`
 }
 
 type GlobalActorsConfig struct {
@@ -33,9 +34,10 @@ type UnitConfig struct {
 }
 
 type UnitActorsConfig struct {
-	MQTT   UnitMQTTConfig   `yaml:"mqtt"`
-	Sysfs  UnitSysfsConfig  `yaml:"sysfs"`
-	Modbus UnitModbusConfig `yaml:"modbus"`
+	Persistence PersistenceConfig `yaml:"persistence"`
+	MQTT        UnitMQTTConfig    `yaml:"mqtt"`
+	Sysfs       UnitSysfsConfig   `yaml:"sysfs"`
+	Modbus      UnitModbusConfig  `yaml:"modbus"`
 }
 
 type UnitModbusConfig = ModbusConfig
@@ -54,6 +56,7 @@ type UnitSysfsConfig struct {
 type UnitEntitiesConfig struct {
 	Buttons []UnitPushButtonConfig `yaml:"buttons"`
 	Lights  []UnitLightConfig      `yaml:"lights"`
+	Covers  []UnitCoverConfig      `yaml:"covers"`
 }
 
 type GlobalBindingConfig struct {
@@ -81,6 +84,13 @@ type UnitLightConfig struct {
 	Actuator EndpointRefConfig `yaml:"actuator"`
 }
 
+type UnitCoverConfig struct {
+	ID    string            `yaml:"id"`
+	Name  string            `yaml:"name"`
+	Open  EndpointRefConfig `yaml:"open"`
+	Close EndpointRefConfig `yaml:"close"`
+}
+
 func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
 	if err := validateID("unit_id", unitID); err != nil {
 		return nil, err
@@ -101,7 +111,8 @@ func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
 
 	localButtons, buttonErr := projectPushButtons(unitID, unit.Entities.Buttons)
 	localLights, lightErr := projectLights(unitID, unit.Entities.Lights)
-	if err := errors.Join(buttonErr, lightErr); err != nil {
+	localCovers, coverErr := projectCovers(unitID, unit.Entities.Covers)
+	if err := errors.Join(buttonErr, lightErr, coverErr); err != nil {
 		return nil, err
 	}
 
@@ -115,12 +126,15 @@ func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
 		DigitalInputs: append([]DigitalInputConfig(nil), unit.Actors.Sysfs.DigitalInputs...),
 		PushButtons:   localButtons,
 		Lights:        localLights,
+		Covers:        localCovers,
+		CoverControl:  global.CoverControl,
+		Persistence:   unit.Actors.Persistence,
 		Relays:        append([]RelayConfig(nil), unit.Actors.Sysfs.Relays...),
 	}
 
 	for _, binding := range global.Bindings {
 		sourceLocal := entity.IsIDForUnit(binding.Source, unitID, entity.TypeButton)
-		targetLocal := entity.IsIDForUnit(binding.Target, unitID, entity.TypeLight)
+		targetLocal := entity.IsIDForUnit(binding.Target, unitID, entity.TypeLight) || entity.IsIDForUnit(binding.Target, unitID, entity.TypeCover)
 
 		switch {
 		case sourceLocal && targetLocal:
@@ -241,4 +255,20 @@ func projectEndpointRef(field string, endpoint EndpointRefConfig, actor string, 
 
 	errs = errors.Join(errs, validateID(field+".id", endpoint.ID))
 	return endpoint.ID, errs
+}
+
+func projectCovers(unitID string, covers []UnitCoverConfig) ([]CoverConfig, error) {
+	projected := make([]CoverConfig, 0, len(covers))
+	var errs error
+	for i, cover := range covers {
+		prefix := fmt.Sprintf("entities.covers[%d]", i)
+		openRelay, openErr := projectEndpointRef(prefix+".open", cover.Open, endpointActorSysfs, endpointKindSysfsRelay)
+		closeRelay, closeErr := projectEndpointRef(prefix+".close", cover.Close, endpointActorSysfs, endpointKindSysfsRelay)
+		errs = errors.Join(errs, validateID(prefix+".id", cover.ID), openErr, closeErr)
+		projected = append(projected, CoverConfig{
+			ID: string(entity.NewID(unitID, entity.TypeCover, cover.ID)), Name: cover.Name,
+			OpenRelay: openRelay, CloseRelay: closeRelay,
+		})
+	}
+	return projected, errs
 }

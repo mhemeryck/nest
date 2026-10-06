@@ -3,19 +3,18 @@
 ## Context
 
 See `proposal.md` for motivation and `specs/cover-control/spec.md` for behavior.
-This document records the reviewed design direction, not implemented behavior.
+This document records the reviewed implementation approach and integration boundaries.
 
 `internal/controller/controller.go` normalizes actor reports and dispatches semantic events through one central loop.
 The loop processes derived events through a local queue.
 MQTT and Modbus receive commands from dispatch targets.
 Sysfs routes commands to sequential device workers.
-Current worker configuration groups devices by type, so all relay outputs share one worker.
+Baseline worker configuration groups devices by type, so all relay outputs share one worker.
 This change gives each cover a dedicated output worker for its two direction relays.
 
-Sysfs currently reports initial relay observations and changed values through `StateChange`.
-It does not report unchanged command success or command failures.
-Input read failures currently do not reach the controller.
-The runtime currently cancels the controller and actors together.
+Baseline sysfs reports initial relay observations and changed values through `StateChange`.
+Baseline reports omit unchanged command success, command failures, and input read failures.
+Baseline shutdown cancels the controller and actors together.
 
 ## Goals / Non-Goals
 
@@ -123,6 +122,8 @@ Give unrelated covers separate workers so blocked I/O on one cover cannot occupy
 Retain existing type-grouped workers for devices outside cover ownership.
 Exclude cover-owned relays from those workers to avoid duplicate execution or polling.
 Each cover worker polls its own relays at the configured relay interval.
+Device discovery identifies relay paths without reading their values.
+Workers own initial relay sampling, so blocked relay reads do not serialize startup across covers.
 Do not increase per-relay polling frequency when partitioning workers.
 Waiting workers use Go goroutines, not a dedicated operating-system thread per cover.
 
@@ -137,6 +138,7 @@ Queue saturation on one worker must not block routing to other workers or contro
 Cancellation submits OFF after any previously submitted ON for that output.
 An expired operation remains potentially executable; timeout does not cancel hardware work.
 Ignore stale results for transition purposes without assuming the command never executed.
+Cancelled activation results can supply timing or failure evidence during stopping, but cannot resume movement or complete newer operations.
 
 Each switch-off attempt uses new identifiers and a generation.
 Require both successful OFF results from the current attempt before recovery or activation.
@@ -149,6 +151,7 @@ Block one cover worker and verify another cover can start and stop before the bl
 Add typed cover IDs, two relay references, and cover actions through config, entities, and registries.
 Validate distinct relays and exclusive ownership across covers and lights.
 Physical bindings map presses to direction requests and releases to stop requests.
+Detected input failures also produce canonical STOP requests for MQTT-bound remote covers.
 Input initialization owns startup sampling policy.
 
 Alternative: a shared fixed-size worker pool with per-device scheduling.
@@ -186,6 +189,14 @@ Preserve the ordinary event dispatch model.
 
 Alternative: simultaneous cancellation.
 Workers can exit before executing shutdown OFF commands.
+
+### Non-blocking Modbus handoff
+
+Keep shared Modbus dispatch independent of local cover request and deadline processing.
+Use bounded handoff with FIFO pending event commands and latest pending light-state updates per coil.
+An event-command overflow produces a logged integration failure instead of blocking the central dispatcher.
+Do not replay rejected event commands later.
+Flush pending work when actor capacity becomes available, even without further semantic input.
 
 ### 7. Persistence as a semantic-event integration
 
@@ -235,6 +246,8 @@ Do not advertise a native `position_topic` that can leave stale numeric position
 Unknown semantic state maps to the documented `None` state payload.
 Expose Nest semantic state in attributes when the native Home Assistant mapping loses detail.
 Publish replacement attribute snapshots so unknown estimates clear previous values.
+Use one retained JSON observation topic for state, attributes, and per-cover availability.
+Keep the actor command channel unbuffered so the handoff owns pending observation coalescing.
 Validate this mapping against the deployed Home Assistant version during implementation.
 This adapter detail comes from protocol inspection, not the collaborative behavior decisions.
 
@@ -269,3 +282,30 @@ References checked during design:
 - Persistence location and position reporting interval
 
 These values do not change the state model or integration boundaries.
+
+## Verification
+
+Automated scenario coverage:
+
+| Behavior                                                                                 | Evidence                                                                                                             |
+| ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Requests, preparation, cancellation, correlation, and recovery                           | `internal/controller/cover_test.go`                                                                                  |
+| Relay exclusivity after every attempted write, including late and failed operations      | `internal/controller/cover_invariant_test.go`                                                                        |
+| Physical press/release and MQTT retained-request normalization                           | `internal/controller/cover_binding_test.go`, `internal/controller/cover_mqtt_test.go`                                |
+| Travel expiry, elapsed-time estimates, reporting, and sustained integration backpressure | `internal/controller/cover_deadline_test.go`                                                                         |
+| Completion reports, input failures, direct writes, and bounded admission                 | `internal/sysfs/completion_test.go`, `internal/sysfs/admission_test.go`, `internal/controller/output_report_test.go` |
+| Worker ownership and unchanged polling intervals                                         | `internal/nest/cover_workers_test.go`                                                                                |
+| Simultaneous runs and blocked-worker queue saturation                                    | `internal/nest/cover_integration_linux_test.go`                                                                      |
+| Persistence trust, replacement writes, overload, and clean/unclean restart               | `internal/persistence/persistence_test.go`, `internal/controller/persistence_test.go`                                |
+| Staged shutdown, missing results, and actor termination                                  | `internal/controller/cover_shutdown_test.go`, `internal/nest/runtime_test.go`                                        |
+| Discovery, nullable attributes, coherent coalescing, and reporting-boundary rounding     | `internal/mqtt/cover_test.go`                                                                                        |
+
+Required checks:
+
+- `devenv shell -- nest-check`
+- `devenv shell -- openspec validate cover-request-semantics --strict`
+- `devenv shell -- go run ./cmd/nest --config test/fixtures/config.covers.yaml --validate controller_1`
+
+Home Assistant protocol inspection confirms `value_template`, `None`, and stopped-state handling in the referenced MQTT implementation.
+Validation against the deployed Home Assistant version remains pending under task 7.5.
+Complete that validation before archive or hardware migration.

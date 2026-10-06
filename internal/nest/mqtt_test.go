@@ -15,5 +15,5 @@ func TestNewMQTTActorBuffersInitialLocalLightStates(t *testing.T) {
 		Lights: lights,
 	}))
 
-	assert.Equal(t, 32+len(lights), cap(actor.commands))
+	assert.Zero(t, cap(actor.commands), "pending reporting belongs to the coalescing handoff")
 }

@@ -23,9 +23,15 @@ func Validate(f *Root) error {
 	knownButtonIDs, buttonErr := validatePushButtons(f.PushButtons, knownInputIDs)
 	knownRelayIDs, relayErr := validateRelays(f.Relays)
 	knownLightIDs, lightErr := validateLights(f.Lights, knownRelayIDs)
+	knownCoverIDs, coverErr := validateCovers(f.Covers, f.Lights, knownRelayIDs)
 
 	if len(f.DigitalInputs) == 0 && len(f.Relays) == 0 {
 		errs = errors.Join(errs, fmt.Errorf("at least one digital_input or relay is required"))
+	}
+	if len(f.Covers) > 0 {
+		errs = errors.Join(errs, validateRequiredField("persistence.path", f.Persistence.Path))
+	} else {
+		errs = errors.Join(errs, validateOptionalField("persistence.path", f.Persistence.Path))
 	}
 
 	errs = errors.Join(
@@ -33,11 +39,13 @@ func Validate(f *Root) error {
 		validateSysfs(f.Sysfs),
 		validateMQTT(f.MQTT),
 		validateModbus(f.Modbus),
+		validateCoverControl(f.CoverControl, len(f.Covers) > 0),
 		inputErr,
 		buttonErr,
 		relayErr,
 		lightErr,
-		validateBindings(f.Bindings, knownButtonIDs, knownLightIDs),
+		coverErr,
+		validateBindings(f.Bindings, knownButtonIDs, knownLightIDs, knownCoverIDs),
 		validateRemoteBindings("remote_source_bindings", f.RemoteSourceBindings),
 		validateRemoteBindings("remote_target_bindings", f.RemoteTargetBindings),
 	)
@@ -59,6 +67,22 @@ func validateModbus(modbus ModbusConfig) error {
 	default:
 		return fmt.Errorf("modbus.mode: unsupported mode %q", modbus.Mode)
 	}
+}
+
+func validateCoverControl(settings CoverControlConfig, required bool) error {
+	var errs error
+	for field, value := range map[string]time.Duration{
+		"full_travel_duration": settings.FullTravelDuration,
+		"operation_timeout":    settings.OperationTimeout,
+		"off_retry_interval":   settings.OffRetryInterval,
+		"shutdown_period":      settings.ShutdownPeriod,
+		"reporting_interval":   settings.ReportingInterval,
+	} {
+		if value < 0 || (required && value == 0) {
+			errs = errors.Join(errs, fmt.Errorf("cover_control.%s: must be positive when covers are configured and must not be negative", field))
+		}
+	}
+	return errs
 }
 
 func validateModbusMaster(modbus ModbusConfig) error {
@@ -325,8 +349,9 @@ func validateGlobalBindings(global *GlobalRoot) error {
 	for i, binding := range global.Bindings {
 		prefix := fmt.Sprintf("bindings[%d]", i)
 		sourceErr := validateGlobalBindingEndpoint(global, prefix+".source", binding.Source, entity.TypeButton)
-		targetErr := validateGlobalBindingEndpoint(global, prefix+".target", binding.Target, entity.TypeLight)
-		actionErr := validateModbusBindingAction(prefix+".action", binding.Action)
+		targetType := bindingTargetType(binding.Target)
+		targetErr := validateGlobalBindingEndpoint(global, prefix+".target", binding.Target, targetType)
+		actionErr := validateBindingAction(prefix+".action", binding.Action, targetType)
 		transportErr := error(nil)
 
 		if sourceErr == nil && targetErr == nil && actionErr == nil {
@@ -339,7 +364,11 @@ func validateGlobalBindings(global *GlobalRoot) error {
 			} else {
 				transportErr = validateExecutionTransport(prefix+".execution_transport", binding.ExecutionTransport)
 				if binding.ExecutionTransport == string(entity.ExecutionTransportModbus) {
-					transportErr = errors.Join(transportErr, validateModbusBindingRoute(global, prefix, binding, sourceUnit, targetUnit))
+					if targetType == entity.TypeCover {
+						transportErr = fmt.Errorf("%s.execution_transport: Modbus cover bindings are not supported", prefix)
+					} else {
+						transportErr = errors.Join(transportErr, validateModbusBindingRoute(global, prefix, binding, sourceUnit, targetUnit))
+					}
 				}
 			}
 
@@ -412,6 +441,12 @@ func validateGlobalBindingEndpoint(global *GlobalRoot, field string, value strin
 	case entity.TypeLight:
 		for _, light := range unit.Entities.Lights {
 			if light.ID == localID {
+				return nil
+			}
+		}
+	case entity.TypeCover:
+		for _, cover := range unit.Entities.Covers {
+			if cover.ID == localID {
 				return nil
 			}
 		}
@@ -706,7 +741,7 @@ func validateLights(lights []LightConfig, knownRelayIDs map[string]struct{}) (ma
 	return knownLightIDs, err
 }
 
-func validateBindings(bindings []BindingConfig, knownButtonIDs map[string]struct{}, knownLightIDs map[string]struct{}) error {
+func validateBindings(bindings []BindingConfig, knownButtonIDs map[string]struct{}, knownLightIDs map[string]struct{}, knownCoverIDs map[string]struct{}) error {
 	var errs error
 	seen := make(map[string]int, len(bindings))
 
@@ -720,16 +755,17 @@ func validateBindings(bindings []BindingConfig, knownButtonIDs map[string]struct
 		}
 
 		var targetErr error
+		targetType := entity.TypeLight
+		if _, ok := knownCoverIDs[binding.Target]; ok {
+			targetType = entity.TypeCover
+		}
 		if err := validateRequiredField(prefix+".target", binding.Target); err != nil {
 			targetErr = err
-		} else if _, ok := knownLightIDs[binding.Target]; !ok {
+		} else if _, ok := knownLightIDs[binding.Target]; !ok && targetType != entity.TypeCover {
 			targetErr = fmt.Errorf("%s.target: unknown light %q", prefix, binding.Target)
 		}
 
-		actionErr := validateRequiredField(prefix+".action", binding.Action)
-		if actionErr == nil && binding.Action != BindingActionToggle {
-			actionErr = fmt.Errorf("%s.action: unsupported action %q", prefix, binding.Action)
-		}
+		actionErr := validateBindingAction(prefix+".action", binding.Action, targetType)
 
 		if sourceErr == nil && targetErr == nil && actionErr == nil {
 			key := binding.Source + "\x00" + binding.Target + "\x00" + binding.Action
@@ -769,15 +805,16 @@ func validateRemoteBindings(field string, bindings []BindingConfig) error {
 		}
 
 		var targetErr error
+		targetType := bindingTargetType(binding.Target)
 		if err := validateRequiredField(prefix+".target", binding.Target); err != nil {
 			targetErr = err
-		} else if !entity.IsID(binding.Target, entity.TypeLight) {
+		} else if !entity.IsID(binding.Target, targetType) {
 			targetErr = fmt.Errorf("%s.target: must be a light semantic id %q", prefix, binding.Target)
 		}
 
-		actionErr := validateRequiredField(prefix+".action", binding.Action)
-		if actionErr == nil && binding.Action != BindingActionToggle {
-			actionErr = fmt.Errorf("%s.action: unsupported action %q", prefix, binding.Action)
+		actionErr := validateBindingAction(prefix+".action", binding.Action, targetType)
+		if targetType == entity.TypeCover && binding.ExecutionTransport == string(entity.ExecutionTransportModbus) {
+			errs = errors.Join(errs, fmt.Errorf("%s.execution_transport: Modbus cover bindings are not supported", prefix))
 		}
 
 		if sourceErr == nil && targetErr == nil && actionErr == nil {

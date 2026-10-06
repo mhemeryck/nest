@@ -523,6 +523,30 @@ Reconnect SHALL NOT restart movement or reset movement timers.
 - **WHEN** MQTT reconnects while position is unknown
 - **THEN** the controller publishes current cover state without inventing a numeric position
 
+### Requirement: Non-blocking Modbus handoff
+
+Modbus command backpressure SHALL NOT block local cover requests or deadline processing.
+Pending Modbus event commands SHALL use bounded FIFO storage.
+Pending Modbus light-state updates SHALL retain the latest value per coil.
+Event-command overflow SHALL produce a logged integration failure without later replay of the rejected command.
+Pending commands SHALL progress when actor capacity returns without requiring another semantic input.
+
+#### Scenario: Modbus cannot accept commands
+
+- **GIVEN** the Modbus command channel and event handoff queue are full
+- **WHEN** another event command arrives
+- **THEN** the controller logs and reports an integration failure
+- **AND** local cover stop requests and deadlines remain effective
+- **AND** the rejected event command does not execute later
+
+#### Scenario: Pending light-state replacement
+
+- **GIVEN** a Modbus light-state update is pending for a coil
+- **WHEN** a newer update arrives for that coil
+- **THEN** pending reporting retains the newer value
+- **WHEN** actor capacity returns
+- **THEN** the integration sends the latest pending value without another semantic input
+
 ### Requirement: Retained MQTT request handling
 
 The controller SHALL ignore retained MQTT open and close commands.

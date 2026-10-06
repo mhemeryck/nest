@@ -136,19 +136,17 @@ func TestWorkerCommandTogglesRelayFromActualSysfsState(t *testing.T) {
 	assert.Equal(t, "0\n", string(data))
 }
 
-func TestHandleCommandIgnoresUnknownDevice(t *testing.T) {
+func TestHandleCommandReportsUnknownDevice(t *testing.T) {
 	ctx := t.Context()
 	states := make(chan StateChange, 1)
 	handleCommand(map[string]*Device{}, Command{Kind: ToggleCommand, DeviceID: "missing"}, ctx, states)
 
-	select {
-	case event := <-states:
-		require.Failf(t, "unexpected state event", "%+v", event)
-	default:
-	}
+	report := <-states
+	assert.Equal(t, CompletionReportKind, report.Kind)
+	assert.ErrorContains(t, report.Completion.Error, "unknown device")
 }
 
-func TestHandleCommandIgnoresUnsupportedCommand(t *testing.T) {
+func TestHandleCommandReportsUnsupportedCommand(t *testing.T) {
 	ctx := t.Context()
 	states := make(chan StateChange, 1)
 	device := &Device{Identifier: "ro_1_01", Path: filepath.Join(t.TempDir(), "ro_value"), Value: Off}
@@ -156,24 +154,21 @@ func TestHandleCommandIgnoresUnsupportedCommand(t *testing.T) {
 
 	handleCommand(map[string]*Device{"ro_1_01": device}, Command{Kind: CommandKind("invalid"), DeviceID: "ro_1_01"}, ctx, states)
 
-	select {
-	case event := <-states:
-		require.Failf(t, "unexpected state event", "%+v", event)
-	default:
-	}
+	report := <-states
+	assert.Equal(t, CompletionReportKind, report.Kind)
+	assert.ErrorContains(t, report.Completion.Error, "unsupported command")
 	assert.Equal(t, Off, device.Value)
 }
 
-func TestPollDevicesIgnoresReadErrors(t *testing.T) {
+func TestPollDevicesReportsInputReadErrors(t *testing.T) {
 	states := make(chan StateChange, 1)
 	ctx := t.Context()
 	pollDevices([]*Device{{Identifier: "missing", Path: filepath.Join(t.TempDir(), "missing")}}, ctx, states)
 
-	select {
-	case event := <-states:
-		require.Failf(t, "unexpected state event", "%+v", event)
-	default:
-	}
+	report := <-states
+	assert.Equal(t, InputFailureReportKind, report.Kind)
+	assert.Equal(t, "missing", report.Device.Identifier)
+	assert.Error(t, report.Error)
 }
 
 func TestPublishInitialRelayStatesPublishesRelayObservations(t *testing.T) {
@@ -241,16 +236,14 @@ func TestHandleCommandLogsWriteFailure(t *testing.T) {
 	handleCommand(map[string]*Device{"ro_1_01": device}, Command{Kind: ToggleCommand, DeviceID: "ro_1_01"}, ctx, states)
 
 	assert.Contains(t, buffer.String(), "sysfs read failed")
-	select {
-	case event := <-states:
-		require.Failf(t, "unexpected state event", "%+v", event)
-	default:
-	}
+	report := <-states
+	assert.Equal(t, CompletionReportKind, report.Kind)
+	assert.Error(t, report.Completion.Error)
 }
 
 func TestHandleCommandTurnsRelayOn(t *testing.T) {
 	ctx := t.Context()
-	states := make(chan StateChange, 1)
+	states := make(chan StateChange, 2)
 	device := &Device{Identifier: "ro_1_01", Path: filepath.Join(t.TempDir(), "ro_value"), Value: Off}
 	require.NoError(t, writeValue(device.Path, Off))
 
@@ -266,7 +259,7 @@ func TestHandleCommandTurnsRelayOn(t *testing.T) {
 
 func TestHandleCommandTurnsRelayOff(t *testing.T) {
 	ctx := t.Context()
-	states := make(chan StateChange, 1)
+	states := make(chan StateChange, 2)
 	device := &Device{Identifier: "ro_1_01", Path: filepath.Join(t.TempDir(), "ro_value"), Value: On}
 	require.NoError(t, writeValue(device.Path, On))
 

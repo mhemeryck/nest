@@ -27,6 +27,7 @@ func Run(ctx context.Context, cfg entity.MQTT, sourceEventTopics []string, comma
 	topics := NewTopics(cfg.TopicPrefix, cfg.UnitID)
 	client := paho.NewClient(clientOptions(ctx, cfg, topics, sourceEventTopics, events))
 	if err := waitToken(ctx, client.Connect()); err != nil {
+		client.Disconnect(0)
 		slog.Error("mqtt connect failed", "broker", brokerURL(cfg), "error", err)
 		publishEvent(ctx, events, ConnectFailedEvent(err))
 		return
@@ -85,6 +86,9 @@ func clientOptions(ctx context.Context, cfg entity.MQTT, topics Topics, sourceEv
 		}
 		if err := subscribeSourceEvents(ctx, client, sourceEventTopics, events); err != nil {
 			slog.Error("mqtt source event subscribe failed", "error", err)
+		}
+		if err := subscribeCoverCommands(ctx, client, topics, events); err != nil {
+			slog.Error("mqtt cover subscribe failed", "error", err)
 		}
 		slog.Info("mqtt connected", "broker", brokerURL(cfg), "client_id", cfg.ClientID)
 		publishEvent(ctx, events, ConnectedEvent())
@@ -152,6 +156,16 @@ func subscribeSourceEvents(ctx context.Context, client client, topics []string, 
 	}
 
 	return nil
+}
+
+func subscribeCoverCommands(ctx context.Context, client client, topics Topics, events chan<- Event) error {
+	if client == nil {
+		return nil
+	}
+	token := client.Subscribe(CoverCommandSubscriptionTopic(topics), 0, func(_ paho.Client, message paho.Message) {
+		publishEvent(ctx, events, ReceivedEvent(ReceivedMessage{Topic: message.Topic(), Payload: bytes.Clone(message.Payload()), Retained: message.Retained()}))
+	})
+	return waitToken(ctx, token)
 }
 
 func publishGracefulOffline(ctx context.Context, client paho.Client, cfg entity.MQTT) {

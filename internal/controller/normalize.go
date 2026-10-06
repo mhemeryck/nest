@@ -8,6 +8,9 @@ import (
 )
 
 func pushButtonEventsFromStateChange(index *registry.Registry, stateChange sysfs.StateChange) ([]event.Event, bool) {
+	if stateChange.Kind != sysfs.ObservationReportKind {
+		return nil, false
+	}
 	input, ok := registry.DigitalInputBySysfsDevice(index, entity.SysfsDeviceID(stateChange.Device.Identifier))
 	if !ok {
 		return nil, false
@@ -35,6 +38,28 @@ func pushButtonEventsFromStateChange(index *registry.Registry, stateChange sysfs
 
 func semanticEventsFromStateChange(index *registry.Registry, stateChange sysfs.StateChange) ([]event.Event, bool) {
 	deviceID := entity.SysfsDeviceID(stateChange.Device.Identifier)
+	switch stateChange.Kind {
+	case sysfs.CompletionReportKind:
+		completion := stateChange.Completion
+		if completion == nil {
+			return nil, false
+		}
+		return []event.Event{{Kind: event.OutputResultKind, OutputResult: &event.OutputResult{
+			CommandID: completion.Command.ID, SysfsDevice: entity.SysfsDeviceID(completion.Command.DeviceID),
+			Action: entity.OutputAction(completion.Command.Kind), CompletedAt: completion.CompletedAt, Error: completion.Error,
+		}}}, true
+	case sysfs.InputFailureReportKind:
+		input, ok := registry.DigitalInputBySysfsDevice(index, deviceID)
+		if !ok {
+			return nil, false
+		}
+		return []event.Event{{Kind: event.InputFailureKind, InputFailure: &event.InputFailure{
+			InputID: input.ID, SysfsDevice: deviceID, Error: stateChange.Error,
+		}}}, true
+	case sysfs.ObservationReportKind:
+	default:
+		return nil, false
+	}
 	if input, ok := registry.DigitalInputBySysfsDevice(index, deviceID); ok {
 		events := []event.Event{{
 			Kind: event.DigitalInputStateKind,

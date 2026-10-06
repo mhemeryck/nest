@@ -38,19 +38,19 @@ None
 
 ## Impact
 
-- Future cover behavior in `internal/controller` and physical binding normalization
-- Future command normalization in MQTT and other integrations
+- Cover behavior in `internal/controller` and physical binding normalization
+- Command normalization in MQTT and other integrations
 - Output execution must enforce per-cover direction exclusivity
 - Output execution must return completion results, including failures and writes that leave values unchanged
 - Position persistence and cover state reporting require new integration work
-- No implementation or new dependencies in this checkpoint
+- No new dependencies
 
 ## Checkpoint Scope
 
 Source context: collaborative exploration, `../covers/covers.py`, and the historical cover plan at `14bf97a855d52cac134fdc5af227395fe50d6b86`.
-The scenarios record agreed target behavior, not behavior already implemented on this branch.
+The scenarios define the agreed target behavior for this change.
 The design records the reviewed implementation approach.
-Implementation tasks remain pending.
+`tasks.md` tracks implementation and verification.
 
 Hardware assumption:
 
@@ -71,6 +71,7 @@ Reviewed design decisions:
 - Stage shutdown so output execution and feedback remain available
 - Dispatch consumer-independent semantic events to persistence and MQTT integrations
 - Keep MQTT reporting bounded and non-blocking; coalesce pending cover observations
+- Keep Modbus handoff bounded and non-blocking; preserve event-command FIFO, coalesce light-state updates, and report event overflow
 
 Resolved behavior questions:
 
