@@ -658,5 +658,5 @@ func dispatchQueuedTestEvents(
 	}
 	close(semanticEvents)
 
-	_ = dispatchEvents(ctx, index, sysfsCommands, mqttCommands, nil, mqttTopics, semanticEvents, RuntimeOptions{})
+	_ = runCoverLoop(ctx, index, sysfsCommands, mqttCommands, nil, mqttTopics, semanticEvents, RuntimeOptions{})
 }

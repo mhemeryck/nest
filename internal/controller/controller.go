@@ -3,10 +3,8 @@ package controller
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/mhemeryck/nest/internal/controller/event"
 	"github.com/mhemeryck/nest/internal/entity"
@@ -46,7 +44,7 @@ func Run(
 	normalizerDone := make(chan struct{})
 	go normalizeEvents(normalizerContext, reg, mqttTopics, stateChanges, mqttEvents, modbusEvents, semanticEvents, normalizerDone)
 
-	err := dispatchEvents(ctx, reg, sysfsCommands, mqttCommands, modbusCommands, mqttTopics, semanticEvents, runtimeOptions)
+	err := runCoverLoop(ctx, reg, sysfsCommands, mqttCommands, modbusCommands, mqttTopics, semanticEvents, runtimeOptions)
 	cancelNormalizer()
 	<-normalizerDone
 	return err
@@ -96,148 +94,6 @@ func normalizeEvents(
 			}
 		}
 	}
-}
-
-func dispatchEvents(
-	ctx context.Context,
-	reg *registry.Registry,
-	sysfsCommands chan<- sysfs.Command,
-	mqttCommands chan<- mqtt.Command,
-	modbusCommands chan<- modbus.Command,
-	mqttTopics mqtt.Topics,
-	semanticEvents <-chan event.Event,
-	runtimeOptions RuntimeOptions,
-) error {
-	feedbackContext := runtimeOptions.FeedbackContext
-	if feedbackContext == nil {
-		feedbackContext = context.WithoutCancel(ctx)
-	}
-	handoffContext, cancelHandoff := context.WithCancel(feedbackContext)
-	defer cancelHandoff()
-	modbusCapacity := max(32, len(registry.Modbus(reg).StatePoints))
-	handoff := modbus.NewHandoff(modbusCapacity)
-	handoffDone := make(chan struct{})
-	go modbus.RunHandoff(handoffContext, handoff, modbusCommands, handoffDone)
-	defer func() { modbus.FlushAvailable(handoff, modbusCommands); cancelHandoff(); <-handoffDone }()
-	mqttHandoff := mqtt.NewHandoff(mqttHandoffCapacity(reg))
-	mqttHandoffDone := make(chan struct{})
-	go mqtt.RunHandoff(handoffContext, mqttHandoff, mqttCommands, mqttHandoffDone)
-	defer func() { mqtt.FlushAvailable(mqttHandoff, mqttCommands); cancelHandoff(); <-mqttHandoffDone }()
-	covers := newCoverController(reg, runtimeOptions.RestoredPositions)
-	dispatchQueue := initializeCovers(covers, time.Now())
-	timer := time.NewTimer(time.Hour)
-	defer timer.Stop()
-	semanticEventsOpen := true
-	shutdownSignal := ctx.Done()
-	var shutdownDeadline time.Time
-
-	for {
-		now := time.Now()
-		select {
-		case <-shutdownSignal:
-			shutdownSignal = nil
-			shutdownDeadline = now.Add(covers.settings.ShutdownPeriod)
-			dispatchQueue = append(beginCoverShutdown(covers, now), dispatchQueue...)
-		default:
-		}
-		if covers.shuttingDown && !now.Before(shutdownDeadline) {
-			return coverShutdownError(covers)
-		}
-		due := processCoverDeadlines(covers, time.Now())
-		dispatchQueue = append(due, dispatchQueue...)
-		if semanticEvent, remainingEvents, ok := popEvent(dispatchQueue); ok {
-			if semanticEvent.Kind == event.OutputCommandKind && !currentCoverCommand(covers, *semanticEvent.OutputCommand) {
-				dispatchQueue = remainingEvents
-				continue
-			}
-			derived := handleCoverEvent(covers, semanticEvent, time.Now())
-			derived = append(derived, dispatchPersistenceEvent(runtimeOptions.Persistence, semanticEvent)...)
-			derived = append(derived, dispatchEvent(feedbackContext, reg, sysfsCommands, mqttCommands, modbusCommands, mqttTopics, semanticEvent, dispatchHandoffs{modbus: handoff, mqtt: mqttHandoff})...)
-			dispatchQueue = append(remainingEvents, derived...)
-			continue
-		}
-
-		if covers.shuttingDown && coverOutputsStopped(covers) {
-			dispatchPersistenceEvent(runtimeOptions.Persistence, event.Event{Kind: event.SessionStoppedKind})
-			if runtimeOptions.Persistence != nil {
-				flushContext, cancelFlush := context.WithDeadline(feedbackContext, shutdownDeadline)
-				if !persistence.FlushWithin(flushContext, runtimeOptions.Persistence) {
-					slog.Error("persistence shutdown flush incomplete")
-				}
-				cancelFlush()
-			}
-			return nil
-		}
-		if !semanticEventsOpen && !covers.shuttingDown {
-			shutdownSignal = nil
-			shutdownDeadline = time.Now().Add(covers.settings.ShutdownPeriod)
-			dispatchQueue = beginCoverShutdown(covers, time.Now())
-			continue
-		}
-
-		var deadline <-chan time.Time
-		next := nextCoverDeadline(covers)
-		if covers.shuttingDown && (next.IsZero() || shutdownDeadline.Before(next)) {
-			next = shutdownDeadline
-		}
-		if !next.IsZero() {
-			timer.Reset(max(0, time.Until(next)))
-			deadline = timer.C
-		}
-		select {
-		case <-shutdownSignal:
-			shutdownSignal = nil
-			shutdownDeadline = time.Now().Add(covers.settings.ShutdownPeriod)
-			dispatchQueue = beginCoverShutdown(covers, time.Now())
-		case <-deadline:
-		case semanticEvent, ok := <-semanticEvents:
-			if !ok {
-				semanticEventsOpen = false
-				semanticEvents = nil
-				continue
-			}
-
-			dispatchQueue = append(dispatchQueue, semanticEvent)
-		}
-	}
-}
-
-func popEvent(events []event.Event) (event.Event, []event.Event, bool) {
-	if len(events) == 0 {
-		return event.Event{}, events, false
-	}
-
-	return events[0], events[1:], true
-}
-
-func mqttHandoffCapacity(reg *registry.Registry) int {
-	lightIDs := make(map[entity.LightID]struct{})
-	for _, light := range registry.Lights(reg) {
-		lightIDs[light.ID] = struct{}{}
-	}
-	for _, poll := range registry.Modbus(reg).StatePolls {
-		lightIDs[entity.LightID(poll.Entity)] = struct{}{}
-	}
-	// Distinct observation topics plus discovery and unit availability
-	return max(32, len(registry.Covers(reg))+len(lightIDs)+2)
-}
-
-func publishMQTTStartup(ctx context.Context, reg *registry.Registry, commands chan<- mqtt.Command, handoff *mqtt.Handoff) error {
-	startupCommands, err := mqtt.StartupCommands(registry.MQTT(reg), registry.Lights(reg), registry.Covers(reg))
-	if err != nil {
-		return fmt.Errorf("build mqtt startup commands: %w", err)
-	}
-
-	for _, command := range startupCommands {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		if !publishMQTT(ctx, commands, command.Publish, handoff) {
-			return fmt.Errorf("mqtt startup handoff rejected")
-		}
-	}
-
-	return nil
 }
 
 func semanticEventFromMQTTEvent(index *registry.Registry, mqttTopics mqtt.Topics, mqttEvent mqtt.Event) (event.Event, bool) {

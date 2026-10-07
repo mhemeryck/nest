@@ -81,7 +81,7 @@ func TestCoverDeadlineProgressesUnderEventTrafficAndModbusBackpressure(t *testin
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		_ = dispatchEvents(ctx, reg, commands, make(chan mqtt.Command), make(chan modbus.Command), mqtt.Topics{}, semantic, RuntimeOptions{})
+		_ = runCoverLoop(ctx, reg, commands, make(chan mqtt.Command), make(chan modbus.Command), mqtt.Topics{}, semantic, RuntimeOptions{})
 	}()
 	actorDone := make(chan struct{})
 	stopped := make(chan struct{}, 1)

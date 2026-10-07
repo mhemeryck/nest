@@ -10,6 +10,7 @@ import (
 	"github.com/mhemeryck/nest/internal/entity"
 	"github.com/mhemeryck/nest/internal/modbus"
 	"github.com/mhemeryck/nest/internal/mqtt"
+	"github.com/mhemeryck/nest/internal/persistence"
 	"github.com/mhemeryck/nest/internal/registry"
 	"github.com/mhemeryck/nest/internal/sysfs"
 )
@@ -17,6 +18,42 @@ import (
 type dispatchHandoffs struct {
 	modbus *modbus.Handoff
 	mqtt   *mqtt.Handoff
+}
+
+type dispatchTargets struct {
+	reg            *registry.Registry
+	sysfsCommands  chan<- sysfs.Command
+	mqttCommands   chan<- mqtt.Command
+	modbusCommands chan<- modbus.Command
+	mqttTopics     mqtt.Topics
+	persistence    *persistence.Store
+	handoffs       dispatchHandoffs
+}
+
+func startDispatchHandoffs(ctx context.Context, reg *registry.Registry, mqttCommands chan<- mqtt.Command, modbusCommands chan<- modbus.Command) (dispatchHandoffs, func()) {
+	handoffContext, cancel := context.WithCancel(ctx)
+	handoffs := dispatchHandoffs{
+		modbus: modbus.NewHandoff(max(32, len(registry.Modbus(reg).StatePoints))),
+		mqtt:   mqtt.NewHandoff(mqttHandoffCapacity(reg)),
+	}
+	modbusDone := make(chan struct{})
+	mqttDone := make(chan struct{})
+	go modbus.RunHandoff(handoffContext, handoffs.modbus, modbusCommands, modbusDone)
+	go mqtt.RunHandoff(handoffContext, handoffs.mqtt, mqttCommands, mqttDone)
+	return handoffs, func() {
+		mqtt.FlushAvailable(handoffs.mqtt, mqttCommands)
+		cancel()
+		<-mqttDone
+		modbus.FlushAvailable(handoffs.modbus, modbusCommands)
+		<-modbusDone
+	}
+}
+
+func popEvent(events []event.Event) (event.Event, []event.Event, bool) {
+	if len(events) == 0 {
+		return event.Event{}, events, false
+	}
+	return events[0], events[1:], true
 }
 
 func dispatchEvent(

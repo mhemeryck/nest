@@ -5,7 +5,9 @@
 See `proposal.md` for motivation and `specs/cover-control/spec.md` for behavior.
 This document records the reviewed implementation approach and integration boundaries.
 
-`internal/controller/controller.go` normalizes actor reports and dispatches semantic events through one central loop.
+`internal/controller/controller.go` wires normalization to the cover-aware event loop in `internal/controller/cover_loop.go`.
+The cover loop owns startup, deadline scheduling, and staged shutdown.
+`internal/controller/dispatch.go` routes semantic events to integrations.
 The loop processes derived events through a local queue.
 MQTT and Modbus receive commands from dispatch targets.
 Sysfs routes commands to sequential device workers.
@@ -39,7 +41,7 @@ Baseline shutdown cancels the controller and actors together.
 ### 1. Controller-owned cover runtime state
 
 Keep per-cover runtime state in `internal/controller`.
-Use the existing dispatcher and derived-event queue for requests, output results, and deadline handling.
+Use one sequential cover loop and derived-event queue for requests, output results, and deadline handling.
 Do not add another consumer to the shared semantic-event channel.
 Multiple direct consumers would divide events rather than broadcast them.
 
