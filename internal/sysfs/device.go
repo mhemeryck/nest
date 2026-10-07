@@ -17,8 +17,9 @@ var (
 type Value byte
 
 const (
-	Off Value = '0'
-	On  Value = '1'
+	Unknown Value = '?'
+	Off     Value = '0'
+	On      Value = '1'
 )
 
 type DeviceType int
@@ -74,9 +75,13 @@ func ListDevices(root string) ([]*Device, error) {
 func newDevice(path string) (*Device, bool, error) {
 	for _, pattern := range devicePatterns {
 		if pattern.Regex.MatchString(path) {
-			value, err := readValue(path)
-			if err != nil {
-				return nil, false, err
+			value := Unknown
+			if pattern.Type != RelayOutput {
+				var err error
+				value, err = readValue(path)
+				if err != nil {
+					return nil, false, err
+				}
 			}
 
 			return &Device{
@@ -110,6 +115,8 @@ func writeValue(path string, value Value) error {
 
 func PrintableValue(value Value) int {
 	switch value {
+	case Unknown:
+		return -1
 	case Off:
 		return 0
 	case On:

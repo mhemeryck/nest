@@ -2,7 +2,9 @@ package sysfs
 
 import (
 	"context"
+	"fmt"
 	"sync"
+	"time"
 )
 
 type workerSet struct {
@@ -15,7 +17,11 @@ func startWorkers(ctx context.Context, configs []WorkerConfig, commands <-chan C
 
 	workers := startConfiguredWorkers(ctx, configs, states)
 
-	go routeCommands(ctx, commands, workers.routes)
+	workers.wg.Add(1)
+	go func() {
+		defer workers.wg.Done()
+		routeCommands(ctx, commands, workers.routes, states)
+	}()
 
 	go func() {
 		workers.wg.Wait()
@@ -53,7 +59,7 @@ func registerWorkerDevices(routes map[string]chan Command, devices []*Device, co
 	}
 }
 
-func routeCommands(ctx context.Context, commands <-chan Command, routes map[string]chan Command) {
+func routeCommands(ctx context.Context, commands <-chan Command, routes map[string]chan Command, states chan<- StateChange) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -65,12 +71,16 @@ func routeCommands(ctx context.Context, commands <-chan Command, routes map[stri
 
 			commandCh, found := routes[cmd.DeviceID]
 			if !found {
+				publishCompletion(ctx, states, cmd, time.Now(), fmt.Errorf("unknown device %q", cmd.DeviceID))
 				continue
 			}
 
 			select {
 			case <-ctx.Done():
+				return
 			case commandCh <- cmd:
+			default:
+				publishCompletion(ctx, states, cmd, time.Now(), fmt.Errorf("sysfs worker queue exhausted for device %q", cmd.DeviceID))
 			}
 		}
 	}

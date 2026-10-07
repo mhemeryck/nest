@@ -27,7 +27,7 @@ func TestRouteCommandsForwardsKnownDevice(t *testing.T) {
 
 	go func() {
 		defer close(done)
-		routeCommands(ctx, commands, map[string]chan Command{"ro_1_01": workerCommands})
+		routeCommands(ctx, commands, map[string]chan Command{"ro_1_01": workerCommands}, make(chan StateChange, 1))
 	}()
 
 	commands <- Command{Kind: ToggleCommand, DeviceID: "ro_1_01"}
@@ -48,7 +48,7 @@ func TestRouteCommandsIgnoresUnknownDevice(t *testing.T) {
 
 	go func() {
 		defer close(done)
-		routeCommands(ctx, commands, map[string]chan Command{"ro_1_01": workerCommands})
+		routeCommands(ctx, commands, map[string]chan Command{"ro_1_01": workerCommands}, make(chan StateChange, 1))
 	}()
 
 	commands <- Command{Kind: ToggleCommand, DeviceID: "missing"}

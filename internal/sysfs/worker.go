@@ -2,6 +2,7 @@ package sysfs
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 )
@@ -40,6 +41,11 @@ func pollDevices(devices []*Device, ctx context.Context, states chan<- StateChan
 		oldValue := device.Value
 		newValue, err := readDevice(device)
 		if err != nil {
+			if device.Type == DigitalInput {
+				if !publishState(ctx, states, StateChange{Kind: InputFailureReportKind, Device: *device, Error: err}) {
+					return
+				}
+			}
 			continue
 		}
 		if newValue != oldValue {
@@ -81,35 +87,48 @@ func publishInitialRelayStates(ctx context.Context, devices []*Device, states ch
 func handleCommand(devicesByID map[string]*Device, cmd Command, ctx context.Context, states chan<- StateChange) {
 	device, ok := devicesByID[cmd.DeviceID]
 	if !ok {
+		publishCompletion(ctx, states, cmd, time.Now(), fmt.Errorf("unknown device %q", cmd.DeviceID))
 		return
 	}
 
+	oldValue, newValue, err := executeCommand(device, cmd)
+	completedAt := time.Now()
+	if err != nil {
+		slog.Error("sysfs command failed", "device_id", cmd.DeviceID, "command_id", cmd.ID, "error", err)
+	} else if oldValue != newValue {
+		publishState(ctx, states, StateChange{
+			Device: *device, OldValue: oldValue, NewValue: newValue, IsRising: oldValue == Off && newValue == On,
+		})
+	}
+	publishCompletion(ctx, states, cmd, completedAt, err)
+}
+
+func executeCommand(device *Device, cmd Command) (Value, Value, error) {
+	oldValue := device.Value
+	var newValue Value
 	switch cmd.Kind {
 	case ToggleCommand:
-		oldValue, err := readCurrentValue(device)
+		var err error
+		oldValue, err = readCurrentValue(device)
 		if err != nil {
-			return
+			return oldValue, oldValue, err
 		}
-		newValue := On
+		newValue = On
 		if oldValue == On {
 			newValue = Off
 		}
-		writeCommandValue(device, oldValue, newValue, ctx, states)
 	case OnCommand:
-		oldValue, err := readCurrentValue(device)
-		if err != nil {
-			return
-		}
-		writeCommandValue(device, oldValue, On, ctx, states)
+		newValue = On
 	case OffCommand:
-		oldValue, err := readCurrentValue(device)
-		if err != nil {
-			return
-		}
-		writeCommandValue(device, oldValue, Off, ctx, states)
+		newValue = Off
 	default:
-		return
+		return oldValue, oldValue, fmt.Errorf("unsupported command %q", cmd.Kind)
 	}
+	if err := writeValue(device.Path, newValue); err != nil {
+		return oldValue, oldValue, fmt.Errorf("write device %s: %w", device.Identifier, err)
+	}
+	device.Value = newValue
+	return oldValue, newValue, nil
 }
 
 func readCurrentValue(device *Device) (Value, error) {
@@ -123,26 +142,17 @@ func readCurrentValue(device *Device) (Value, error) {
 	return oldValue, nil
 }
 
-func writeCommandValue(device *Device, oldValue Value, newValue Value, ctx context.Context, states chan<- StateChange) {
-	if err := writeValue(device.Path, newValue); err != nil {
-		slog.Error("sysfs write failed", "device_id", device.Identifier, "path", device.Path, "error", err)
-		return
-	}
-
-	device.Value = newValue
-	if oldValue == newValue {
-		return
-	}
-
-	publishState(ctx, states, StateChange{
-		Device:   *device,
-		OldValue: oldValue,
-		NewValue: newValue,
-		IsRising: oldValue == Off && newValue == On,
+func publishCompletion(ctx context.Context, states chan<- StateChange, cmd Command, completedAt time.Time, err error) bool {
+	return publishState(ctx, states, StateChange{
+		Kind:       CompletionReportKind,
+		Completion: &CommandCompletion{Command: cmd, CompletedAt: completedAt, Error: err},
 	})
 }
 
 func publishState(ctx context.Context, states chan<- StateChange, state StateChange) bool {
+	if ctx.Err() != nil {
+		return false
+	}
 	select {
 	case <-ctx.Done():
 		return false

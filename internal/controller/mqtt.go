@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/mhemeryck/nest/internal/controller/event"
@@ -10,7 +11,35 @@ import (
 	"github.com/mhemeryck/nest/internal/registry"
 )
 
-func publishPushButtonSourceEvent(ctx context.Context, index *registry.Registry, commands chan<- mqtt.Command, topics mqtt.Topics, eventKind event.Kind, pushButton event.PushButton) {
+func mqttHandoffCapacity(reg *registry.Registry) int {
+	lightIDs := make(map[entity.LightID]struct{})
+	for _, light := range registry.Lights(reg) {
+		lightIDs[light.ID] = struct{}{}
+	}
+	for _, poll := range registry.Modbus(reg).StatePolls {
+		lightIDs[entity.LightID(poll.Entity)] = struct{}{}
+	}
+	// Distinct observation topics plus discovery and unit availability
+	return max(32, len(registry.Covers(reg))+len(lightIDs)+2)
+}
+
+func publishMQTTStartup(ctx context.Context, reg *registry.Registry, commands chan<- mqtt.Command, handoff *mqtt.Handoff) error {
+	startupCommands, err := mqtt.StartupCommands(registry.MQTT(reg), registry.Lights(reg), registry.Covers(reg))
+	if err != nil {
+		return fmt.Errorf("build mqtt startup commands: %w", err)
+	}
+	for _, command := range startupCommands {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if !publishMQTT(ctx, commands, command.Publish, handoff) {
+			return fmt.Errorf("mqtt startup handoff rejected")
+		}
+	}
+	return nil
+}
+
+func publishPushButtonSourceEvent(ctx context.Context, index *registry.Registry, commands chan<- mqtt.Command, topics mqtt.Topics, eventKind event.Kind, pushButton event.PushButton, handoff *mqtt.Handoff) {
 	if len(registry.RemoteSourceBindingsByButton(index, pushButton.ButtonID)) == 0 {
 		return
 	}
@@ -24,10 +53,10 @@ func publishPushButtonSourceEvent(ctx context.Context, index *registry.Registry,
 		return
 	}
 
-	publishMQTT(ctx, commands, message)
+	publishMQTT(ctx, commands, message, handoff)
 }
 
-func publishLightState(ctx context.Context, commands chan<- mqtt.Command, topics mqtt.Topics, light event.LightState) {
+func publishLightState(ctx context.Context, commands chan<- mqtt.Command, topics mqtt.Topics, light event.LightState, handoff *mqtt.Handoff) {
 	message, err := mqtt.LightStateMessage(topics, mqtt.LightObservation{
 		LightID: light.LightID,
 		State:   lightState(light.Value),
@@ -37,12 +66,22 @@ func publishLightState(ctx context.Context, commands chan<- mqtt.Command, topics
 		return
 	}
 
-	publishMQTT(ctx, commands, message)
+	publishMQTT(ctx, commands, message, handoff)
 }
 
-func publishMQTT(ctx context.Context, commands chan<- mqtt.Command, message mqtt.PublishMessage) bool {
+func publishMQTT(ctx context.Context, commands chan<- mqtt.Command, message mqtt.PublishMessage, handoff *mqtt.Handoff) bool {
 	if commands == nil {
 		return false
+	}
+	if ctx.Err() != nil {
+		return false
+	}
+	if handoff != nil {
+		if err := mqtt.QueueMessage(handoff, message); err != nil {
+			slog.Error("mqtt integration failure", "error", err)
+			return false
+		}
+		return true
 	}
 
 	select {

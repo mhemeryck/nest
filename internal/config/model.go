@@ -9,6 +9,9 @@ type Root struct {
 	DigitalInputs []DigitalInputConfig `yaml:"digital_inputs"`
 	PushButtons   []PushButtonConfig   `yaml:"push_buttons"`
 	Lights        []LightConfig        `yaml:"lights"`
+	Covers        []CoverConfig        `yaml:"covers"`
+	CoverControl  CoverControlConfig   `yaml:"cover_control"`
+	Persistence   PersistenceConfig    `yaml:"persistence"`
 	Relays        []RelayConfig        `yaml:"relays"`
 	Bindings      []BindingConfig      `yaml:"bindings"`
 
@@ -113,7 +116,32 @@ type BindingConfig struct {
 	ExecutionTransport string `yaml:"execution_transport"`
 }
 
+type CoverConfig struct {
+	ID         string `yaml:"id"`
+	Name       string `yaml:"name"`
+	OpenRelay  string `yaml:"open_relay"`
+	CloseRelay string `yaml:"close_relay"`
+}
+
+type CoverControlConfig struct {
+	FullTravelDuration time.Duration `yaml:"full_travel_duration"`
+	OperationTimeout   time.Duration `yaml:"operation_timeout"`
+	OffRetryInterval   time.Duration `yaml:"off_retry_interval"`
+	ShutdownPeriod     time.Duration `yaml:"shutdown_period"`
+	ReportingInterval  time.Duration `yaml:"reporting_interval"`
+}
+
+type PersistenceConfig struct {
+	Path string `yaml:"path"`
+}
+
 const BindingActionToggle = "toggle"
+
+const (
+	BindingActionOpen  = "open"
+	BindingActionClose = "close"
+	BindingActionStop  = "stop"
+)
 
 const (
 	ModbusModeMaster = "master"

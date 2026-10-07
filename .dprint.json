@@ -1,0 +1,8 @@
+{
+  "includes": ["**/*.{md,markdown}"],
+  "excludes": ["**/node_modules/**", ".devenv/**", ".git/**"],
+  "markdown": {
+    "textWrap": "maintain"
+  },
+  "plugins": ["https://plugins.dprint.dev/markdown-0.25.0.wasm"]
+}

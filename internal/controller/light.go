@@ -22,10 +22,12 @@ func handleLightToggle(ctx context.Context, index *registry.Registry, sysfsComma
 		return
 	}
 
-	select {
-	case <-ctx.Done():
+	if ctx.Err() != nil {
 		return
-	case sysfsCommands <- cmd:
+	}
+	if failure := sysfs.AdmitCommand(sysfsCommands, cmd); failure != nil {
+		slog.Error("light command rejected", "light_id", light.ID, "error", failure.Error)
+		return
 	}
 
 	slog.Info(
@@ -51,10 +53,12 @@ func handleLightSet(ctx context.Context, index *registry.Registry, sysfsCommands
 		return
 	}
 
-	select {
-	case <-ctx.Done():
+	if ctx.Err() != nil {
 		return
-	case sysfsCommands <- cmd:
+	}
+	if failure := sysfs.AdmitCommand(sysfsCommands, cmd); failure != nil {
+		slog.Error("light command rejected", "light_id", light.ID, "error", failure.Error)
+		return
 	}
 
 	slog.Info(

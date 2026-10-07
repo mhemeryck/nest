@@ -28,7 +28,7 @@ func newMQTTActor(reg *registry.Registry) mqttActor {
 
 	return mqttActor{
 		enabled:           true,
-		commands:          make(chan mqtt.Command, 32+len(registry.Lights(reg))),
+		commands:          make(chan mqtt.Command),
 		events:            make(chan mqtt.Event, 32),
 		done:              make(chan struct{}),
 		topics:            topics,
@@ -51,5 +51,4 @@ func waitForMQTTActor(actor mqttActor) {
 	}
 
 	<-actor.done
-	close(actor.events)
 }

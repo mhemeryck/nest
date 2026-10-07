@@ -10,25 +10,38 @@ import (
 
 func bindingEventsFromEvent(index *registry.Registry, busEvent event.Event) []event.Event {
 	switch busEvent.Kind {
-	case event.PushButtonPressedKind:
-		return lightEventsFromPushButton(index, *busEvent.PushButton)
+	case event.PushButtonPressedKind, event.PushButtonReleasedKind:
+		return bindingEventsFromPushButton(index, busEvent.Kind, *busEvent.PushButton)
 	default:
 		return nil
 	}
 }
 
-func lightEventsFromPushButton(index *registry.Registry, pushButton event.PushButton) []event.Event {
+func bindingEventsFromPushButton(index *registry.Registry, kind event.Kind, pushButton event.PushButton) []event.Event {
 	bindings := registry.BindingsByButton(index, pushButton.ButtonID)
 	bindings = append(bindings, remoteTargetBindingsBySourceAndTransport(index, entity.ID(pushButton.ButtonID), pushButton.Delivery)...)
-	lightEvents := make([]event.Event, 0, len(bindings))
+	derivedEvents := make([]event.Event, 0, len(bindings))
 	for _, binding := range bindings {
+		if cover, ok := registry.CoverByID(index, entity.CoverID(binding.Target)); ok {
+			action := entity.CoverAction(binding.Action)
+			if kind == event.PushButtonReleasedKind {
+				action = entity.CoverActionStop
+			}
+			derivedEvents = append(derivedEvents, event.Event{Kind: event.CoverKind, Cover: &event.Cover{
+				CoverID: cover.ID, Name: cover.Name, Action: action,
+			}})
+			continue
+		}
+		if kind == event.PushButtonReleasedKind {
+			continue
+		}
 		name := ""
 		lightID := entity.LightID(binding.Target)
 		if light, ok := registry.LightByID(index, lightID); ok {
 			name = light.Name
 		}
 
-		lightEvents = append(lightEvents, event.Event{
+		derivedEvents = append(derivedEvents, event.Event{
 			Kind: event.LightKind,
 			Light: &event.Light{
 				LightID: lightID,
@@ -38,7 +51,7 @@ func lightEventsFromPushButton(index *registry.Registry, pushButton event.PushBu
 		})
 	}
 
-	return lightEvents
+	return derivedEvents
 }
 
 func remoteTargetBindingsBySourceAndTransport(index *registry.Registry, sourceID entity.ID, delivery entity.ExecutionTransport) []entity.Binding {

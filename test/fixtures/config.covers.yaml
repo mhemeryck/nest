@@ -1,0 +1,54 @@
+cover_control:
+  full_travel_duration: 30s
+  operation_timeout: 2s
+  off_retry_interval: 1s
+  shutdown_period: 5s
+  reporting_interval: 500ms
+
+actors:
+  mqtt:
+    broker:
+      host: localhost
+      port: 1883
+      client_id: nest
+      topic_prefix: nest
+
+units:
+  controller_1:
+    actors:
+      mqtt:
+        enabled: false
+      persistence:
+        path: .devenv/cover-positions/controller_1.json
+      sysfs:
+        root: test/fixtures
+        poll_intervals:
+          digital_input: 100ms
+          relay_output: 1s
+        digital_inputs:
+          - {id: office_open_input, device: di_3_16}
+          - {id: office_close_input, device: di_3_15}
+        relays:
+          - {id: office_open_relay, name: Office open relay, device: ro_3_14}
+          - {id: office_close_relay, name: Office close relay, device: ro_3_13}
+    entities:
+      buttons:
+        - id: office_open
+          name: Office open button
+          input: {actor: sysfs, kind: digital_input, id: office_open_input}
+        - id: office_close
+          name: Office close button
+          input: {actor: sysfs, kind: digital_input, id: office_close_input}
+      covers:
+        - id: office
+          name: Office cover
+          open: {actor: sysfs, kind: relay, id: office_open_relay}
+          close: {actor: sysfs, kind: relay, id: office_close_relay}
+
+bindings:
+  - source: controller_1.button.office_open
+    target: controller_1.cover.office
+    action: open
+  - source: controller_1.button.office_close
+    target: controller_1.cover.office
+    action: close

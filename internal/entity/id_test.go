@@ -39,3 +39,15 @@ func TestLocalID(t *testing.T) {
 	_, ok = LocalID("office", TypeLight)
 	assert.False(t, ok)
 }
+
+func TestCoverSemanticID(t *testing.T) {
+	id := NewID("controller_1", TypeCover, "office")
+	assert.Equal(t, ID("controller_1.cover.office"), id)
+	assert.True(t, IsID(string(id), TypeCover))
+	assert.True(t, IsIDForUnit(string(id), "controller_1", TypeCover))
+	assert.False(t, IsIDForUnit(string(id), "controller_2", TypeCover))
+	assert.False(t, IsID(string(id), TypeLight))
+	localID, ok := LocalID(string(id), TypeCover)
+	assert.True(t, ok)
+	assert.Equal(t, "office", localID)
+}

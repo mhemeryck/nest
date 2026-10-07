@@ -35,6 +35,10 @@ func buildWorkerConfigs(devices []*Device, intervals PollIntervals) []WorkerConf
 	return result
 }
 
+func WorkerConfigs(devices []*Device, intervals PollIntervals) []WorkerConfig {
+	return buildWorkerConfigs(devices, intervals)
+}
+
 func defaultPollIntervals(overrides PollIntervals) map[DeviceType]time.Duration {
 	intervals := map[DeviceType]time.Duration{
 		DigitalInput:  100 * time.Millisecond,
