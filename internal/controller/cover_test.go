@@ -266,3 +266,30 @@ func TestCoverTimeoutRetryAndStaleCompletion(t *testing.T) {
 	assert.NoError(t, controller.covers["a"].fault)
 	assert.True(t, nextCoverDeadline(controller).IsZero())
 }
+
+func TestCoverCommandOwnershipStaysBoundedAcrossTimeoutsAndRuns(t *testing.T) {
+	controller, now := testCoverController()
+	hardware := make(map[entity.RelayID]bool)
+	readyTestCovers(t, controller, now, hardware)
+	require.Empty(t, controller.commandOwners)
+	for range 20 {
+		prepare := coverOutputCommands(handleCoverRequest(controller, event.Cover{CoverID: "a", Action: entity.CoverActionOpen}, now))
+		var activation []event.OutputCommand
+		for _, command := range prepare {
+			activation = append(activation, coverOutputCommands(handleCoverOutputResult(controller, coverResult(controller, command, now, nil), now))...)
+		}
+		require.Len(t, activation, 1)
+		stops := coverOutputCommands(handleCoverRequest(controller, event.Cover{CoverID: "a", Action: entity.CoverActionStop}, now))
+		for range 20 {
+			now = now.Add(controller.settings.OperationTimeout)
+			processCoverDeadlines(controller, now)
+			now = now.Add(controller.settings.OffRetryInterval)
+			stops = coverOutputCommands(processCoverDeadlines(controller, now))
+			require.Len(t, controller.commandOwners, 3, "one cancelled activation and two current OFF commands")
+		}
+		completeCoverCommands(t, controller, activation, now, hardware)
+		completeCoverCommands(t, controller, stops, now, hardware)
+		require.Empty(t, controller.commandOwners)
+		assert.Empty(t, handleCoverOutputResult(controller, coverResult(controller, activation[0], now, nil), now))
+	}
+}

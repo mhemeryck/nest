@@ -2,6 +2,7 @@ package nest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -17,21 +18,23 @@ func startController(
 	mqttActor mqttActor,
 	modbusActor modbusActor,
 	options controller.RuntimeOptions,
-) <-chan struct{} {
-	done := make(chan struct{})
-	go controller.Run(
-		ctx,
-		reg,
-		sysfsActor.commands,
-		mqttActor.commands,
-		modbusActor.commands,
-		mqttActor.topics,
-		sysfsActor.states,
-		mqttActor.events,
-		modbusActor.events,
-		done,
-		options,
-	)
+) <-chan error {
+	done := make(chan error, 1)
+	go func() {
+		defer close(done)
+		done <- controller.Run(
+			ctx,
+			reg,
+			sysfsActor.commands,
+			mqttActor.commands,
+			modbusActor.commands,
+			mqttActor.topics,
+			sysfsActor.states,
+			mqttActor.events,
+			modbusActor.events,
+			options,
+		)
+	}()
 
 	return done
 }
@@ -39,16 +42,12 @@ func startController(
 func waitForShutdown(
 	ctx context.Context,
 	cancel context.CancelFunc,
-	controllerDone <-chan struct{},
+	controllerDone <-chan error,
 	sysfsActor sysfsActor,
 	mqttActor mqttActor,
 	modbusActor modbusActor,
-	options ...shutdownOptions,
+	settings shutdownOptions,
 ) error {
-	var settings shutdownOptions
-	if len(options) > 0 {
-		settings = options[0]
-	}
 	requestShutdown := cancel
 	if settings.cancelController != nil {
 		requestShutdown = settings.cancelController
@@ -67,7 +66,8 @@ func waitForShutdown(
 			if started.IsZero() {
 				started = time.Now()
 			}
-		case <-controllerDone:
+		case err := <-controllerDone:
+			shutdownErr = errors.Join(shutdownErr, err)
 			waiting = false
 		case <-sysfsDone:
 			sysfsDone = nil
@@ -111,8 +111,8 @@ func waitForShutdown(
 		}
 		waitContext, cancelWait := context.WithDeadline(context.WithoutCancel(ctx), started.Add(settings.period))
 		defer cancelWait()
-		if !waitForActorsWithin(waitContext, sysfsActor, mqttActor, modbusActor, settings.persistence) && shutdownErr == nil {
-			shutdownErr = fmt.Errorf("actor shutdown incomplete at deadline")
+		if !waitForActorsWithin(waitContext, sysfsActor, mqttActor, modbusActor, settings.persistence) {
+			shutdownErr = errors.Join(shutdownErr, fmt.Errorf("actor shutdown incomplete at deadline"))
 		}
 		return shutdownErr
 	}

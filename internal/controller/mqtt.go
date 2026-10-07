@@ -10,7 +10,7 @@ import (
 	"github.com/mhemeryck/nest/internal/registry"
 )
 
-func publishPushButtonSourceEvent(ctx context.Context, index *registry.Registry, commands chan<- mqtt.Command, topics mqtt.Topics, eventKind event.Kind, pushButton event.PushButton, handoffs ...*mqtt.Handoff) {
+func publishPushButtonSourceEvent(ctx context.Context, index *registry.Registry, commands chan<- mqtt.Command, topics mqtt.Topics, eventKind event.Kind, pushButton event.PushButton, handoff *mqtt.Handoff) {
 	if len(registry.RemoteSourceBindingsByButton(index, pushButton.ButtonID)) == 0 {
 		return
 	}
@@ -24,10 +24,10 @@ func publishPushButtonSourceEvent(ctx context.Context, index *registry.Registry,
 		return
 	}
 
-	publishMQTT(ctx, commands, message, handoffs...)
+	publishMQTT(ctx, commands, message, handoff)
 }
 
-func publishLightState(ctx context.Context, commands chan<- mqtt.Command, topics mqtt.Topics, light event.LightState, handoffs ...*mqtt.Handoff) {
+func publishLightState(ctx context.Context, commands chan<- mqtt.Command, topics mqtt.Topics, light event.LightState, handoff *mqtt.Handoff) {
 	message, err := mqtt.LightStateMessage(topics, mqtt.LightObservation{
 		LightID: light.LightID,
 		State:   lightState(light.Value),
@@ -37,18 +37,18 @@ func publishLightState(ctx context.Context, commands chan<- mqtt.Command, topics
 		return
 	}
 
-	publishMQTT(ctx, commands, message, handoffs...)
+	publishMQTT(ctx, commands, message, handoff)
 }
 
-func publishMQTT(ctx context.Context, commands chan<- mqtt.Command, message mqtt.PublishMessage, handoffs ...*mqtt.Handoff) bool {
+func publishMQTT(ctx context.Context, commands chan<- mqtt.Command, message mqtt.PublishMessage, handoff *mqtt.Handoff) bool {
 	if commands == nil {
 		return false
 	}
 	if ctx.Err() != nil {
 		return false
 	}
-	if len(handoffs) > 0 && handoffs[0] != nil {
-		if err := mqtt.QueueMessage(handoffs[0], message); err != nil {
+	if handoff != nil {
+		if err := mqtt.QueueMessage(handoff, message); err != nil {
 			slog.Error("mqtt integration failure", "error", err)
 			return false
 		}

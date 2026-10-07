@@ -55,7 +55,7 @@ func TestPendingOffDoesNotPublishCompletedEndpoint(t *testing.T) {
 	processCoverDeadlines(controller, now.Add(controller.settings.FullTravelDuration))
 	commands := make(chan mqtt.Command, 1)
 	observation := coverObservation(controller.covers["a"], now.Add(controller.settings.FullTravelDuration), controller.settings.FullTravelDuration, event.CoverObservationKind)
-	dispatchMQTTCommand(t.Context(), controller.reg, commands, mqtt.NewTopics("nest", "unit"), observation)
+	dispatchMQTTCommand(t.Context(), controller.reg, commands, mqtt.NewTopics("nest", "unit"), observation, nil)
 	var payload map[string]any
 	require.NoError(t, json.Unmarshal((<-commands).Publish.Payload, &payload))
 	assert.Equal(t, "opening", payload["state"])
@@ -74,7 +74,7 @@ func TestBoundInputFailureStopsMQTTBoundRemoteCover(t *testing.T) {
 	assert.Equal(t, event.CoverKind, events[0].Kind)
 	assert.Equal(t, entity.CoverActionStop, events[0].Cover.Action)
 	commands := make(chan mqtt.Command, 1)
-	dispatchMQTTCommand(t.Context(), reg, commands, mqtt.NewTopics("nest", "source"), events[0])
+	dispatchMQTTCommand(t.Context(), reg, commands, mqtt.NewTopics("nest", "source"), events[0], nil)
 	message := (<-commands).Publish
 	assert.Equal(t, "nest/units/target/covers/office/command", message.Topic)
 	assert.Equal(t, "STOP", string(message.Payload))

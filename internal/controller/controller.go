@@ -33,14 +33,8 @@ func Run(
 	stateChanges <-chan sysfs.StateChange,
 	mqttEvents <-chan mqtt.Event,
 	modbusEvents <-chan modbus.Event,
-	done chan<- struct{},
-	options ...RuntimeOptions,
-) {
-	defer close(done)
-	var runtimeOptions RuntimeOptions
-	if len(options) > 0 {
-		runtimeOptions = options[0]
-	}
+	runtimeOptions RuntimeOptions,
+) error {
 	feedbackContext := runtimeOptions.FeedbackContext
 	if feedbackContext == nil {
 		feedbackContext = context.WithoutCancel(ctx)
@@ -52,9 +46,10 @@ func Run(
 	normalizerDone := make(chan struct{})
 	go normalizeEvents(normalizerContext, reg, mqttTopics, stateChanges, mqttEvents, modbusEvents, semanticEvents, normalizerDone)
 
-	dispatchEvents(ctx, reg, sysfsCommands, mqttCommands, modbusCommands, mqttTopics, semanticEvents, runtimeOptions)
+	err := dispatchEvents(ctx, reg, sysfsCommands, mqttCommands, modbusCommands, mqttTopics, semanticEvents, runtimeOptions)
 	cancelNormalizer()
 	<-normalizerDone
+	return err
 }
 
 func normalizeEvents(
@@ -111,12 +106,8 @@ func dispatchEvents(
 	modbusCommands chan<- modbus.Command,
 	mqttTopics mqtt.Topics,
 	semanticEvents <-chan event.Event,
-	options ...RuntimeOptions,
-) {
-	var runtimeOptions RuntimeOptions
-	if len(options) > 0 {
-		runtimeOptions = options[0]
-	}
+	runtimeOptions RuntimeOptions,
+) error {
 	feedbackContext := runtimeOptions.FeedbackContext
 	if feedbackContext == nil {
 		feedbackContext = context.WithoutCancel(ctx)
@@ -128,7 +119,7 @@ func dispatchEvents(
 	handoffDone := make(chan struct{})
 	go modbus.RunHandoff(handoffContext, handoff, modbusCommands, handoffDone)
 	defer func() { modbus.FlushAvailable(handoff, modbusCommands); cancelHandoff(); <-handoffDone }()
-	mqttHandoff := mqtt.NewHandoff(max(32, len(registry.Covers(reg))+len(registry.Lights(reg))+2))
+	mqttHandoff := mqtt.NewHandoff(mqttHandoffCapacity(reg))
 	mqttHandoffDone := make(chan struct{})
 	go mqtt.RunHandoff(handoffContext, mqttHandoff, mqttCommands, mqttHandoffDone)
 	defer func() { mqtt.FlushAvailable(mqttHandoff, mqttCommands); cancelHandoff(); <-mqttHandoffDone }()
@@ -150,7 +141,7 @@ func dispatchEvents(
 		default:
 		}
 		if covers.shuttingDown && !now.Before(shutdownDeadline) {
-			return
+			return coverShutdownError(covers)
 		}
 		due := processCoverDeadlines(covers, time.Now())
 		dispatchQueue = append(due, dispatchQueue...)
@@ -175,7 +166,7 @@ func dispatchEvents(
 				}
 				cancelFlush()
 			}
-			return
+			return nil
 		}
 		if !semanticEventsOpen && !covers.shuttingDown {
 			shutdownSignal = nil
@@ -219,7 +210,19 @@ func popEvent(events []event.Event) (event.Event, []event.Event, bool) {
 	return events[0], events[1:], true
 }
 
-func publishMQTTStartup(ctx context.Context, reg *registry.Registry, commands chan<- mqtt.Command, handoffs ...*mqtt.Handoff) error {
+func mqttHandoffCapacity(reg *registry.Registry) int {
+	lightIDs := make(map[entity.LightID]struct{})
+	for _, light := range registry.Lights(reg) {
+		lightIDs[light.ID] = struct{}{}
+	}
+	for _, poll := range registry.Modbus(reg).StatePolls {
+		lightIDs[entity.LightID(poll.Entity)] = struct{}{}
+	}
+	// Distinct observation topics plus discovery and unit availability
+	return max(32, len(registry.Covers(reg))+len(lightIDs)+2)
+}
+
+func publishMQTTStartup(ctx context.Context, reg *registry.Registry, commands chan<- mqtt.Command, handoff *mqtt.Handoff) error {
 	startupCommands, err := mqtt.StartupCommands(registry.MQTT(reg), registry.Lights(reg), registry.Covers(reg))
 	if err != nil {
 		return fmt.Errorf("build mqtt startup commands: %w", err)
@@ -229,7 +232,7 @@ func publishMQTTStartup(ctx context.Context, reg *registry.Registry, commands ch
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		if !publishMQTT(ctx, commands, command.Publish, handoffs...) {
+		if !publishMQTT(ctx, commands, command.Publish, handoff) {
 			return fmt.Errorf("mqtt startup handoff rejected")
 		}
 	}

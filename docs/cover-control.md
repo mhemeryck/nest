@@ -14,6 +14,10 @@ A blocked operation on one cover does not occupy another cover's worker.
 Write completion confirms the requested output state without physical relay-contact feedback.
 Motor limit switches stop physical movement at the endpoints.
 
+Workers read relay state before processing commands and poll it periodically to observe external changes.
+A blocked read delays commands for that cover, including OFF commands.
+The Nest interlock controls Nest writes; polling does not interlock another controller's writes.
+
 ## Configuration
 
 Example: [config.covers.yaml](../test/fixtures/config.covers.yaml)
@@ -57,6 +61,8 @@ Incomplete failed runs recover with unknown position.
 Persistence records unfinished movement from start intent.
 Confirmed switch-off clears that record.
 Clean shutdown follows output confirmation and ordered snapshot writes.
+Shutdown returns an error naming covers whose outputs remain unconfirmed OFF at the deadline.
+Normal actor termination does not clear that error.
 Snapshots include version, unit identity, cover identity, and relay assignment.
 Unclean sessions, unfinished records, and changed assignments restore unknown position.
 Storage errors do not block local control.

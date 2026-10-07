@@ -50,11 +50,7 @@ type HomeAssistantAvailability struct {
 	ValueTemplate string `json:"value_template,omitempty"`
 }
 
-func BuildHomeAssistantDeviceDiscovery(lights []entity.Light, topics Topics, coverLists ...[]entity.Cover) HomeAssistantDeviceDiscovery {
-	var covers []entity.Cover
-	if len(coverLists) > 0 {
-		covers = coverLists[0]
-	}
+func BuildHomeAssistantDeviceDiscovery(lights []entity.Light, topics Topics, covers []entity.Cover) HomeAssistantDeviceDiscovery {
 	doc := HomeAssistantDeviceDiscovery{
 		Device:            homeAssistantDevice(topics),
 		Origin:            HomeAssistantOrigin{Name: "nest"},
@@ -79,8 +75,8 @@ func BuildHomeAssistantDeviceDiscovery(lights []entity.Light, topics Topics, cov
 	return doc
 }
 
-func HomeAssistantDeviceDiscoveryPayload(lights []entity.Light, topics Topics, covers ...[]entity.Cover) ([]byte, error) {
-	payload, err := json.Marshal(BuildHomeAssistantDeviceDiscovery(lights, topics, covers...))
+func HomeAssistantDeviceDiscoveryPayload(lights []entity.Light, topics Topics, covers []entity.Cover) ([]byte, error) {
+	payload, err := json.Marshal(BuildHomeAssistantDeviceDiscovery(lights, topics, covers))
 	if err != nil {
 		return nil, err
 	}
@@ -88,8 +84,8 @@ func HomeAssistantDeviceDiscoveryPayload(lights []entity.Light, topics Topics, c
 	return payload, nil
 }
 
-func HomeAssistantDeviceDiscoveryMessage(lights []entity.Light, topics Topics, covers ...[]entity.Cover) (PublishMessage, error) {
-	payload, err := HomeAssistantDeviceDiscoveryPayload(lights, topics, covers...)
+func HomeAssistantDeviceDiscoveryMessage(lights []entity.Light, topics Topics, covers []entity.Cover) (PublishMessage, error) {
+	payload, err := HomeAssistantDeviceDiscoveryPayload(lights, topics, covers)
 	if err != nil {
 		return PublishMessage{}, err
 	}

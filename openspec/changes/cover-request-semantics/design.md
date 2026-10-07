@@ -124,6 +124,9 @@ Exclude cover-owned relays from those workers to avoid duplicate execution or po
 Each cover worker polls its own relays at the configured relay interval.
 Device discovery identifies relay paths without reading their values.
 Workers own initial relay sampling, so blocked relay reads do not serialize startup across covers.
+Retain initial reads before command execution and periodic polling to observe changes from another controller on the device.
+This selected approach can delay commands for the affected cover when a read blocks.
+Polling observes external changes but does not enforce interlocking for commands from another controller.
 Do not increase per-relay polling frequency when partitioning workers.
 Waiting workers use Go goroutines, not a dedicated operating-system thread per cover.
 
@@ -181,9 +184,11 @@ Adjust lifecycle wiring in `internal/nest/nest.go` and `runtime.go`.
 Application shutdown first signals the controller to reject movement and command both outputs OFF.
 Keep sysfs and normalization alive while results arrive.
 Finish controller shutdown after confirmation or the bounded deadline, then stop actors.
+Return an error identifying covers with unconfirmed OFF results when the shutdown deadline expires.
+Preserve that error through runtime shutdown, independently of actor termination.
 Allow persistence to complete final writes within the shutdown bound.
 
-Use context lifetimes and existing done signals without adding a cover shutdown channel.
+Use context lifetimes and a buffered controller result channel without adding a separate cover shutdown signal.
 Review the exact context wiring during implementation.
 Preserve the ordinary event dispatch model.
 
@@ -227,6 +232,8 @@ MQTT maintains the latest reporting snapshot from consumer-independent cover eve
 Reconnect republishes current observations without changing movement intent or deadlines.
 Keep handoff bounded and non-blocking; coalesce pending cover observations by cover ID.
 Preserve state, position, and availability as one coherent pending observation.
+Size the retained-topic budget for local covers, distinct local and Modbus-polled lights, discovery, and unit availability.
+Drained publications retain their topic slots in the latest-observation cache.
 Audit shared MQTT dispatch paths so button-event publication cannot block local cover requests.
 
 Normalize OPEN, CLOSE, and STOP through existing command handling.
@@ -299,6 +306,11 @@ Automated scenario coverage:
 | Persistence trust, replacement writes, overload, and clean/unclean restart               | `internal/persistence/persistence_test.go`, `internal/controller/persistence_test.go`                                |
 | Staged shutdown, missing results, and actor termination                                  | `internal/controller/cover_shutdown_test.go`, `internal/nest/runtime_test.go`                                        |
 | Discovery, nullable attributes, coherent coalescing, and reporting-boundary rounding     | `internal/mqtt/cover_test.go`                                                                                        |
+| MQTT topic capacity after remote light observations drain                                | `internal/controller/mqtt_capacity_test.go`                                                                          |
+
+Review follow-up checks pass: formatting, lint, vet, race tests, builds, and strict OpenSpec validation.
+Shutdown tests verify failed OFF writes remain errors after actor termination.
+Command ownership tests verify index cleanup across repeated timeouts and completed runs.
 
 Required checks:
 

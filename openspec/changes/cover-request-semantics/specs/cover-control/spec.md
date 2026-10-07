@@ -451,6 +451,7 @@ Shutdown SHALL reject new movement requests and request both outputs off.
 Shutdown SHALL wait for output results within a bounded shutdown period.
 The persistence integration SHALL save final shutdown position only after successful switch-off.
 Failed or interrupted switch-off SHALL leave movement recorded as unfinished when persistence succeeds.
+The runtime SHALL return an error identifying covers with unconfirmed switch-off at the shutdown deadline.
 
 #### Scenario: Startup readiness
 
@@ -470,6 +471,7 @@ Failed or interrupted switch-off SHALL leave movement recorded as unfinished whe
 - **WHEN** switch-off fails or remains incomplete at the shutdown deadline
 - **THEN** the controller does not save a successfully stopped position
 - **AND** successful persistence leaves the movement marked unfinished
+- **AND** the runtime returns a shutdown error identifying the affected covers, even if actors terminate normally
 
 ### Requirement: Bound input failures to affected covers
 
@@ -546,6 +548,17 @@ Pending commands SHALL progress when actor capacity returns without requiring an
 - **THEN** pending reporting retains the newer value
 - **WHEN** actor capacity returns
 - **THEN** the integration sends the latest pending value without another semantic input
+
+### Requirement: MQTT reporting capacity includes remote light observations
+
+The retained reporting capacity SHALL include local covers, distinct local and Modbus-polled lights, discovery, and unit availability.
+Previously published topics SHALL NOT prevent another configured topic from entering the handoff.
+
+#### Scenario: Remote light reporting fills the handoff
+
+- **GIVEN** configured Modbus polls report more than 32 distinct remote lights
+- **WHEN** MQTT publications drain and discovery, unit availability, and cover observations arrive
+- **THEN** all configured reporting topics remain accepted
 
 ### Requirement: Retained MQTT request handling
 

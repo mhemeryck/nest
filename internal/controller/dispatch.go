@@ -27,7 +27,7 @@ func dispatchEvent(
 	modbusCommands chan<- modbus.Command,
 	mqttTopics mqtt.Topics,
 	busEvent event.Event,
-	handoffs ...dispatchHandoffs,
+	handoffs dispatchHandoffs,
 ) []event.Event {
 	logSemanticEvent(busEvent)
 	derivedEvents := bindingEventsFromEvent(reg, busEvent)
@@ -35,14 +35,8 @@ func dispatchEvent(
 		derivedEvents = append(derivedEvents, dispatchCoverOutputCommand(ctx, reg, sysfsCommands, *busEvent.OutputCommand)...)
 	}
 	dispatchSysfsCommand(ctx, reg, sysfsCommands, busEvent)
-	var modbusHandoff *modbus.Handoff
-	var mqttHandoff *mqtt.Handoff
-	if len(handoffs) > 0 {
-		modbusHandoff = handoffs[0].modbus
-		mqttHandoff = handoffs[0].mqtt
-	}
-	dispatchMQTTCommand(ctx, reg, mqttCommands, mqttTopics, busEvent, mqttHandoff)
-	derivedEvents = append(derivedEvents, dispatchModbusCommand(ctx, reg, modbusCommands, busEvent, modbusHandoff)...)
+	dispatchMQTTCommand(ctx, reg, mqttCommands, mqttTopics, busEvent, handoffs.mqtt)
+	derivedEvents = append(derivedEvents, dispatchModbusCommand(ctx, reg, modbusCommands, busEvent, handoffs.modbus)...)
 
 	return derivedEvents
 }
@@ -73,7 +67,7 @@ func dispatchSysfsCommand(ctx context.Context, index *registry.Registry, command
 	}
 }
 
-func dispatchMQTTCommand(ctx context.Context, reg *registry.Registry, commands chan<- mqtt.Command, topics mqtt.Topics, busEvent event.Event, handoffs ...*mqtt.Handoff) {
+func dispatchMQTTCommand(ctx context.Context, reg *registry.Registry, commands chan<- mqtt.Command, topics mqtt.Topics, busEvent event.Event, handoff *mqtt.Handoff) {
 	if commands == nil {
 		return
 	}
@@ -87,13 +81,13 @@ func dispatchMQTTCommand(ctx context.Context, reg *registry.Registry, commands c
 			slog.Error("build remote cover command failed", "error", err)
 			return
 		}
-		publishMQTT(ctx, commands, message, handoffs...)
+		publishMQTT(ctx, commands, message, handoff)
 	case event.PushButtonPressedKind, event.PushButtonReleasedKind:
-		publishPushButtonSourceEvent(ctx, reg, commands, topics, busEvent.Kind, *busEvent.PushButton, handoffs...)
+		publishPushButtonSourceEvent(ctx, reg, commands, topics, busEvent.Kind, *busEvent.PushButton, handoff)
 	case event.LightStateKind:
-		publishLightState(ctx, commands, topics, *busEvent.LightState, handoffs...)
+		publishLightState(ctx, commands, topics, *busEvent.LightState, handoff)
 	case event.MQTTConnectedKind:
-		if err := publishMQTTStartup(ctx, reg, commands, handoffs...); err != nil {
+		if err := publishMQTTStartup(ctx, reg, commands, handoff); err != nil {
 			slog.Error("mqtt startup publish failed", "error", err)
 		}
 	case event.CoverObservationKind, event.CoverStoppedKind, event.CoverStartIntentKind:
@@ -103,47 +97,47 @@ func dispatchMQTTCommand(ctx context.Context, reg *registry.Registry, commands c
 			slog.Error("build mqtt cover observation failed", "error", err)
 			return
 		}
-		publishMQTT(ctx, commands, message, handoffs...)
+		publishMQTT(ctx, commands, message, handoff)
 	}
 }
 
-func dispatchModbusCommand(ctx context.Context, reg *registry.Registry, commands chan<- modbus.Command, busEvent event.Event, handoffs ...*modbus.Handoff) []event.Event {
+func dispatchModbusCommand(ctx context.Context, reg *registry.Registry, commands chan<- modbus.Command, busEvent event.Event, handoff *modbus.Handoff) []event.Event {
 	if commands == nil {
 		return nil
 	}
 
 	switch busEvent.Kind {
 	case event.PushButtonPressedKind:
-		return dispatchModbusEventSignalWrites(ctx, reg, commands, *busEvent.PushButton, handoffs...)
+		return dispatchModbusEventSignalWrites(ctx, reg, commands, *busEvent.PushButton, handoff)
 	case event.LightStateKind:
-		return dispatchModbusStatePoints(ctx, reg, commands, *busEvent.LightState, handoffs...)
+		return dispatchModbusStatePoints(ctx, reg, commands, *busEvent.LightState, handoff)
 	}
 	return nil
 }
 
-func dispatchModbusEventSignalWrites(ctx context.Context, reg *registry.Registry, commands chan<- modbus.Command, pushButton event.PushButton, handoffs ...*modbus.Handoff) []event.Event {
+func dispatchModbusEventSignalWrites(ctx context.Context, reg *registry.Registry, commands chan<- modbus.Command, pushButton event.PushButton, handoff *modbus.Handoff) []event.Event {
 	var failures []event.Event
 	for _, write := range registry.ModbusEventSignalWritesBySource(reg, entity.ID(pushButton.ButtonID)) {
-		failures = append(failures, submitModbusCommand(ctx, commands, modbus.WriteCoilCommand(write.UnitID, write.Coil, true), handoffs...)...)
+		failures = append(failures, submitModbusCommand(ctx, commands, modbus.WriteCoilCommand(write.UnitID, write.Coil, true), handoff)...)
 	}
 	return failures
 }
 
-func dispatchModbusStatePoints(ctx context.Context, reg *registry.Registry, commands chan<- modbus.Command, lightState event.LightState, handoffs ...*modbus.Handoff) []event.Event {
+func dispatchModbusStatePoints(ctx context.Context, reg *registry.Registry, commands chan<- modbus.Command, lightState event.LightState, handoff *modbus.Handoff) []event.Event {
 	var failures []event.Event
 	for _, point := range registry.ModbusStatePointsByEntity(reg, entity.ID(lightState.LightID)) {
-		failures = append(failures, submitModbusCommand(ctx, commands, modbus.SetCoilStateCommand(uint16(point.Coil), lightState.Value != 0), handoffs...)...)
+		failures = append(failures, submitModbusCommand(ctx, commands, modbus.SetCoilStateCommand(uint16(point.Coil), lightState.Value != 0), handoff)...)
 	}
 	return failures
 }
 
-func submitModbusCommand(ctx context.Context, commands chan<- modbus.Command, command modbus.Command, handoffs ...*modbus.Handoff) []event.Event {
+func submitModbusCommand(ctx context.Context, commands chan<- modbus.Command, command modbus.Command, handoff *modbus.Handoff) []event.Event {
 	if ctx.Err() != nil {
 		return nil
 	}
 	errorMessage := ""
-	if len(handoffs) > 0 && handoffs[0] != nil {
-		if failure := modbus.QueueCommand(handoffs[0], command); failure != nil {
+	if handoff != nil {
+		if failure := modbus.QueueCommand(handoff, command); failure != nil {
 			errorMessage = failure.Error
 		}
 	} else {

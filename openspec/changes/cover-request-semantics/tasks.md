@@ -62,3 +62,12 @@
 - [x] 8.3 Document timing values, persistence location, and migration steps; verify example configuration passes validation
 - [x] 8.4 Run nest-format and nest-check inside devenv shell; verify formatting, lint, vet, race tests, and builds pass
 - [x] 8.5 Validate the change with openspec and compare delivered behavior with scenarios; record verification before archive
+
+## 9. Application review follow-ups
+
+- [x] 9.1 Include Modbus-polled lights in MQTT reporting capacity; verify all configured topics publish after saturation and drainage
+- [x] 9.2 Propagate unconfirmed cover shutdown through the runtime result; verify missing and failed OFF results remain errors after actor termination
+- [x] 9.3 Record initial reads and periodic polling as the selected approach for observing another controller
+- [x] 9.4 Replace singleton variadic options, handoffs, and cover lists with explicit parameters
+- [x] 9.5 Split output-result handling by responsibility and index command ownership; verify cancelled activation evidence and bounded index cleanup
+- [x] 9.6 Run nest-format, nest-check, and strict OpenSpec validation after review fixes

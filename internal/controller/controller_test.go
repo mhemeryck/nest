@@ -26,13 +26,16 @@ func TestRunReturnsOnSignal(t *testing.T) {
 	index := registry.Build(&entity.Root{})
 	stateChanges := make(chan sysfs.StateChange)
 	commands := make(chan sysfs.Command)
-	done := make(chan struct{})
-	go Run(ctx, index, commands, nil, nil, mqtt.Topics{}, stateChanges, nil, nil, done)
+	done := make(chan error, 1)
+	go func() {
+		done <- Run(ctx, index, commands, nil, nil, mqtt.Topics{}, stateChanges, nil, nil, RuntimeOptions{})
+	}()
 
 	cancel()
 
 	select {
-	case <-done:
+	case err := <-done:
+		require.NoError(t, err)
 	case <-time.After(time.Second):
 		require.Fail(t, "Run did not return after signal")
 	}
@@ -43,13 +46,16 @@ func TestRunReturnsWhenPollEventsClose(t *testing.T) {
 	index := registry.Build(&entity.Root{})
 	stateChanges := make(chan sysfs.StateChange)
 	commands := make(chan sysfs.Command)
-	done := make(chan struct{})
-	go Run(ctx, index, commands, nil, nil, mqtt.Topics{}, stateChanges, nil, nil, done)
+	done := make(chan error, 1)
+	go func() {
+		done <- Run(ctx, index, commands, nil, nil, mqtt.Topics{}, stateChanges, nil, nil, RuntimeOptions{})
+	}()
 
 	close(stateChanges)
 
 	select {
-	case <-done:
+	case err := <-done:
+		require.NoError(t, err)
 	case <-time.After(time.Second):
 		require.Fail(t, "Run did not return after poll event channel closed")
 	}
@@ -61,8 +67,10 @@ func TestRunContinuesWhenModbusEventsClose(t *testing.T) {
 	stateChanges := make(chan sysfs.StateChange)
 	modbusEvents := make(chan modbus.Event)
 	commands := make(chan sysfs.Command)
-	done := make(chan struct{})
-	go Run(ctx, index, commands, nil, nil, mqtt.Topics{}, stateChanges, nil, modbusEvents, done)
+	done := make(chan error, 1)
+	go func() {
+		done <- Run(ctx, index, commands, nil, nil, mqtt.Topics{}, stateChanges, nil, modbusEvents, RuntimeOptions{})
+	}()
 
 	close(modbusEvents)
 
@@ -130,7 +138,7 @@ func TestDispatchPushButtonEventDerivesLightEvent(t *testing.T) {
 			ButtonID: entity.PushButtonID("office_button"),
 			Name:     "Office button",
 		},
-	})
+	}, dispatchHandoffs{})
 
 	require.Len(t, derivedEvents, 1)
 	assert.Equal(t, event.LightKind, derivedEvents[0].Kind)
@@ -215,7 +223,7 @@ func TestDispatchPushButtonEventPublishesRemoteSourceEvent(t *testing.T) {
 			ButtonID: entity.PushButtonID("controller_1.button.office_button"),
 			Name:     "Office button",
 		},
-	})
+	}, dispatchHandoffs{})
 
 	command := <-mqttCommands
 	assert.Equal(t, mqtt.PublishCommandKind, command.Kind)
@@ -241,9 +249,9 @@ func TestDispatchRemoteSourceEventTogglesTargetLocalLight(t *testing.T) {
 		PushButton: &event.PushButton{
 			ButtonID: entity.PushButtonID("controller_2.button.hall_button"),
 		},
-	})
+	}, dispatchHandoffs{})
 	require.Len(t, derivedEvents, 1)
-	dispatchEvent(t.Context(), index, sysfsCommands, nil, nil, mqtt.Topics{}, derivedEvents[0])
+	dispatchEvent(t.Context(), index, sysfsCommands, nil, nil, mqtt.Topics{}, derivedEvents[0], dispatchHandoffs{})
 
 	command := <-sysfsCommands
 	assert.Equal(t, sysfs.ToggleCommand, command.Kind)
@@ -265,9 +273,9 @@ func TestProjectedConfigModbusEventSignalTogglesTargetLocalLight(t *testing.T) {
 	assert.Equal(t, event.PushButtonPressedKind, semanticEvent.Kind)
 	assert.Equal(t, entity.PushButtonID("local.button.office_button"), semanticEvent.PushButton.ButtonID)
 
-	derivedEvents := dispatchEvent(t.Context(), index, sysfsCommands, nil, nil, mqtt.Topics{}, semanticEvent)
+	derivedEvents := dispatchEvent(t.Context(), index, sysfsCommands, nil, nil, mqtt.Topics{}, semanticEvent, dispatchHandoffs{})
 	require.Len(t, derivedEvents, 1)
-	dispatchEvent(t.Context(), index, sysfsCommands, nil, nil, mqtt.Topics{}, derivedEvents[0])
+	dispatchEvent(t.Context(), index, sysfsCommands, nil, nil, mqtt.Topics{}, derivedEvents[0], dispatchHandoffs{})
 
 	command := <-sysfsCommands
 	assert.Equal(t, sysfs.ToggleCommand, command.Kind)
@@ -284,7 +292,7 @@ func TestProjectedConfigPushButtonDispatchesModbusEventSignal(t *testing.T) {
 		PushButton: &event.PushButton{
 			ButtonID: entity.PushButtonID("local.button.office_button"),
 		},
-	})
+	}, dispatchHandoffs{})
 
 	assert.Equal(t, modbus.WriteCoilCommand(1, 1, true), <-commands)
 }
@@ -306,7 +314,7 @@ func TestLightStateProjectsModbusSlaveStatePoint(t *testing.T) {
 			LightID: entity.LightID("remote.light.remote_light"),
 			Value:   1,
 		},
-	})
+	}, dispatchHandoffs{})
 
 	assert.Equal(t, modbus.SetCoilStateCommand(2, true), <-commands)
 }
@@ -339,7 +347,7 @@ func TestInitialRelayStateProjectsModbusSlaveStatePoint(t *testing.T) {
 	assert.Equal(t, event.RelayStateKind, (<-semanticEvents).Kind)
 	lightState := <-semanticEvents
 	assert.Equal(t, event.LightStateKind, lightState.Kind)
-	dispatchEvent(t.Context(), reg, nil, nil, commands, mqtt.Topics{}, lightState)
+	dispatchEvent(t.Context(), reg, nil, nil, commands, mqtt.Topics{}, lightState, dispatchHandoffs{})
 	assert.Equal(t, modbus.SetCoilStateCommand(2, true), <-commands)
 }
 
@@ -449,8 +457,8 @@ func TestHandleStateChangePublishesMappedLightState(t *testing.T) {
 		NewValue: sysfs.On,
 		IsRising: true,
 	})
-	dispatchEvent(t.Context(), index, nil, mqttCommands, nil, topics, <-semanticEvents)
-	dispatchEvent(t.Context(), index, nil, mqttCommands, nil, topics, <-semanticEvents)
+	dispatchEvent(t.Context(), index, nil, mqttCommands, nil, topics, <-semanticEvents, dispatchHandoffs{})
+	dispatchEvent(t.Context(), index, nil, mqttCommands, nil, topics, <-semanticEvents, dispatchHandoffs{})
 
 	lightCommand := <-mqttCommands
 	assert.Equal(t, mqtt.PublishCommandKind, lightCommand.Kind)
@@ -464,7 +472,7 @@ func TestPublishMQTTDoesNotBlockWhenCommandChannelIsFull(t *testing.T) {
 	commands := make(chan mqtt.Command, 1)
 	commands <- mqtt.PublishCommand(mqtt.PublishMessage{Topic: "nest/full"})
 
-	published := publishMQTT(t.Context(), commands, mqtt.PublishMessage{Topic: "nest/dropped"})
+	published := publishMQTT(t.Context(), commands, mqtt.PublishMessage{Topic: "nest/dropped"}, nil)
 
 	assert.False(t, published)
 	assert.Len(t, commands, 1)
@@ -486,7 +494,7 @@ func TestNormalizeMQTTEventPublishesStartupCommandsOnConnect(t *testing.T) {
 	semanticEvent, handled := semanticEventFromMQTTEvent(registry.Build(root), mqtt.Topics{}, mqtt.ConnectedEvent())
 	require.True(t, handled)
 
-	dispatchEvent(t.Context(), registry.Build(root), nil, commands, nil, mqtt.Topics{}, semanticEvent)
+	dispatchEvent(t.Context(), registry.Build(root), nil, commands, nil, mqtt.Topics{}, semanticEvent, dispatchHandoffs{})
 
 	require.Len(t, commands, 2)
 	assert.Equal(t, "homeassistant/device/nest_controller_1_unit/config", (<-commands).Publish.Topic)
@@ -498,7 +506,7 @@ func TestNormalizeMQTTEventIgnoresNonConnectEvents(t *testing.T) {
 	semanticEvent, handled := semanticEventFromMQTTEvent(registry.Build(&entity.Root{}), mqtt.Topics{}, mqtt.PublishedEvent(mqtt.PublishMessage{Topic: "nest/topic"}))
 	require.True(t, handled)
 
-	dispatchEvent(t.Context(), registry.Build(&entity.Root{}), nil, commands, nil, mqtt.Topics{}, semanticEvent)
+	dispatchEvent(t.Context(), registry.Build(&entity.Root{}), nil, commands, nil, mqtt.Topics{}, semanticEvent, dispatchHandoffs{})
 
 	assert.Empty(t, commands)
 }
@@ -517,7 +525,7 @@ func TestDispatchMQTTLightCommandTurnsLightOn(t *testing.T) {
 			Name:    "Office light",
 			Action:  entity.LightActionOn,
 		},
-	})
+	}, dispatchHandoffs{})
 
 	command := <-commands
 	assert.Equal(t, sysfs.OnCommand, command.Kind)
@@ -538,7 +546,7 @@ func TestProjectedConfigMQTTLightCommandTurnsLightOn(t *testing.T) {
 	require.True(t, handled)
 	assert.Equal(t, entity.LightID("controller_1.light.office_light"), semanticEvent.Light.LightID)
 
-	dispatchEvent(t.Context(), registry.Build(root), commands, nil, nil, mqtt.Topics{}, semanticEvent)
+	dispatchEvent(t.Context(), registry.Build(root), commands, nil, nil, mqtt.Topics{}, semanticEvent, dispatchHandoffs{})
 
 	command := <-commands
 	assert.Equal(t, sysfs.OnCommand, command.Kind)
@@ -650,5 +658,5 @@ func dispatchQueuedTestEvents(
 	}
 	close(semanticEvents)
 
-	dispatchEvents(ctx, index, sysfsCommands, mqttCommands, nil, mqttTopics, semanticEvents)
+	_ = dispatchEvents(ctx, index, sysfsCommands, mqttCommands, nil, mqttTopics, semanticEvents, RuntimeOptions{})
 }

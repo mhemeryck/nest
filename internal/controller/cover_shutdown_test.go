@@ -31,9 +31,13 @@ func TestShutdownKeepsFeedbackAliveAndPersistsConfirmedPosition(t *testing.T) {
 	commands := make(chan sysfs.Command, 32)
 	states := make(chan sysfs.StateChange, 32)
 	controllerDone := make(chan struct{})
+	result := make(chan error, 1)
 	position := 60.0
-	go Run(shutdownContext, controller.reg, commands, nil, nil, mqtt.Topics{}, states, nil, nil, controllerDone,
-		RuntimeOptions{Persistence: store, RestoredPositions: map[entity.CoverID]*float64{"a": &position, "b": &position}, FeedbackContext: actorContext})
+	go func() {
+		defer close(controllerDone)
+		result <- Run(shutdownContext, controller.reg, commands, nil, nil, mqtt.Topics{}, states, nil, nil,
+			RuntimeOptions{Persistence: store, RestoredPositions: map[entity.CoverID]*float64{"a": &position, "b": &position}, FeedbackContext: actorContext})
+	}()
 	startup := make(chan struct{})
 	moving := make(chan struct{})
 	actorDone := make(chan struct{})
@@ -74,6 +78,7 @@ func TestShutdownKeepsFeedbackAliveAndPersistsConfirmedPosition(t *testing.T) {
 	assert.NoError(t, actorContext.Err(), "actor lifetime must survive shutdown request")
 	select {
 	case <-controllerDone:
+		require.NoError(t, <-result)
 	case <-time.After(time.Second):
 		require.FailNow(t, "confirmed shutdown did not finish")
 	}
@@ -100,8 +105,12 @@ func TestShutdownMissingResultsRemainsUncleanAndBounded(t *testing.T) {
 	commands := make(chan sysfs.Command, 32)
 	states := make(chan sysfs.StateChange, 32)
 	done := make(chan struct{})
-	go Run(shutdownContext, reg, commands, nil, nil, mqtt.Topics{}, states, nil, nil, done,
-		RuntimeOptions{Persistence: store, FeedbackContext: actorContext})
+	result := make(chan error, 1)
+	go func() {
+		defer close(done)
+		result <- Run(shutdownContext, reg, commands, nil, nil, mqtt.Topics{}, states, nil, nil,
+			RuntimeOptions{Persistence: store, FeedbackContext: actorContext})
+	}()
 	defer func() { cancelController(); cancelActors(); <-storeDone; <-done }()
 	select {
 	case <-commands:
@@ -112,6 +121,7 @@ func TestShutdownMissingResultsRemainsUncleanAndBounded(t *testing.T) {
 	cancelController()
 	select {
 	case <-done:
+		require.ErrorContains(t, <-result, `cover "a" shutdown: outputs unconfirmed OFF at deadline`)
 	case <-time.After(500 * time.Millisecond):
 		require.FailNow(t, "shutdown exceeded bounded period")
 	}

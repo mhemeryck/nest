@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -64,12 +65,13 @@ type coverController struct {
 	settings      entity.CoverControl
 	covers        map[entity.CoverID]*coverRuntime
 	order         []entity.CoverID
+	commandOwners map[entity.OutputCommandID]entity.CoverID
 	nextCommandID entity.OutputCommandID
 	shuttingDown  bool
 }
 
 func newCoverController(reg *registry.Registry, restored map[entity.CoverID]*float64) *coverController {
-	controller := &coverController{reg: reg, settings: registry.CoverControl(reg), covers: make(map[entity.CoverID]*coverRuntime)}
+	controller := &coverController{reg: reg, settings: registry.CoverControl(reg), covers: make(map[entity.CoverID]*coverRuntime), commandOwners: make(map[entity.OutputCommandID]entity.CoverID)}
 	for _, cover := range registry.Covers(reg) {
 		controller.order = append(controller.order, cover.ID)
 		controller.covers[cover.ID] = &coverRuntime{cover: cover, state: entity.CoverStateUnknown, position: copyPosition(restored[cover.ID]), phase: coverInitializing}
@@ -156,6 +158,7 @@ func stopCover(controller *coverController, runtime *coverRuntime, now time.Time
 func commandBothCoverOutputsOff(controller *coverController, runtime *coverRuntime, phase coverPhase, now time.Time) []event.Event {
 	runtime.phase = phase
 	runtime.generation++
+	clearPendingCoverOutputs(controller, runtime)
 	runtime.pending = make(map[entity.OutputCommandID]pendingCoverOutput)
 	runtime.attemptFailed = false
 	runtime.retryAt = time.Time{}
@@ -168,83 +171,119 @@ func commandBothCoverOutputsOff(controller *coverController, runtime *coverRunti
 func commandCoverOutput(controller *coverController, runtime *coverRuntime, relay entity.RelayID, action entity.OutputAction, now time.Time) event.Event {
 	controller.nextCommandID++
 	id := controller.nextCommandID
+	controller.commandOwners[id] = runtime.cover.ID
 	runtime.pending[id] = pendingCoverOutput{relay: relay, action: action, generation: runtime.generation, deadline: now.Add(controller.settings.OperationTimeout)}
 	return event.Event{Kind: event.OutputCommandKind, OutputCommand: &event.OutputCommand{CommandID: id, RelayID: relay, Action: action}}
 }
 
 func handleCoverOutputResult(controller *coverController, result event.OutputResult, now time.Time) []event.Event {
-	for _, id := range controller.order {
-		runtime := controller.covers[id]
-		if result.CommandID == runtime.activationID && runtime.activatedAt.IsZero() && runtime.phase == coverStopping && runtime.fault == nil && result.Action == entity.OutputActionOn {
-			// Timing and failure evidence; cancelled activation never restores movement intent
-			relay, ok := registry.RelayByID(controller.reg, activeCoverRelay(runtime))
-			if ok && relay.SysfsDevice == result.SysfsDevice {
-				if result.Error != nil {
-					runtime.fault = result.Error
-					runtime.phase = coverRecovering
-					runtime.position = nil
-					runtime.stopReason = coverFailure
-					return []event.Event{coverObservation(runtime, now, controller.settings.FullTravelDuration, event.CoverObservationKind)}
-				}
-				runtime.activatedAt = result.CompletedAt
-			}
-		}
-		operation, ok := runtime.pending[result.CommandID]
-		if !ok || operation.generation != runtime.generation {
-			continue
-		}
-		relay, ok := registry.RelayByID(controller.reg, operation.relay)
-		if !ok || relay.SysfsDevice != result.SysfsDevice || operation.action != result.Action {
-			return nil
-		}
-		delete(runtime.pending, result.CommandID)
-		if result.Error != nil {
-			if operation.action == entity.OutputActionOn || runtime.phase == coverPreparing {
-				return faultCover(controller, runtime, result.Error, now, true)
-			}
-			runtime.fault = result.Error
-			runtime.attemptFailed = true
-			runtime.phase = coverRecovering
-			if runtime.stopReason != coverCompleted {
-				runtime.position = nil
-				runtime.stopReason = coverFailure
-			}
-			if len(runtime.pending) == 0 {
-				runtime.retryAt = now.Add(controller.settings.OffRetryInterval)
-			}
-			return []event.Event{coverObservation(runtime, now, controller.settings.FullTravelDuration, event.CoverObservationKind)}
-		}
-		if operation.action == entity.OutputActionOn {
-			runtime.activatedAt = result.CompletedAt
-			runtime.phase = coverMoving
-			runtime.state = entity.CoverStateOpening
-			if runtime.direction == entity.CoverActionClose {
-				runtime.state = entity.CoverStateClosing
-			}
-			runtime.travelDeadline = result.CompletedAt.Add(controller.settings.FullTravelDuration)
-			runtime.reportDeadline = now.Add(controller.settings.ReportingInterval)
-			return []event.Event{coverObservation(runtime, now, controller.settings.FullTravelDuration, event.CoverObservationKind)}
-		}
-		if operation.relay == activeCoverRelay(runtime) {
-			runtime.activeOffAt = result.CompletedAt
-		}
-		if len(runtime.pending) > 0 {
-			return nil
-		}
-		if runtime.attemptFailed {
-			runtime.retryAt = now.Add(controller.settings.OffRetryInterval)
-			return nil
-		}
-		if runtime.phase == coverPreparing {
-			runtime.phase = coverActivating
-			runtime.generation++
-			command := commandCoverOutput(controller, runtime, activeCoverRelay(runtime), entity.OutputActionOn, now)
-			runtime.activationID = command.OutputCommand.CommandID
-			return []event.Event{command}
-		}
-		return completeCoverStop(controller, runtime, now)
+	id, owned := controller.commandOwners[result.CommandID]
+	if !owned {
+		return nil
 	}
-	return nil
+	runtime := controller.covers[id]
+	if events, handled := handleCancelledCoverActivation(controller, runtime, result, now); handled {
+		return events
+	}
+	operation, ok := runtime.pending[result.CommandID]
+	if !ok || operation.generation != runtime.generation {
+		return nil
+	}
+	relay, ok := registry.RelayByID(controller.reg, operation.relay)
+	if !ok || relay.SysfsDevice != result.SysfsDevice || operation.action != result.Action {
+		return nil
+	}
+	delete(runtime.pending, result.CommandID)
+	if result.CommandID != runtime.activationID {
+		delete(controller.commandOwners, result.CommandID)
+	}
+	if result.Error != nil {
+		return handleCoverOutputFailure(controller, runtime, operation, result.Error, now)
+	}
+	if operation.action == entity.OutputActionOn {
+		return completeCoverActivation(controller, runtime, result.CompletedAt, now)
+	}
+	return handleCoverOffCompletion(controller, runtime, operation.relay, result.CompletedAt, now)
+}
+
+func handleCancelledCoverActivation(controller *coverController, runtime *coverRuntime, result event.OutputResult, now time.Time) ([]event.Event, bool) {
+	if result.CommandID != runtime.activationID || !runtime.activatedAt.IsZero() || runtime.phase != coverStopping || runtime.fault != nil || result.Action != entity.OutputActionOn {
+		return nil, false
+	}
+	relay, ok := registry.RelayByID(controller.reg, activeCoverRelay(runtime))
+	if !ok || relay.SysfsDevice != result.SysfsDevice {
+		return nil, false
+	}
+	// Timing and failure evidence; cancelled activation never restores movement intent
+	if result.Error != nil {
+		runtime.fault = result.Error
+		runtime.phase = coverRecovering
+		runtime.position = nil
+		runtime.stopReason = coverFailure
+		return []event.Event{coverObservation(runtime, now, controller.settings.FullTravelDuration, event.CoverObservationKind)}, true
+	}
+	runtime.activatedAt = result.CompletedAt
+	return nil, true
+}
+
+func handleCoverOutputFailure(controller *coverController, runtime *coverRuntime, operation pendingCoverOutput, failure error, now time.Time) []event.Event {
+	if operation.action == entity.OutputActionOn || runtime.phase == coverPreparing {
+		return faultCover(controller, runtime, failure, now, true)
+	}
+	runtime.fault = failure
+	runtime.attemptFailed = true
+	runtime.phase = coverRecovering
+	if runtime.stopReason != coverCompleted {
+		runtime.position = nil
+		runtime.stopReason = coverFailure
+	}
+	if len(runtime.pending) == 0 {
+		runtime.retryAt = now.Add(controller.settings.OffRetryInterval)
+	}
+	return []event.Event{coverObservation(runtime, now, controller.settings.FullTravelDuration, event.CoverObservationKind)}
+}
+
+func completeCoverActivation(controller *coverController, runtime *coverRuntime, completedAt, now time.Time) []event.Event {
+	runtime.activatedAt = completedAt
+	runtime.phase = coverMoving
+	runtime.state = entity.CoverStateOpening
+	if runtime.direction == entity.CoverActionClose {
+		runtime.state = entity.CoverStateClosing
+	}
+	runtime.travelDeadline = completedAt.Add(controller.settings.FullTravelDuration)
+	runtime.reportDeadline = now.Add(controller.settings.ReportingInterval)
+	return []event.Event{coverObservation(runtime, now, controller.settings.FullTravelDuration, event.CoverObservationKind)}
+}
+
+func handleCoverOffCompletion(controller *coverController, runtime *coverRuntime, relay entity.RelayID, completedAt, now time.Time) []event.Event {
+	if relay == activeCoverRelay(runtime) {
+		runtime.activeOffAt = completedAt
+	}
+	if len(runtime.pending) > 0 {
+		return nil
+	}
+	if runtime.attemptFailed {
+		runtime.retryAt = now.Add(controller.settings.OffRetryInterval)
+		return nil
+	}
+	if runtime.phase == coverPreparing {
+		runtime.phase = coverActivating
+		runtime.generation++
+		command := commandCoverOutput(controller, runtime, activeCoverRelay(runtime), entity.OutputActionOn, now)
+		runtime.activationID = command.OutputCommand.CommandID
+		return []event.Event{command}
+	}
+	return completeCoverStop(controller, runtime, now)
+}
+
+func clearPendingCoverOutputs(controller *coverController, runtime *coverRuntime) {
+	for id := range runtime.pending {
+		// Retain cancelled activation correlation until switch-off completes
+		if id != runtime.activationID {
+			delete(controller.commandOwners, id)
+		}
+	}
+	runtime.pending = nil
 }
 
 func activeCoverRelay(runtime *coverRuntime) entity.RelayID {
@@ -267,7 +306,7 @@ func faultCover(controller *coverController, runtime *coverRuntime, failure erro
 	if immediateOff {
 		events = commandBothCoverOutputsOff(controller, runtime, coverRecovering, now)
 	} else {
-		runtime.pending = nil
+		clearPendingCoverOutputs(controller, runtime)
 		runtime.retryAt = now.Add(controller.settings.OffRetryInterval)
 	}
 	return append(events, coverObservation(runtime, now, controller.settings.FullTravelDuration, event.CoverObservationKind))
@@ -303,6 +342,7 @@ func completeCoverStop(controller *coverController, runtime *coverRuntime, now t
 	runtime.travelDeadline = time.Time{}
 	runtime.reportDeadline = time.Time{}
 	runtime.activatedAt = time.Time{}
+	delete(controller.commandOwners, runtime.activationID)
 	runtime.activationID = 0
 	return []event.Event{coverObservation(runtime, now, controller.settings.FullTravelDuration, event.CoverStoppedKind)}
 }
@@ -459,11 +499,22 @@ func coverOutputsStopped(controller *coverController) bool {
 }
 
 func currentCoverCommand(controller *coverController, command event.OutputCommand) bool {
-	for _, runtime := range controller.covers {
-		operation, exists := runtime.pending[command.CommandID]
-		if exists {
-			return operation.generation == runtime.generation && operation.relay == command.RelayID && operation.action == command.Action
+	id, owned := controller.commandOwners[command.CommandID]
+	if !owned {
+		return false
+	}
+	runtime := controller.covers[id]
+	operation, exists := runtime.pending[command.CommandID]
+	return exists && operation.generation == runtime.generation && operation.relay == command.RelayID && operation.action == command.Action
+}
+
+func coverShutdownError(controller *coverController) error {
+	var failures error
+	for _, id := range controller.order {
+		runtime := controller.covers[id]
+		if runtime.phase != coverIdle || runtime.fault != nil {
+			failures = errors.Join(failures, fmt.Errorf("cover %q shutdown: outputs unconfirmed OFF at deadline", id))
 		}
 	}
-	return false
+	return failures
 }
