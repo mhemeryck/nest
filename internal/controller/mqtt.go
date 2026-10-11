@@ -69,6 +69,30 @@ func publishLightState(ctx context.Context, commands chan<- mqtt.Command, topics
 	publishMQTT(ctx, commands, message, handoff)
 }
 
+func publishRemoteCoverCommand(ctx context.Context, reg *registry.Registry, commands chan<- mqtt.Command, topics mqtt.Topics, cover event.Cover, handoff *mqtt.Handoff) {
+	if _, local := registry.CoverByID(reg, cover.CoverID); local {
+		return
+	}
+	message, err := mqtt.CoverCommandMessage(topics, cover.CoverID, cover.Action)
+	if err != nil {
+		slog.Error("build remote cover command failed", "error", err)
+		return
+	}
+	publishMQTT(ctx, commands, message, handoff)
+}
+
+func publishCoverObservation(ctx context.Context, commands chan<- mqtt.Command, topics mqtt.Topics, observation event.CoverObservation, handoff *mqtt.Handoff) {
+	message, err := mqtt.CoverStateMessage(topics, mqtt.CoverObservation{
+		CoverID: observation.CoverID, State: observation.State,
+		EstimatedPosition: observation.EstimatedPosition, Available: observation.Available,
+	})
+	if err != nil {
+		slog.Error("build mqtt cover observation failed", "error", err)
+		return
+	}
+	publishMQTT(ctx, commands, message, handoff)
+}
+
 func publishMQTT(ctx context.Context, commands chan<- mqtt.Command, message mqtt.PublishMessage, handoff *mqtt.Handoff) bool {
 	if commands == nil {
 		return false

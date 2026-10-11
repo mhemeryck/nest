@@ -110,15 +110,7 @@ func dispatchMQTTCommand(ctx context.Context, reg *registry.Registry, commands c
 	}
 	switch busEvent.Kind {
 	case event.CoverKind:
-		if _, local := registry.CoverByID(reg, busEvent.Cover.CoverID); local {
-			return
-		}
-		message, err := mqtt.CoverCommandMessage(topics, busEvent.Cover.CoverID, busEvent.Cover.Action)
-		if err != nil {
-			slog.Error("build remote cover command failed", "error", err)
-			return
-		}
-		publishMQTT(ctx, commands, message, handoff)
+		publishRemoteCoverCommand(ctx, reg, commands, topics, *busEvent.Cover, handoff)
 	case event.PushButtonPressedKind, event.PushButtonReleasedKind:
 		publishPushButtonSourceEvent(ctx, reg, commands, topics, busEvent.Kind, *busEvent.PushButton, handoff)
 	case event.LightStateKind:
@@ -128,13 +120,7 @@ func dispatchMQTTCommand(ctx context.Context, reg *registry.Registry, commands c
 			slog.Error("mqtt startup publish failed", "error", err)
 		}
 	case event.CoverObservationKind, event.CoverStoppedKind, event.CoverStartIntentKind:
-		observation := busEvent.CoverObservation
-		message, err := mqtt.CoverStateMessage(topics, mqtt.CoverObservation{CoverID: observation.CoverID, State: observation.State, EstimatedPosition: observation.EstimatedPosition, Available: observation.Available})
-		if err != nil {
-			slog.Error("build mqtt cover observation failed", "error", err)
-			return
-		}
-		publishMQTT(ctx, commands, message, handoff)
+		publishCoverObservation(ctx, commands, topics, *busEvent.CoverObservation, handoff)
 	}
 }
 

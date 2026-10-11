@@ -26,22 +26,37 @@ func QueueMessage(handoff *Handoff, message PublishMessage) error {
 	defer handoff.mu.Unlock()
 	message.Payload = bytes.Clone(message.Payload)
 	command := PublishCommand(message)
+	var err error
 	if message.Retain {
-		if _, known := handoff.latest[message.Topic]; !known && len(handoff.latest) >= handoff.capacity {
-			return fmt.Errorf("mqtt observation handoff capacity exhausted")
-		}
-		handoff.latest[message.Topic] = command
-		handoff.pending[message.Topic] = command
+		err = queueLatestObservation(handoff, message.Topic, command)
 	} else {
-		if len(handoff.events) >= handoff.capacity {
-			return fmt.Errorf("mqtt event handoff capacity exhausted")
-		}
-		handoff.events = append(handoff.events, command)
+		err = queueEventCommand(handoff, command)
+	}
+	if err != nil {
+		return err
 	}
 	select {
 	case handoff.wake <- struct{}{}:
 	default:
 	}
+	return nil
+}
+
+// Caller holds the handoff lock across admission and wake-up
+func queueLatestObservation(handoff *Handoff, topic string, command Command) error {
+	if _, known := handoff.latest[topic]; !known && len(handoff.latest) >= handoff.capacity {
+		return fmt.Errorf("mqtt observation handoff capacity exhausted")
+	}
+	handoff.latest[topic] = command
+	handoff.pending[topic] = command
+	return nil
+}
+
+func queueEventCommand(handoff *Handoff, command Command) error {
+	if len(handoff.events) >= handoff.capacity {
+		return fmt.Errorf("mqtt event handoff capacity exhausted")
+	}
+	handoff.events = append(handoff.events, command)
 	return nil
 }
 
@@ -68,6 +83,14 @@ func RunHandoff(ctx context.Context, handoff *Handoff, commands chan<- Command, 
 func FlushAvailable(handoff *Handoff, commands chan<- Command) bool {
 	handoff.mu.Lock()
 	defer handoff.mu.Unlock()
+	if flushEventCommands(handoff, commands) {
+		return true
+	}
+	return flushPendingObservations(handoff, commands)
+}
+
+// Caller holds the handoff lock; FIFO events precede coalesced observations
+func flushEventCommands(handoff *Handoff, commands chan<- Command) bool {
 	for len(handoff.events) > 0 {
 		select {
 		case commands <- handoff.events[0]:
@@ -77,6 +100,10 @@ func FlushAvailable(handoff *Handoff, commands chan<- Command) bool {
 			return true
 		}
 	}
+	return false
+}
+
+func flushPendingObservations(handoff *Handoff, commands chan<- Command) bool {
 	for topic, command := range handoff.pending {
 		select {
 		case commands <- command:

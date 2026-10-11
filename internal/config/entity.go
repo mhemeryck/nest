@@ -7,84 +7,90 @@ func ToEntityRoot(root *Root) *entity.Root {
 		return nil
 	}
 
-	entities := &entity.Root{
-		SysfsRoot:          root.Sysfs.Root,
-		SysfsPollIntervals: pollIntervalsFromConfig(root.Sysfs.PollIntervals),
-		MQTT:               mqttFromConfig(root.MQTT),
-		Modbus:             modbusFromConfig(root.Modbus),
-		DigitalInputs:      make([]entity.DigitalInput, 0, len(root.DigitalInputs)),
-		PushButtons:        make([]entity.PushButton, 0, len(root.PushButtons)),
-		Lights:             make([]entity.Light, 0, len(root.Lights)),
-		Covers:             make([]entity.Cover, 0, len(root.Covers)),
-		CoverControl:       entity.CoverControl(root.CoverControl),
-		PersistencePath:    root.Persistence.Path,
-		Relays:             make([]entity.Relay, 0, len(root.Relays)),
-		Bindings:           make([]entity.Binding, 0, len(root.Bindings)),
-		RemoteSourceBindings: make(
-			[]entity.Binding,
-			0,
-			len(root.RemoteSourceBindings),
-		),
-		RemoteTargetBindings: make(
-			[]entity.Binding,
-			0,
-			len(root.RemoteTargetBindings),
-		),
+	return &entity.Root{
+		SysfsRoot:            root.Sysfs.Root,
+		SysfsPollIntervals:   pollIntervalsFromConfig(root.Sysfs.PollIntervals),
+		MQTT:                 mqttFromConfig(root.MQTT),
+		Modbus:               modbusFromConfig(root.Modbus),
+		DigitalInputs:        digitalInputsFromConfig(root.DigitalInputs),
+		PushButtons:          pushButtonsFromConfig(root.PushButtons),
+		Lights:               lightsFromConfig(root.Lights),
+		Covers:               coversFromConfig(root.Covers),
+		CoverControl:         entity.CoverControl(root.CoverControl),
+		PersistencePath:      root.Persistence.Path,
+		Relays:               relaysFromConfig(root.Relays),
+		Bindings:             bindingsFromConfig(root.Bindings),
+		RemoteSourceBindings: bindingsFromConfig(root.RemoteSourceBindings),
+		RemoteTargetBindings: bindingsFromConfig(root.RemoteTargetBindings),
 	}
+}
 
-	for _, input := range root.DigitalInputs {
-		entities.DigitalInputs = append(entities.DigitalInputs, entity.DigitalInput{
+func digitalInputsFromConfig(inputs []DigitalInputConfig) []entity.DigitalInput {
+	converted := make([]entity.DigitalInput, 0, len(inputs))
+	for _, input := range inputs {
+		converted = append(converted, entity.DigitalInput{
 			ID:          entity.DigitalInputID(input.ID),
 			SysfsDevice: entity.SysfsDeviceID(input.Device),
 		})
 	}
+	return converted
+}
 
-	for _, button := range root.PushButtons {
-		entities.PushButtons = append(entities.PushButtons, entity.PushButton{
+func pushButtonsFromConfig(buttons []PushButtonConfig) []entity.PushButton {
+	converted := make([]entity.PushButton, 0, len(buttons))
+	for _, button := range buttons {
+		converted = append(converted, entity.PushButton{
 			ID:    entity.PushButtonID(button.ID),
 			Name:  button.Name,
 			Input: entity.DigitalInputID(button.Input),
 		})
 	}
+	return converted
+}
 
-	for _, relay := range root.Relays {
-		entities.Relays = append(entities.Relays, entity.Relay{
+func relaysFromConfig(relays []RelayConfig) []entity.Relay {
+	converted := make([]entity.Relay, 0, len(relays))
+	for _, relay := range relays {
+		converted = append(converted, entity.Relay{
 			ID:          entity.RelayID(relay.ID),
 			Name:        relay.Name,
 			SysfsDevice: entity.SysfsDeviceID(relay.Device),
 		})
 	}
+	return converted
+}
 
-	for _, light := range root.Lights {
-		entities.Lights = append(entities.Lights, entity.Light{
+func lightsFromConfig(lights []LightConfig) []entity.Light {
+	converted := make([]entity.Light, 0, len(lights))
+	for _, light := range lights {
+		converted = append(converted, entity.Light{
 			ID:    entity.LightID(light.ID),
 			Name:  light.Name,
 			Relay: entity.RelayID(light.Relay),
 		})
 	}
+	return converted
+}
 
-	for _, cover := range root.Covers {
-		entities.Covers = append(entities.Covers, entity.Cover{
+func coversFromConfig(covers []CoverConfig) []entity.Cover {
+	converted := make([]entity.Cover, 0, len(covers))
+	for _, cover := range covers {
+		converted = append(converted, entity.Cover{
 			ID:         entity.CoverID(cover.ID),
 			Name:       cover.Name,
 			OpenRelay:  entity.RelayID(cover.OpenRelay),
 			CloseRelay: entity.RelayID(cover.CloseRelay),
 		})
 	}
+	return converted
+}
 
-	for _, binding := range root.Bindings {
-		entities.Bindings = append(entities.Bindings, bindingFromConfig(binding))
+func bindingsFromConfig(bindings []BindingConfig) []entity.Binding {
+	converted := make([]entity.Binding, 0, len(bindings))
+	for _, binding := range bindings {
+		converted = append(converted, bindingFromConfig(binding))
 	}
-
-	for _, binding := range root.RemoteSourceBindings {
-		entities.RemoteSourceBindings = append(entities.RemoteSourceBindings, bindingFromConfig(binding))
-	}
-
-	for _, binding := range root.RemoteTargetBindings {
-		entities.RemoteTargetBindings = append(entities.RemoteTargetBindings, bindingFromConfig(binding))
-	}
-
-	return entities
+	return converted
 }
 
 func modbusFromConfig(modbus ModbusConfig) entity.Modbus {

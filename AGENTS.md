@@ -36,6 +36,10 @@
 - Example: `receiveCommand`, `validateCommand`, `persistCommand`
 - Behavior- and direction-oriented names: `handleMasterToSlaveCommand`, `pollSlaveStatePoints`
 - Top-level functions: visible lifecycle or responsibility sequence
+- Reference: `internal/controller/dispatch.go` → `dispatchEvent`
+- Helpers own cohesive behavior and related state updates
+- Callers retain visible ordering, branching, and failure rules
+- Structural reviews: account for every new or modified production function
 - Compact responsibility list above functions when structure alone lacks a clear high-level map
 - Fragment-based comments and lists
 - No helpers for trivial control flow alone

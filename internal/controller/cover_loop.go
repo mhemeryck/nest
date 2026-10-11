@@ -46,6 +46,10 @@ func runCoverLoop(
 		persistence: runtimeOptions.Persistence, handoffs: handoffs,
 	}
 	loop := newCoverLoop(ctx, reg, runtimeOptions.RestoredPositions, time.Now())
+	return processCoverLoop(feedbackContext, loop, targets, semanticEvents)
+}
+
+func processCoverLoop(ctx context.Context, loop *coverLoop, targets dispatchTargets, semanticEvents <-chan event.Event) error {
 	timer := time.NewTimer(time.Hour)
 	// Inactive until armed for the next deadline; initial duration unused
 	timer.Stop()
@@ -64,12 +68,12 @@ func runCoverLoop(
 		}
 		due := processCoverDeadlines(loop.covers, time.Now())
 		loop.queue = append(due, loop.queue...)
-		if dispatchNextCoverLoopEvent(feedbackContext, loop, targets) {
+		if dispatchNextCoverLoopEvent(ctx, loop, targets) {
 			continue
 		}
 
 		if loop.covers.shuttingDown && coverOutputsStopped(loop.covers) {
-			finishCoverLoopShutdown(feedbackContext, runtimeOptions.Persistence, loop.shutdownDeadline)
+			finishCoverLoopShutdown(ctx, targets.persistence, loop.shutdownDeadline)
 			return nil
 		}
 		if !semanticEventsOpen && !loop.covers.shuttingDown {
@@ -77,25 +81,36 @@ func runCoverLoop(
 			continue
 		}
 
-		var deadline <-chan time.Time
-		next := nextCoverLoopDeadline(loop)
-		if !next.IsZero() {
-			timer.Reset(max(0, time.Until(next)))
-			deadline = timer.C
-		}
-		select {
-		case <-loop.shutdownSignal:
-			beginCoverLoopShutdown(loop, time.Now())
-		case <-deadline:
-		case semanticEvent, ok := <-semanticEvents:
-			if !ok {
-				semanticEventsOpen = false
-				semanticEvents = nil
-				continue
-			}
-			loop.queue = append(loop.queue, semanticEvent)
+		deadline := armCoverLoopTimer(loop, timer)
+		if !receiveCoverLoopEvent(loop, semanticEvents, deadline) {
+			semanticEventsOpen = false
+			semanticEvents = nil
 		}
 	}
+}
+
+func armCoverLoopTimer(loop *coverLoop, timer *time.Timer) <-chan time.Time {
+	next := nextCoverLoopDeadline(loop)
+	if next.IsZero() {
+		return nil
+	}
+	timer.Reset(max(0, time.Until(next)))
+	return timer.C
+}
+
+// False result: semantic input closed; shutdown feedback still handled by the loop
+func receiveCoverLoopEvent(loop *coverLoop, semanticEvents <-chan event.Event, deadline <-chan time.Time) bool {
+	select {
+	case <-loop.shutdownSignal:
+		beginCoverLoopShutdown(loop, time.Now())
+	case <-deadline:
+	case semanticEvent, ok := <-semanticEvents:
+		if !ok {
+			return false
+		}
+		loop.queue = append(loop.queue, semanticEvent)
+	}
+	return true
 }
 
 func newCoverLoop(ctx context.Context, reg *registry.Registry, restored map[entity.CoverID]*float64, now time.Time) *coverLoop {

@@ -75,28 +75,34 @@ func NewStore(path string, unitID string, assignments []Assignment, capacity int
 
 func Restore(store *Store) map[entity.CoverID]*float64 {
 	positions := make(map[entity.CoverID]*float64)
-	data, err := os.ReadFile(store.path)
-	if os.IsNotExist(err) {
-		return positions
-	}
+	saved, err := readSnapshot(store.path)
 	if err != nil {
-		slog.Error("persistence restore failed", "error", err)
-		return positions
-	}
-	var saved Snapshot
-	if err := json.Unmarshal(data, &saved); err != nil {
-		slog.Error("persistence restore failed", "error", err)
+		if !os.IsNotExist(err) {
+			slog.Error("persistence restore failed", "error", err)
+		}
 		return positions
 	}
 	if saved.Version != 1 || saved.UnitID != store.snapshot.UnitID || !saved.Clean {
 		return positions
 	}
+	return restoreCoverPositions(store, saved)
+}
+
+func readSnapshot(path string) (Snapshot, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	var saved Snapshot
+	err = json.Unmarshal(data, &saved)
+	return saved, err
+}
+
+func restoreCoverPositions(store *Store, saved Snapshot) map[entity.CoverID]*float64 {
+	positions := make(map[entity.CoverID]*float64)
 	for id, expected := range store.snapshot.Covers {
 		record, exists := saved.Covers[id]
-		if !exists || record.Unfinished || record.OpenRelay != expected.OpenRelay || record.CloseRelay != expected.CloseRelay || record.OpenDevice != expected.OpenDevice || record.CloseDevice != expected.CloseDevice {
-			continue
-		}
-		if record.Position == nil || math.IsNaN(*record.Position) || math.IsInf(*record.Position, 0) || *record.Position < 0 || *record.Position > 100 {
+		if !exists || !trustedCoverRecord(record, expected) {
 			continue
 		}
 		position := *record.Position
@@ -105,6 +111,13 @@ func Restore(store *Store) map[entity.CoverID]*float64 {
 		store.snapshot.Covers[id] = expected
 	}
 	return positions
+}
+
+func trustedCoverRecord(record, expected Record) bool {
+	if record.Unfinished || record.OpenRelay != expected.OpenRelay || record.CloseRelay != expected.CloseRelay || record.OpenDevice != expected.OpenDevice || record.CloseDevice != expected.CloseDevice {
+		return false
+	}
+	return record.Position != nil && !math.IsNaN(*record.Position) && !math.IsInf(*record.Position, 0) && *record.Position >= 0 && *record.Position <= 100
 }
 
 func QueueCommand(store *Store, command Command) error {
@@ -135,17 +148,21 @@ func Run(ctx context.Context, store *Store, done chan<- struct{}) {
 			store.snapshot.Clean = false
 			persistSnapshot(store)
 		case command := <-store.commands:
-			if command.Kind == Flush {
-				if store.untrusted.Load() {
-					persistSnapshot(store)
-				}
-				close(command.Done)
-				continue
-			}
-			applyCommand(store, command)
-			persistSnapshot(store)
+			handleStorageCommand(store, command)
 		}
 	}
+}
+
+func handleStorageCommand(store *Store, command Command) {
+	if command.Kind == Flush {
+		if store.untrusted.Load() {
+			persistSnapshot(store)
+		}
+		close(command.Done)
+		return
+	}
+	applyCommand(store, command)
+	persistSnapshot(store)
 }
 
 func applyCommand(store *Store, command Command) {
@@ -153,25 +170,33 @@ func applyCommand(store *Store, command Command) {
 	case StartSession:
 		store.snapshot.Clean = false
 	case StopSession:
-		store.snapshot.Clean = !store.untrusted.Load()
-		for _, record := range store.snapshot.Covers {
-			if record.Unfinished {
-				store.snapshot.Clean = false
-				break
-			}
-		}
+		completeStoredSession(store)
 	case StartMovement, StopMovement:
-		record, exists := store.snapshot.Covers[command.CoverID]
-		if !exists {
-			store.untrusted.Store(true)
-			return
-		}
-		record.Unfinished = command.Kind == StartMovement
-		if command.Kind == StopMovement {
-			record.Position = command.Position
-		}
-		store.snapshot.Covers[command.CoverID] = record
+		updateStoredMovement(store, command)
 	}
+}
+
+func completeStoredSession(store *Store) {
+	store.snapshot.Clean = !store.untrusted.Load()
+	for _, record := range store.snapshot.Covers {
+		if record.Unfinished {
+			store.snapshot.Clean = false
+			break
+		}
+	}
+}
+
+func updateStoredMovement(store *Store, command Command) {
+	record, exists := store.snapshot.Covers[command.CoverID]
+	if !exists {
+		store.untrusted.Store(true)
+		return
+	}
+	record.Unfinished = command.Kind == StartMovement
+	if command.Kind == StopMovement {
+		record.Position = command.Position
+	}
+	store.snapshot.Covers[command.CoverID] = record
 }
 
 func persistSnapshot(store *Store) {
@@ -191,14 +216,32 @@ func writeSnapshot(path string, snapshot Snapshot) error {
 		return fmt.Errorf("encode snapshot: %w", err)
 	}
 	directory := filepath.Dir(path)
+	file, err := createSnapshotFile(directory)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(file.Name()) }()
+	if err := writeAndSyncSnapshot(file, data); err != nil {
+		return err
+	}
+	if err := os.Rename(file.Name(), path); err != nil {
+		return fmt.Errorf("replace snapshot: %w", err)
+	}
+	return syncSnapshotDirectory(directory)
+}
+
+func createSnapshotFile(directory string) (*os.File, error) {
 	if err := os.MkdirAll(directory, 0o700); err != nil {
-		return fmt.Errorf("create snapshot directory: %w", err)
+		return nil, fmt.Errorf("create snapshot directory: %w", err)
 	}
 	file, err := os.CreateTemp(directory, ".nest-snapshot-*")
 	if err != nil {
-		return fmt.Errorf("create snapshot temporary file: %w", err)
+		return nil, fmt.Errorf("create snapshot temporary file: %w", err)
 	}
-	defer func() { _ = os.Remove(file.Name()) }()
+	return file, nil
+}
+
+func writeAndSyncSnapshot(file *os.File, data []byte) error {
 	if _, err := file.Write(data); err != nil {
 		_ = file.Close()
 		return fmt.Errorf("write snapshot: %w", err)
@@ -210,9 +253,10 @@ func writeSnapshot(path string, snapshot Snapshot) error {
 	if err := file.Close(); err != nil {
 		return fmt.Errorf("close snapshot: %w", err)
 	}
-	if err := os.Rename(file.Name(), path); err != nil {
-		return fmt.Errorf("replace snapshot: %w", err)
-	}
+	return nil
+}
+
+func syncSnapshotDirectory(directory string) error {
 	dir, err := os.Open(directory)
 	if err != nil {
 		return fmt.Errorf("open snapshot directory: %w", err)

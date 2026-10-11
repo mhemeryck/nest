@@ -38,27 +38,28 @@ func pollWorker(
 
 func pollDevices(devices []*Device, ctx context.Context, states chan<- StateChange) {
 	for _, device := range devices {
-		oldValue := device.Value
-		newValue, err := readDevice(device)
-		if err != nil {
-			if device.Type == DigitalInput {
-				if !publishState(ctx, states, StateChange{Kind: InputFailureReportKind, Device: *device, Error: err}) {
-					return
-				}
-			}
-			continue
-		}
-		if newValue != oldValue {
-			if !publishState(ctx, states, StateChange{
-				Device:   *device,
-				OldValue: oldValue,
-				NewValue: newValue,
-				IsRising: oldValue == Off && newValue == On,
-			}) {
-				return
-			}
+		if !pollDevice(device, ctx, states) {
+			return
 		}
 	}
+}
+
+func pollDevice(device *Device, ctx context.Context, states chan<- StateChange) bool {
+	oldValue := device.Value
+	newValue, err := readDevice(device)
+	if err != nil {
+		if device.Type == DigitalInput {
+			return publishState(ctx, states, StateChange{Kind: InputFailureReportKind, Device: *device, Error: err})
+		}
+		return true
+	}
+	if newValue == oldValue {
+		return true
+	}
+	return publishState(ctx, states, StateChange{
+		Device: *device, OldValue: oldValue, NewValue: newValue,
+		IsRising: oldValue == Off && newValue == On,
+	})
 }
 
 func publishInitialRelayStates(ctx context.Context, devices []*Device, states chan<- StateChange) bool {
@@ -104,9 +105,21 @@ func handleCommand(devicesByID map[string]*Device, cmd Command, ctx context.Cont
 }
 
 func executeCommand(device *Device, cmd Command) (Value, Value, error) {
+	oldValue, newValue, err := resolveCommandValues(device, cmd.Kind)
+	if err != nil {
+		return oldValue, oldValue, err
+	}
+	if err := writeValue(device.Path, newValue); err != nil {
+		return oldValue, oldValue, fmt.Errorf("write device %s: %w", device.Identifier, err)
+	}
+	device.Value = newValue
+	return oldValue, newValue, nil
+}
+
+func resolveCommandValues(device *Device, kind CommandKind) (Value, Value, error) {
 	oldValue := device.Value
 	var newValue Value
-	switch cmd.Kind {
+	switch kind {
 	case ToggleCommand:
 		var err error
 		oldValue, err = readCurrentValue(device)
@@ -122,12 +135,8 @@ func executeCommand(device *Device, cmd Command) (Value, Value, error) {
 	case OffCommand:
 		newValue = Off
 	default:
-		return oldValue, oldValue, fmt.Errorf("unsupported command %q", cmd.Kind)
+		return oldValue, oldValue, fmt.Errorf("unsupported command %q", kind)
 	}
-	if err := writeValue(device.Path, newValue); err != nil {
-		return oldValue, oldValue, fmt.Errorf("write device %s: %w", device.Identifier, err)
-	}
-	device.Value = newValue
 	return oldValue, newValue, nil
 }
 

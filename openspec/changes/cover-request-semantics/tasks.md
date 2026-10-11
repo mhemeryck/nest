@@ -71,3 +71,10 @@
 - [x] 9.4 Replace singleton variadic options, handoffs, and cover lists with explicit parameters
 - [x] 9.5 Split output-result handling by responsibility and index command ownership; verify cancelled activation evidence and bounded index cleanup
 - [x] 9.6 Run nest-format, nest-check, and strict OpenSpec validation after review fixes
+
+## 10. Structural review
+
+- [x] 10.1 Inventory every new or modified production function against master; classify responsibility boundaries using dispatchEvent as the reference
+- [x] 10.2 Extract cover transitions, deadline handling, and runtime shutdown responsibilities; verify existing controller and runtime scenarios
+- [x] 10.3 Extract configuration, registry, persistence, and integration responsibilities; verify existing package tests
+- [x] 10.4 Review ordering and ownership preservation; record coverage and run nest-format, nest-check, strict OpenSpec validation, and fixture validation

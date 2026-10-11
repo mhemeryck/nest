@@ -26,21 +26,32 @@ func Run(ctx context.Context, cfg entity.MQTT, sourceEventTopics []string, comma
 
 	topics := NewTopics(cfg.TopicPrefix, cfg.UnitID)
 	client := paho.NewClient(clientOptions(ctx, cfg, topics, sourceEventTopics, events))
+	if !connectClient(ctx, client, cfg, events) {
+		return
+	}
+	defer disconnectClient(ctx, client, cfg, events)
+	processCommands(ctx, client, commands, events)
+}
+
+func connectClient(ctx context.Context, client paho.Client, cfg entity.MQTT, events chan<- Event) bool {
 	if err := waitToken(ctx, client.Connect()); err != nil {
 		client.Disconnect(0)
 		slog.Error("mqtt connect failed", "broker", brokerURL(cfg), "error", err)
 		publishEvent(ctx, events, ConnectFailedEvent(err))
-		return
+		return false
 	}
+	return true
+}
 
-	defer func() {
-		offlineCtx, cancel := context.WithTimeout(context.Background(), gracefulOfflineTimeout)
-		defer cancel()
-		publishGracefulOffline(offlineCtx, client, cfg)
-		client.Disconnect(uint(disconnectQuiesce / time.Millisecond))
-		publishEvent(ctx, events, DisconnectedEvent())
-	}()
+func disconnectClient(ctx context.Context, client paho.Client, cfg entity.MQTT, events chan<- Event) {
+	offlineCtx, cancel := context.WithTimeout(context.Background(), gracefulOfflineTimeout)
+	defer cancel()
+	publishGracefulOffline(offlineCtx, client, cfg)
+	client.Disconnect(uint(disconnectQuiesce / time.Millisecond))
+	publishEvent(ctx, events, DisconnectedEvent())
+}
 
+func processCommands(ctx context.Context, client client, commands <-chan Command, events chan<- Event) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -81,15 +92,7 @@ func clientOptions(ctx context.Context, cfg entity.MQTT, topics Topics, sourceEv
 	offline := AvailabilityMessage(topics, AvailabilityOffline)
 	options.SetWill(offline.Topic, string(offline.Payload), offline.QoS, offline.Retain)
 	options.SetOnConnectHandler(func(client paho.Client) {
-		if err := subscribeLightCommands(ctx, client, topics, events); err != nil {
-			slog.Error("mqtt subscribe failed", "topic", LightCommandSubscriptionTopic(topics), "error", err)
-		}
-		if err := subscribeSourceEvents(ctx, client, sourceEventTopics, events); err != nil {
-			slog.Error("mqtt source event subscribe failed", "error", err)
-		}
-		if err := subscribeCoverCommands(ctx, client, topics, events); err != nil {
-			slog.Error("mqtt cover subscribe failed", "error", err)
-		}
+		subscribeRuntimeTopics(ctx, client, topics, sourceEventTopics, events)
 		slog.Info("mqtt connected", "broker", brokerURL(cfg), "client_id", cfg.ClientID)
 		publishEvent(ctx, events, ConnectedEvent())
 	})
@@ -104,6 +107,18 @@ func clientOptions(ctx context.Context, cfg entity.MQTT, topics Topics, sourceEv
 	options.SetOrderMatters(true)
 
 	return options
+}
+
+func subscribeRuntimeTopics(ctx context.Context, client client, topics Topics, sourceEventTopics []string, events chan<- Event) {
+	if err := subscribeLightCommands(ctx, client, topics, events); err != nil {
+		slog.Error("mqtt subscribe failed", "topic", LightCommandSubscriptionTopic(topics), "error", err)
+	}
+	if err := subscribeSourceEvents(ctx, client, sourceEventTopics, events); err != nil {
+		slog.Error("mqtt source event subscribe failed", "error", err)
+	}
+	if err := subscribeCoverCommands(ctx, client, topics, events); err != nil {
+		slog.Error("mqtt cover subscribe failed", "error", err)
+	}
 }
 
 func subscribeLightCommands(ctx context.Context, client client, topics Topics, events chan<- Event) error {

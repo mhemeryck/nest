@@ -40,7 +40,21 @@ type modbusCoilKey struct {
 }
 
 func Build(root *entity.Root) *Registry {
-	index := &Registry{
+	index := newRegistry(root)
+	indexDigitalInputs(index, root.DigitalInputs)
+	indexPushButtons(index, root.PushButtons)
+	indexLights(index, root.Lights)
+	indexCovers(index, root.Covers)
+	indexRelays(index, root.Relays)
+	indexBindings(index.bindingsBySourceID, root.Bindings)
+	indexBindings(index.remoteSourceBindingsBySourceID, root.RemoteSourceBindings)
+	indexBindings(index.remoteTargetBindingsBySourceID, root.RemoteTargetBindings)
+	indexModbusRoutes(index, root.Modbus)
+	return index
+}
+
+func newRegistry(root *entity.Root) *Registry {
+	return &Registry{
 		sysfsRoot:                         root.SysfsRoot,
 		sysfsPollIntervals:                root.SysfsPollIntervals,
 		mqtt:                              root.MQTT,
@@ -67,58 +81,62 @@ func Build(root *entity.Root) *Registry {
 		relaysByID:                        make(map[entity.RelayID]entity.Relay, len(root.Relays)),
 		relaysByDevice:                    make(map[entity.SysfsDeviceID]entity.Relay, len(root.Relays)),
 	}
+}
 
-	for _, input := range root.DigitalInputs {
+func indexDigitalInputs(index *Registry, inputs []entity.DigitalInput) {
+	for _, input := range inputs {
 		index.digitalInputsByDevice[input.SysfsDevice] = input
 	}
+}
 
-	for _, button := range root.PushButtons {
+func indexPushButtons(index *Registry, buttons []entity.PushButton) {
+	for _, button := range buttons {
 		index.pushButtonsByID[button.ID] = button
 		index.pushButtonsByInputID[button.Input] = append(index.pushButtonsByInputID[button.Input], button)
 	}
+}
 
-	for _, light := range root.Lights {
+func indexLights(index *Registry, lights []entity.Light) {
+	for _, light := range lights {
 		index.lightsByID[light.ID] = light
 		index.lightsByRelayID[light.Relay] = append(index.lightsByRelayID[light.Relay], light)
 	}
+}
 
-	for _, cover := range root.Covers {
+func indexCovers(index *Registry, covers []entity.Cover) {
+	for _, cover := range covers {
 		index.coversByID[cover.ID] = cover
 		index.coversByRelayID[cover.OpenRelay] = cover
 		index.coversByRelayID[cover.CloseRelay] = cover
 	}
+}
 
-	for _, relay := range root.Relays {
+func indexRelays(index *Registry, relays []entity.Relay) {
+	for _, relay := range relays {
 		index.relaysByID[relay.ID] = relay
 		index.relaysByDevice[relay.SysfsDevice] = relay
 	}
+}
 
-	for _, binding := range root.Bindings {
-		index.bindingsBySourceID[binding.Source] = append(index.bindingsBySourceID[binding.Source], binding)
+func indexBindings(bySource map[entity.ID][]entity.Binding, bindings []entity.Binding) {
+	for _, binding := range bindings {
+		bySource[binding.Source] = append(bySource[binding.Source], binding)
 	}
+}
 
-	for _, binding := range root.RemoteSourceBindings {
-		index.remoteSourceBindingsBySourceID[binding.Source] = append(index.remoteSourceBindingsBySourceID[binding.Source], binding)
-	}
-
-	for _, binding := range root.RemoteTargetBindings {
-		index.remoteTargetBindingsBySourceID[binding.Source] = append(index.remoteTargetBindingsBySourceID[binding.Source], binding)
-	}
-
-	for _, signal := range root.Modbus.EventSignals {
+func indexModbusRoutes(index *Registry, modbus entity.Modbus) {
+	for _, signal := range modbus.EventSignals {
 		index.modbusEventSignalsByCoil[signal.Coil] = signal
 	}
-	for _, write := range root.Modbus.EventSignalWrites {
+	for _, write := range modbus.EventSignalWrites {
 		index.modbusEventSignalWritesBySourceID[write.Source] = append(index.modbusEventSignalWritesBySourceID[write.Source], write)
 	}
-	for _, point := range root.Modbus.StatePoints {
+	for _, point := range modbus.StatePoints {
 		index.modbusStatePointsByEntityID[point.Entity] = append(index.modbusStatePointsByEntityID[point.Entity], point)
 	}
-	for _, poll := range root.Modbus.StatePolls {
+	for _, poll := range modbus.StatePolls {
 		index.modbusStatePollsByCoil[modbusCoilKey{unitID: poll.UnitID, coil: poll.Coil}] = poll
 	}
-
-	return index
 }
 
 func SysfsRoot(reg *Registry) string {

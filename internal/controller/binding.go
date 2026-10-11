@@ -22,36 +22,43 @@ func bindingEventsFromPushButton(index *registry.Registry, kind event.Kind, push
 	bindings = append(bindings, remoteTargetBindingsBySourceAndTransport(index, entity.ID(pushButton.ButtonID), pushButton.Delivery)...)
 	derivedEvents := make([]event.Event, 0, len(bindings))
 	for _, binding := range bindings {
-		if cover, ok := registry.CoverByID(index, entity.CoverID(binding.Target)); ok {
-			action := entity.CoverAction(binding.Action)
-			if kind == event.PushButtonReleasedKind {
-				action = entity.CoverActionStop
-			}
-			derivedEvents = append(derivedEvents, event.Event{Kind: event.CoverKind, Cover: &event.Cover{
-				CoverID: cover.ID, Name: cover.Name, Action: action,
-			}})
-			continue
+		if derived, handled := eventFromButtonBinding(index, kind, binding); handled {
+			derivedEvents = append(derivedEvents, derived)
 		}
-		if kind == event.PushButtonReleasedKind {
-			continue
-		}
-		name := ""
-		lightID := entity.LightID(binding.Target)
-		if light, ok := registry.LightByID(index, lightID); ok {
-			name = light.Name
-		}
-
-		derivedEvents = append(derivedEvents, event.Event{
-			Kind: event.LightKind,
-			Light: &event.Light{
-				LightID: lightID,
-				Name:    name,
-				Action:  entity.LightAction(binding.Action),
-			},
-		})
 	}
 
 	return derivedEvents
+}
+
+func eventFromButtonBinding(index *registry.Registry, kind event.Kind, binding entity.Binding) (event.Event, bool) {
+	if cover, ok := registry.CoverByID(index, entity.CoverID(binding.Target)); ok {
+		return coverEventFromButtonBinding(cover, kind, binding), true
+	}
+	if kind == event.PushButtonReleasedKind {
+		return event.Event{}, false
+	}
+	return lightEventFromButtonBinding(index, binding), true
+}
+
+func coverEventFromButtonBinding(cover entity.Cover, kind event.Kind, binding entity.Binding) event.Event {
+	action := entity.CoverAction(binding.Action)
+	if kind == event.PushButtonReleasedKind {
+		action = entity.CoverActionStop
+	}
+	return event.Event{Kind: event.CoverKind, Cover: &event.Cover{
+		CoverID: cover.ID, Name: cover.Name, Action: action,
+	}}
+}
+
+func lightEventFromButtonBinding(index *registry.Registry, binding entity.Binding) event.Event {
+	name := ""
+	lightID := entity.LightID(binding.Target)
+	if light, ok := registry.LightByID(index, lightID); ok {
+		name = light.Name
+	}
+	return event.Event{Kind: event.LightKind, Light: &event.Light{
+		LightID: lightID, Name: name, Action: entity.LightAction(binding.Action),
+	}}
 }
 
 func remoteTargetBindingsBySourceAndTransport(index *registry.Registry, sourceID entity.ID, delivery entity.ExecutionTransport) []entity.Binding {

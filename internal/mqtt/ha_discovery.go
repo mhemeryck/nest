@@ -58,21 +58,33 @@ func BuildHomeAssistantDeviceDiscovery(lights []entity.Light, topics Topics, cov
 		AvailabilityTopic: AvailabilityTopic(topics),
 	}
 
-	for _, light := range lights {
-		doc.Components[lightTopicSegment(light.ID)] = homeAssistantLightComponent(light, topics)
-	}
+	addHomeAssistantLights(&doc, lights, topics)
 	if len(covers) > 0 {
-		doc.AvailabilityTopic = ""
-		for key, component := range doc.Components {
-			component.AvailabilityTopic = AvailabilityTopic(topics)
-			doc.Components[key] = component
-		}
-		for _, cover := range covers {
-			doc.Components["cover."+coverTopicSegment(cover.ID)] = homeAssistantCoverComponent(cover, topics)
-		}
+		useComponentAvailability(&doc, topics)
+		addHomeAssistantCovers(&doc, covers, topics)
 	}
 
 	return doc
+}
+
+func addHomeAssistantLights(doc *HomeAssistantDeviceDiscovery, lights []entity.Light, topics Topics) {
+	for _, light := range lights {
+		doc.Components[lightTopicSegment(light.ID)] = homeAssistantLightComponent(light, topics)
+	}
+}
+
+func useComponentAvailability(doc *HomeAssistantDeviceDiscovery, topics Topics) {
+	doc.AvailabilityTopic = ""
+	for key, component := range doc.Components {
+		component.AvailabilityTopic = AvailabilityTopic(topics)
+		doc.Components[key] = component
+	}
+}
+
+func addHomeAssistantCovers(doc *HomeAssistantDeviceDiscovery, covers []entity.Cover, topics Topics) {
+	for _, cover := range covers {
+		doc.Components["cover."+coverTopicSegment(cover.ID)] = homeAssistantCoverComponent(cover, topics)
+	}
 }
 
 func HomeAssistantDeviceDiscoveryPayload(lights []entity.Light, topics Topics, covers []entity.Cover) ([]byte, error) {

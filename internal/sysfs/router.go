@@ -69,19 +69,25 @@ func routeCommands(ctx context.Context, commands <-chan Command, routes map[stri
 				return
 			}
 
-			commandCh, found := routes[cmd.DeviceID]
-			if !found {
-				publishCompletion(ctx, states, cmd, time.Now(), fmt.Errorf("unknown device %q", cmd.DeviceID))
-				continue
-			}
-
-			select {
-			case <-ctx.Done():
+			if !routeCommand(ctx, cmd, routes, states) {
 				return
-			case commandCh <- cmd:
-			default:
-				publishCompletion(ctx, states, cmd, time.Now(), fmt.Errorf("sysfs worker queue exhausted for device %q", cmd.DeviceID))
 			}
 		}
 	}
+}
+
+func routeCommand(ctx context.Context, cmd Command, routes map[string]chan Command, states chan<- StateChange) bool {
+	commandCh, found := routes[cmd.DeviceID]
+	if !found {
+		publishCompletion(ctx, states, cmd, time.Now(), fmt.Errorf("unknown device %q", cmd.DeviceID))
+		return true
+	}
+	select {
+	case <-ctx.Done():
+		return false
+	case commandCh <- cmd:
+	default:
+		publishCompletion(ctx, states, cmd, time.Now(), fmt.Errorf("sysfs worker queue exhausted for device %q", cmd.DeviceID))
+	}
+	return true
 }

@@ -104,11 +104,15 @@ func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
 		return nil, err
 	}
 
-	mqtt := global.Actors.MQTT.Broker
-	mqtt.Enabled = unit.Actors.MQTT.Enabled
-	mqtt.UnitID = unitID
-	mqtt.ClientID = projectedMQTTClientID(mqtt.ClientID, unitID)
+	local, err := projectUnitConfig(global, unitID, unit)
+	if err != nil {
+		return nil, err
+	}
+	projectUnitBindings(local, global.Bindings, unitID)
+	return local, nil
+}
 
+func projectUnitConfig(global *GlobalRoot, unitID string, unit UnitConfig) (*Root, error) {
 	localButtons, buttonErr := projectPushButtons(unitID, unit.Entities.Buttons)
 	localLights, lightErr := projectLights(unitID, unit.Entities.Lights)
 	localCovers, coverErr := projectCovers(unitID, unit.Entities.Covers)
@@ -116,12 +120,12 @@ func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
 		return nil, err
 	}
 
-	local := &Root{
+	return &Root{
 		Sysfs: SysfsConfig{
 			Root:          unit.Actors.Sysfs.Root,
 			PollIntervals: unit.Actors.Sysfs.PollIntervals,
 		},
-		MQTT:          mqtt,
+		MQTT:          projectUnitMQTT(global.Actors.MQTT.Broker, unit.Actors.MQTT, unitID),
 		Modbus:        projectModbusConfig(global, unit.Actors.Modbus),
 		DigitalInputs: append([]DigitalInputConfig(nil), unit.Actors.Sysfs.DigitalInputs...),
 		PushButtons:   localButtons,
@@ -130,9 +134,18 @@ func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
 		CoverControl:  global.CoverControl,
 		Persistence:   unit.Actors.Persistence,
 		Relays:        append([]RelayConfig(nil), unit.Actors.Sysfs.Relays...),
-	}
+	}, nil
+}
 
-	for _, binding := range global.Bindings {
+func projectUnitMQTT(broker MQTTConfig, unit UnitMQTTConfig, unitID string) MQTTConfig {
+	broker.Enabled = unit.Enabled
+	broker.UnitID = unitID
+	broker.ClientID = projectedMQTTClientID(broker.ClientID, unitID)
+	return broker
+}
+
+func projectUnitBindings(local *Root, bindings []GlobalBindingConfig, unitID string) {
+	for _, binding := range bindings {
 		sourceLocal := entity.IsIDForUnit(binding.Source, unitID, entity.TypeButton)
 		targetLocal := entity.IsIDForUnit(binding.Target, unitID, entity.TypeLight) || entity.IsIDForUnit(binding.Target, unitID, entity.TypeCover)
 
@@ -145,8 +158,6 @@ func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
 			local.RemoteTargetBindings = append(local.RemoteTargetBindings, BindingConfig(binding))
 		}
 	}
-
-	return local, nil
 }
 
 func projectModbusConfig(global *GlobalRoot, modbus ModbusConfig) ModbusConfig {

@@ -139,15 +139,8 @@ func semanticCoverEventFromMQTTMessage(index *registry.Registry, topics mqtt.Top
 		slog.Warn("mqtt command references unknown cover", "cover_id", id)
 		return event.Event{}, false
 	}
-	var action entity.CoverAction
-	switch strings.ToUpper(string(bytes.TrimSpace(message.Payload))) {
-	case "OPEN":
-		action = entity.CoverActionOpen
-	case "CLOSE":
-		action = entity.CoverActionClose
-	case "STOP":
-		action = entity.CoverActionStop
-	default:
+	action, ok := coverActionFromMQTTPayload(message.Payload)
+	if !ok {
 		slog.Warn("invalid mqtt cover command", "cover_id", id)
 		return event.Event{}, false
 	}
@@ -155,6 +148,19 @@ func semanticCoverEventFromMQTTMessage(index *registry.Registry, topics mqtt.Top
 		return event.Event{}, false
 	}
 	return event.Event{Kind: event.CoverKind, Cover: &event.Cover{CoverID: cover.ID, Name: cover.Name, Action: action}}, true
+}
+
+func coverActionFromMQTTPayload(payload []byte) (entity.CoverAction, bool) {
+	switch strings.ToUpper(string(bytes.TrimSpace(payload))) {
+	case "OPEN":
+		return entity.CoverActionOpen, true
+	case "CLOSE":
+		return entity.CoverActionClose, true
+	case "STOP":
+		return entity.CoverActionStop, true
+	default:
+		return "", false
+	}
 }
 
 func semanticLightEventFromMQTTMessage(index *registry.Registry, mqttTopics mqtt.Topics, message mqtt.ReceivedMessage) (event.Event, bool) {

@@ -22,21 +22,36 @@ func NewHandoff(capacity int) *Handoff {
 func QueueCommand(handoff *Handoff, command Command) *Event {
 	handoff.mu.Lock()
 	defer handoff.mu.Unlock()
+	var failure *Event
 	if command.Kind == SetCoilStateCommandKind {
-		if _, exists := handoff.states[command.Coil]; !exists && len(handoff.states) >= handoff.capacity {
-			return rejectedCommand(command, "state handoff capacity exhausted")
-		}
-		handoff.states[command.Coil] = command
+		failure = queueLatestState(handoff, command)
 	} else {
-		if len(handoff.events) >= handoff.capacity {
-			return rejectedCommand(command, "event handoff capacity exhausted")
-		}
-		handoff.events = append(handoff.events, command)
+		failure = queueEventCommand(handoff, command)
+	}
+	if failure != nil {
+		return failure
 	}
 	select {
 	case handoff.wake <- struct{}{}:
 	default:
 	}
+	return nil
+}
+
+// Caller holds the handoff lock across admission and wake-up
+func queueLatestState(handoff *Handoff, command Command) *Event {
+	if _, exists := handoff.states[command.Coil]; !exists && len(handoff.states) >= handoff.capacity {
+		return rejectedCommand(command, "state handoff capacity exhausted")
+	}
+	handoff.states[command.Coil] = command
+	return nil
+}
+
+func queueEventCommand(handoff *Handoff, command Command) *Event {
+	if len(handoff.events) >= handoff.capacity {
+		return rejectedCommand(command, "event handoff capacity exhausted")
+	}
+	handoff.events = append(handoff.events, command)
 	return nil
 }
 
@@ -68,6 +83,14 @@ func RunHandoff(ctx context.Context, handoff *Handoff, commands chan<- Command, 
 func FlushAvailable(handoff *Handoff, commands chan<- Command) bool {
 	handoff.mu.Lock()
 	defer handoff.mu.Unlock()
+	if flushEventCommands(handoff, commands) {
+		return true
+	}
+	return flushPendingStates(handoff, commands)
+}
+
+// Caller holds the handoff lock; FIFO events precede coalesced states
+func flushEventCommands(handoff *Handoff, commands chan<- Command) bool {
 	for len(handoff.events) > 0 {
 		select {
 		case commands <- handoff.events[0]:
@@ -77,6 +100,10 @@ func FlushAvailable(handoff *Handoff, commands chan<- Command) bool {
 			return true
 		}
 	}
+	return false
+}
+
+func flushPendingStates(handoff *Handoff, commands chan<- Command) bool {
 	for coil, command := range handoff.states {
 		select {
 		case commands <- command:
