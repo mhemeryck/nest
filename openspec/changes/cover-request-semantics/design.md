@@ -322,6 +322,49 @@ Keep ordering, decision rules, and failure handling visible in callers.
 | `BuildHomeAssistantDeviceDiscovery` | Add lights, select component availability, add covers                                  |
 | `sysfsWorkerConfigs`                | Partition cover-owned devices, configure ordinary and dedicated workers                |
 
+### FSM branches
+
+Branch on one discrete decision dimension at a time.
+Use guards for lookup, correlation, pending results, movement availability, and due deadlines.
+Keep ordered deadline checks explicit; do not replace them with a predicate switch.
+
+Request dispatch first selects stop, direction, or unsupported action.
+`handleCoverStopRequest` selects eligible phases without applying movement restrictions.
+`handleCoverDirectionRequest` checks movement availability, then selects phase and same or opposite direction.
+
+| Current phase                      | Input or condition                           | Outcome                                                           |
+| ---------------------------------- | -------------------------------------------- | ----------------------------------------------------------------- |
+| Initializing                       | Both startup OFF results succeed             | Idle                                                              |
+| Idle                               | Permitted direction request                  | Preparing; command both outputs OFF                               |
+| Preparing                          | Both preparation OFF results succeed         | Activating; command selected output ON                            |
+| Activating                         | Current ON result succeeds                   | Moving; start travel and reporting deadlines                      |
+| Preparing, activating, moving      | Same-direction request                       | Preserve current operation and deadlines                          |
+| Preparing, activating, moving      | Stop or permitted opposite-direction request | Stopping; command both outputs OFF                                |
+| Moving                             | Travel deadline expires                      | Stopping; record completed travel and command both outputs OFF    |
+| Stopping                           | Both current OFF results succeed             | Idle; resolve final state from stop reason                        |
+| Any phase with a current operation | Output failure or timeout                    | Recovering; apply operation- and phase-specific OFF handling      |
+| Recovering                         | Both current OFF results succeed             | Idle; clear fault without resuming movement                       |
+| Initializing, stopping, recovering | Direction request                            | Discard request                                                   |
+| Any phase                          | Shutdown                                     | Reject movement; command both outputs OFF in stopping or recovery |
+
+Direction requests remain rejected during shutdown or an output fault.
+Stop requests remain independent of those movement restrictions.
+Cancelled ON results supply timing or failure evidence only during stopping.
+Output handlers select success or failure, then operation action and relevant phase.
+Deadline handlers prioritize output timeout, then select moving or non-moving work.
+Shutdown selects the stop reason by phase and switch-off handling by fault status.
+
+Reviewed production functions in this pass:
+
+- Requests: `handleCoverRequest`, `handleCoverStopRequest`, `handleCoverDirectionRequest`, `stopCover`
+- Results: `handleCoverOutputResult`, `handleCancelledCoverActivation`, `handleCoverOutputFailure`, `recoverFailedCoverSwitchOff`
+- Completion: `completeCoverActivation`, `handleCoverOffCompletion`, `resolveStoppedCoverState`, `resolveCompletedCoverEndpoint`
+- Recovery: `recordCoverOutputFault`
+- Input failure: `stopLocalCoversForFailedButton`
+- Direction and observation: `activeCoverRelay`, `estimateCoverPosition`, `coverObservation`
+- Deadlines: `processCoverRuntimeDeadlines`, `handleCoverOutputTimeout`, `processMovingCoverDeadlines`
+- Shutdown: `shutDownCover`, `resolveCoverShutdownReason`
+
 ### Function coverage
 
 Scope: 132 new or modified production functions in `origin/master...c68a1fa`.
@@ -417,6 +460,7 @@ Automated scenario coverage:
 Review follow-up checks pass: formatting, lint, vet, race tests, builds, and strict OpenSpec validation.
 Structural cleanup checks pass: package tests, formatting, lint, vet, race tests, builds, strict OpenSpec validation, and cover fixture validation.
 The structural review retains event ordering, output correlation, actor lifetimes, and handoff lock boundaries.
+FSM branch checks pass: controller and runtime scenarios, formatting, lint, vet, race tests, builds, and strict OpenSpec validation.
 Shutdown tests verify failed OFF writes remain errors after actor termination.
 Command ownership tests verify index cleanup across repeated timeouts and completed runs.
 

@@ -39,6 +39,9 @@
 - Reference: `internal/controller/dispatch.go` → `dispatchEvent`
 - Helpers own cohesive behavior and related state updates
 - Callers retain visible ordering, branching, and failure rules
+- Discrete behavioral alternatives: `switch` / `case`, one decision dimension at a time
+- Request kinds before phase-specific transitions; guard clauses for prerequisites
+- Avoid predicate switches that only disguise ordered `if` chains
 - Structural reviews: account for every new or modified production function
 - Compact responsibility list above functions when structure alone lacks a clear high-level map
 - Fragment-based comments and lists

@@ -18,10 +18,28 @@ func processCoverDeadlines(controller *coverController, now time.Time) []event.E
 func processCoverRuntimeDeadlines(controller *coverController, runtime *coverRuntime, now time.Time) []event.Event {
 	// Output timeout precedes travel completion; either suppresses other due work
 	if coverOutputOperationExpired(runtime, now) {
-		immediateOff := runtime.phase == coverActivating || runtime.phase == coverPreparing
-		return faultCover(controller, runtime, fmt.Errorf("cover output operation timed out"), now, immediateOff)
+		return handleCoverOutputTimeout(controller, runtime, now)
 	}
-	if runtime.phase == coverMoving && !now.Before(runtime.travelDeadline) {
+	switch runtime.phase {
+	case coverMoving:
+		return processMovingCoverDeadlines(controller, runtime, now)
+	default:
+		return retryCoverSwitchOff(controller, runtime, now)
+	}
+}
+
+func handleCoverOutputTimeout(controller *coverController, runtime *coverRuntime, now time.Time) []event.Event {
+	failure := fmt.Errorf("cover output operation timed out")
+	switch runtime.phase {
+	case coverPreparing, coverActivating:
+		return faultCover(controller, runtime, failure, now, true)
+	default:
+		return faultCover(controller, runtime, failure, now, false)
+	}
+}
+
+func processMovingCoverDeadlines(controller *coverController, runtime *coverRuntime, now time.Time) []event.Event {
+	if !now.Before(runtime.travelDeadline) {
 		return stopCompletedCoverTravel(controller, runtime, now)
 	}
 	events := retryCoverSwitchOff(controller, runtime, now)

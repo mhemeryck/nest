@@ -78,3 +78,9 @@
 - [x] 10.2 Extract cover transitions, deadline handling, and runtime shutdown responsibilities; verify existing controller and runtime scenarios
 - [x] 10.3 Extract configuration, registry, persistence, and integration responsibilities; verify existing package tests
 - [x] 10.4 Review ordering and ownership preservation; record coverage and run nest-format, nest-check, strict OpenSpec validation, and fixture validation
+
+## 11. FSM branch structure
+
+- [x] 11.1 Separate stop and direction request handlers; use action and phase switches while preserving movement restrictions
+- [x] 11.2 Express output outcomes, timeout handling, and shutdown transitions through discrete branches; preserve correlation and deadline priority
+- [x] 11.3 Record branching guidance and transition map; verify controller scenarios, nest-check, and strict OpenSpec validation
