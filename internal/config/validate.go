@@ -17,32 +17,42 @@ var (
 )
 
 func Validate(f *Root) error {
-	var errs error
-
 	knownInputIDs, inputErr := validateDigitalInputs(f.DigitalInputs)
 	knownButtonIDs, buttonErr := validatePushButtons(f.PushButtons, knownInputIDs)
 	knownRelayIDs, relayErr := validateRelays(f.Relays)
 	knownLightIDs, lightErr := validateLights(f.Lights, knownRelayIDs)
+	knownCoverIDs, coverErr := validateCovers(f.Covers, f.Lights, knownRelayIDs)
 
-	if len(f.DigitalInputs) == 0 && len(f.Relays) == 0 {
-		errs = errors.Join(errs, fmt.Errorf("at least one digital_input or relay is required"))
-	}
-
-	errs = errors.Join(
-		errs,
+	return errors.Join(
+		validateConfiguredHardware(f),
+		validatePersistence(f.Persistence, len(f.Covers) > 0),
 		validateSysfs(f.Sysfs),
 		validateMQTT(f.MQTT),
 		validateModbus(f.Modbus),
+		validateCoverControl(f.CoverControl, len(f.Covers) > 0),
 		inputErr,
 		buttonErr,
 		relayErr,
 		lightErr,
-		validateBindings(f.Bindings, knownButtonIDs, knownLightIDs),
+		coverErr,
+		validateBindings(f.Bindings, knownButtonIDs, knownLightIDs, knownCoverIDs),
 		validateRemoteBindings("remote_source_bindings", f.RemoteSourceBindings),
 		validateRemoteBindings("remote_target_bindings", f.RemoteTargetBindings),
 	)
+}
 
-	return errs
+func validateConfiguredHardware(root *Root) error {
+	if len(root.DigitalInputs) == 0 && len(root.Relays) == 0 {
+		return fmt.Errorf("at least one digital_input or relay is required")
+	}
+	return nil
+}
+
+func validatePersistence(settings PersistenceConfig, required bool) error {
+	if required {
+		return validateRequiredField("persistence.path", settings.Path)
+	}
+	return validateOptionalField("persistence.path", settings.Path)
 }
 
 func validateModbus(modbus ModbusConfig) error {
@@ -59,6 +69,22 @@ func validateModbus(modbus ModbusConfig) error {
 	default:
 		return fmt.Errorf("modbus.mode: unsupported mode %q", modbus.Mode)
 	}
+}
+
+func validateCoverControl(settings CoverControlConfig, required bool) error {
+	var errs error
+	for field, value := range map[string]time.Duration{
+		"full_travel_duration": settings.FullTravelDuration,
+		"operation_timeout":    settings.OperationTimeout,
+		"off_retry_interval":   settings.OffRetryInterval,
+		"shutdown_period":      settings.ShutdownPeriod,
+		"reporting_interval":   settings.ReportingInterval,
+	} {
+		if value < 0 || (required && value == 0) {
+			errs = errors.Join(errs, fmt.Errorf("cover_control.%s: must be positive when covers are configured and must not be negative", field))
+		}
+	}
+	return errs
 }
 
 func validateModbusMaster(modbus ModbusConfig) error {
@@ -321,49 +347,44 @@ func validateModbusBindingAction(field string, action string) error {
 
 func validateGlobalBindings(global *GlobalRoot) error {
 	var errs error
-	seen := make(map[string]int, len(global.Bindings))
+	seen := make(map[string]struct{}, len(global.Bindings))
 	for i, binding := range global.Bindings {
 		prefix := fmt.Sprintf("bindings[%d]", i)
 		sourceErr := validateGlobalBindingEndpoint(global, prefix+".source", binding.Source, entity.TypeButton)
-		targetErr := validateGlobalBindingEndpoint(global, prefix+".target", binding.Target, entity.TypeLight)
-		actionErr := validateModbusBindingAction(prefix+".action", binding.Action)
+		targetType := bindingTargetType(binding.Target)
+		targetErr := validateGlobalBindingEndpoint(global, prefix+".target", binding.Target, targetType)
+		actionErr := validateBindingAction(prefix+".action", binding.Action, targetType)
 		transportErr := error(nil)
 
 		if sourceErr == nil && targetErr == nil && actionErr == nil {
-			sourceUnit := strings.Split(binding.Source, ".")[0]
-			targetUnit := strings.Split(binding.Target, ".")[0]
-			if sourceUnit == targetUnit {
-				if binding.ExecutionTransport != "" {
-					transportErr = fmt.Errorf("%s.execution_transport: only valid for cross-unit bindings", prefix)
-				}
-			} else {
-				transportErr = validateExecutionTransport(prefix+".execution_transport", binding.ExecutionTransport)
-				if binding.ExecutionTransport == string(entity.ExecutionTransportModbus) {
-					transportErr = errors.Join(transportErr, validateModbusBindingRoute(global, prefix, binding, sourceUnit, targetUnit))
-				}
-			}
+			transportErr = validateGlobalBindingTransport(global, prefix, binding, targetType)
 
-			key := binding.Source + "\x00" + binding.Target + "\x00" + binding.Action
-			if _, ok := seen[key]; ok {
-				errs = errors.Join(
-					errs,
-					fmt.Errorf(
-						"%s: duplicate binding source %q target %q action %q",
-						prefix,
-						binding.Source,
-						binding.Target,
-						binding.Action,
-					),
-				)
-			} else {
-				seen[key] = i
-			}
+			errs = errors.Join(errs, validateBindingUniqueness(prefix, BindingConfig(binding), seen, "binding"))
 		}
 
 		errs = errors.Join(errs, sourceErr, targetErr, actionErr, transportErr)
 	}
 
 	return errs
+}
+
+func validateGlobalBindingTransport(global *GlobalRoot, prefix string, binding GlobalBindingConfig, targetType entity.Type) error {
+	sourceUnit := strings.Split(binding.Source, ".")[0]
+	targetUnit := strings.Split(binding.Target, ".")[0]
+	if sourceUnit == targetUnit {
+		if binding.ExecutionTransport != "" {
+			return fmt.Errorf("%s.execution_transport: only valid for cross-unit bindings", prefix)
+		}
+		return nil
+	}
+	err := validateExecutionTransport(prefix+".execution_transport", binding.ExecutionTransport)
+	if binding.ExecutionTransport == string(entity.ExecutionTransportModbus) {
+		if targetType == entity.TypeCover {
+			return fmt.Errorf("%s.execution_transport: Modbus cover bindings are not supported", prefix)
+		}
+		return errors.Join(err, validateModbusBindingRoute(global, prefix, binding, sourceUnit, targetUnit))
+	}
+	return err
 }
 
 func validateModbusBindingRoute(global *GlobalRoot, prefix string, binding GlobalBindingConfig, sourceUnit, targetUnit string) error {
@@ -402,22 +423,35 @@ func validateGlobalBindingEndpoint(global *GlobalRoot, field string, value strin
 	}
 
 	localID := parts[2]
+	if globalUnitEntityExists(unit, localID, entityType) {
+		return nil
+	}
+	return fmt.Errorf("%s: unknown %s %q", field, entityType, value)
+}
+
+func globalUnitEntityExists(unit UnitConfig, localID string, entityType entity.Type) bool {
 	switch entityType {
 	case entity.TypeButton:
 		for _, button := range unit.Entities.Buttons {
 			if button.ID == localID {
-				return nil
+				return true
 			}
 		}
 	case entity.TypeLight:
 		for _, light := range unit.Entities.Lights {
 			if light.ID == localID {
-				return nil
+				return true
+			}
+		}
+	case entity.TypeCover:
+		for _, cover := range unit.Entities.Covers {
+			if cover.ID == localID {
+				return true
 			}
 		}
 	}
 
-	return fmt.Errorf("%s: unknown %s %q", field, entityType, value)
+	return false
 }
 
 func validateGlobalModbus(global *GlobalRoot) error {
@@ -706,47 +740,18 @@ func validateLights(lights []LightConfig, knownRelayIDs map[string]struct{}) (ma
 	return knownLightIDs, err
 }
 
-func validateBindings(bindings []BindingConfig, knownButtonIDs map[string]struct{}, knownLightIDs map[string]struct{}) error {
+func validateBindings(bindings []BindingConfig, knownButtonIDs map[string]struct{}, knownLightIDs map[string]struct{}, knownCoverIDs map[string]struct{}) error {
 	var errs error
-	seen := make(map[string]int, len(bindings))
+	seen := make(map[string]struct{}, len(bindings))
 
 	for i, binding := range bindings {
 		prefix := fmt.Sprintf("bindings[%d]", i)
-		var sourceErr error
-		if err := validateRequiredField(prefix+".source", binding.Source); err != nil {
-			sourceErr = err
-		} else if _, ok := knownButtonIDs[binding.Source]; !ok {
-			sourceErr = fmt.Errorf("%s.source: unknown push button %q", prefix, binding.Source)
-		}
-
-		var targetErr error
-		if err := validateRequiredField(prefix+".target", binding.Target); err != nil {
-			targetErr = err
-		} else if _, ok := knownLightIDs[binding.Target]; !ok {
-			targetErr = fmt.Errorf("%s.target: unknown light %q", prefix, binding.Target)
-		}
-
-		actionErr := validateRequiredField(prefix+".action", binding.Action)
-		if actionErr == nil && binding.Action != BindingActionToggle {
-			actionErr = fmt.Errorf("%s.action: unsupported action %q", prefix, binding.Action)
-		}
+		sourceErr := validateLocalBindingSource(prefix+".source", binding.Source, knownButtonIDs)
+		targetType, targetErr := validateLocalBindingTarget(prefix+".target", binding.Target, knownLightIDs, knownCoverIDs)
+		actionErr := validateBindingAction(prefix+".action", binding.Action, targetType)
 
 		if sourceErr == nil && targetErr == nil && actionErr == nil {
-			key := binding.Source + "\x00" + binding.Target + "\x00" + binding.Action
-			if _, ok := seen[key]; ok {
-				errs = errors.Join(
-					errs,
-					fmt.Errorf(
-						"%s: duplicate binding source %q target %q action %q",
-						prefix,
-						binding.Source,
-						binding.Target,
-						binding.Action,
-					),
-				)
-			} else {
-				seen[key] = i
-			}
+			errs = errors.Join(errs, validateBindingUniqueness(prefix, binding, seen, "binding"))
 		}
 
 		errs = errors.Join(errs, sourceErr, targetErr, actionErr)
@@ -755,53 +760,71 @@ func validateBindings(bindings []BindingConfig, knownButtonIDs map[string]struct
 	return errs
 }
 
+func validateLocalBindingSource(field, source string, knownButtonIDs map[string]struct{}) error {
+	if err := validateRequiredField(field, source); err != nil {
+		return err
+	}
+	if _, ok := knownButtonIDs[source]; !ok {
+		return fmt.Errorf("%s: unknown push button %q", field, source)
+	}
+	return nil
+}
+
+func validateLocalBindingTarget(field, target string, knownLightIDs, knownCoverIDs map[string]struct{}) (entity.Type, error) {
+	targetType := entity.TypeLight
+	if _, ok := knownCoverIDs[target]; ok {
+		targetType = entity.TypeCover
+	}
+	if err := validateRequiredField(field, target); err != nil {
+		return targetType, err
+	}
+	if _, ok := knownLightIDs[target]; !ok && targetType != entity.TypeCover {
+		return targetType, fmt.Errorf("%s: unknown light %q", field, target)
+	}
+	return targetType, nil
+}
+
+func validateBindingUniqueness(prefix string, binding BindingConfig, seen map[string]struct{}, label string) error {
+	key := binding.Source + "\x00" + binding.Target + "\x00" + binding.Action
+	if _, exists := seen[key]; exists {
+		return fmt.Errorf("%s: duplicate %s source %q target %q action %q", prefix, label, binding.Source, binding.Target, binding.Action)
+	}
+	seen[key] = struct{}{}
+	return nil
+}
+
 func validateRemoteBindings(field string, bindings []BindingConfig) error {
 	var errs error
-	seen := make(map[string]int, len(bindings))
+	seen := make(map[string]struct{}, len(bindings))
 
 	for i, binding := range bindings {
 		prefix := fmt.Sprintf("%s[%d]", field, i)
-		var sourceErr error
-		if err := validateRequiredField(prefix+".source", binding.Source); err != nil {
-			sourceErr = err
-		} else if !entity.IsID(binding.Source, entity.TypeButton) {
-			sourceErr = fmt.Errorf("%s.source: must be a button semantic id %q", prefix, binding.Source)
-		}
-
-		var targetErr error
-		if err := validateRequiredField(prefix+".target", binding.Target); err != nil {
-			targetErr = err
-		} else if !entity.IsID(binding.Target, entity.TypeLight) {
-			targetErr = fmt.Errorf("%s.target: must be a light semantic id %q", prefix, binding.Target)
-		}
-
-		actionErr := validateRequiredField(prefix+".action", binding.Action)
-		if actionErr == nil && binding.Action != BindingActionToggle {
-			actionErr = fmt.Errorf("%s.action: unsupported action %q", prefix, binding.Action)
+		targetType := bindingTargetType(binding.Target)
+		sourceErr := validateRemoteBindingEndpoint(prefix+".source", binding.Source, entity.TypeButton, "button")
+		targetErr := validateRemoteBindingEndpoint(prefix+".target", binding.Target, targetType, "light")
+		actionErr := validateBindingAction(prefix+".action", binding.Action, targetType)
+		if targetType == entity.TypeCover && binding.ExecutionTransport == string(entity.ExecutionTransportModbus) {
+			errs = errors.Join(errs, fmt.Errorf("%s.execution_transport: Modbus cover bindings are not supported", prefix))
 		}
 
 		if sourceErr == nil && targetErr == nil && actionErr == nil {
-			key := binding.Source + "\x00" + binding.Target + "\x00" + binding.Action
-			if _, ok := seen[key]; ok {
-				errs = errors.Join(
-					errs,
-					fmt.Errorf(
-						"%s: duplicate remote binding source %q target %q action %q",
-						prefix,
-						binding.Source,
-						binding.Target,
-						binding.Action,
-					),
-				)
-			} else {
-				seen[key] = i
-			}
+			errs = errors.Join(errs, validateBindingUniqueness(prefix, binding, seen, "remote binding"))
 		}
 
 		errs = errors.Join(errs, sourceErr, targetErr, actionErr)
 	}
 
 	return errs
+}
+
+func validateRemoteBindingEndpoint(field, value string, expectedType entity.Type, label string) error {
+	if err := validateRequiredField(field, value); err != nil {
+		return err
+	}
+	if !entity.IsID(value, expectedType) {
+		return fmt.Errorf("%s: must be a %s semantic id %q", field, label, value)
+	}
+	return nil
 }
 
 func DeviceIDs(f *Root) []string {

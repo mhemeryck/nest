@@ -3,7 +3,6 @@ package controller
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"log/slog"
 	"strings"
 
@@ -11,9 +10,16 @@ import (
 	"github.com/mhemeryck/nest/internal/entity"
 	"github.com/mhemeryck/nest/internal/modbus"
 	"github.com/mhemeryck/nest/internal/mqtt"
+	"github.com/mhemeryck/nest/internal/persistence"
 	"github.com/mhemeryck/nest/internal/registry"
 	"github.com/mhemeryck/nest/internal/sysfs"
 )
+
+type RuntimeOptions struct {
+	Persistence       *persistence.Store
+	RestoredPositions map[entity.CoverID]*float64
+	FeedbackContext   context.Context
+}
 
 func Run(
 	ctx context.Context,
@@ -25,15 +31,30 @@ func Run(
 	stateChanges <-chan sysfs.StateChange,
 	mqttEvents <-chan mqtt.Event,
 	modbusEvents <-chan modbus.Event,
-	done chan<- struct{},
-) {
-	defer close(done)
+	runtimeOptions RuntimeOptions,
+) error {
+	runtimeOptions, semanticEvents, stopNormalizer := startEventNormalizer(ctx, reg, mqttTopics, stateChanges, mqttEvents, modbusEvents, runtimeOptions)
+	defer stopNormalizer()
+	return runCoverLoop(ctx, reg, sysfsCommands, mqttCommands, modbusCommands, mqttTopics, semanticEvents, runtimeOptions)
+}
+
+func coverFeedbackContext(ctx context.Context, options RuntimeOptions) context.Context {
+	if options.FeedbackContext != nil {
+		return options.FeedbackContext
+	}
+	return context.WithoutCancel(ctx)
+}
+
+func startEventNormalizer(ctx context.Context, reg *registry.Registry, topics mqtt.Topics, states <-chan sysfs.StateChange, mqttEvents <-chan mqtt.Event, modbusEvents <-chan modbus.Event, options RuntimeOptions) (RuntimeOptions, <-chan event.Event, func()) {
+	normalizerContext, cancel := context.WithCancel(coverFeedbackContext(ctx, options))
 	semanticEvents := make(chan event.Event, 32)
 	normalizerDone := make(chan struct{})
-	go normalizeEvents(ctx, reg, mqttTopics, stateChanges, mqttEvents, modbusEvents, semanticEvents, normalizerDone)
-
-	dispatchEvents(ctx, reg, sysfsCommands, mqttCommands, modbusCommands, mqttTopics, semanticEvents)
-	<-normalizerDone
+	go normalizeEvents(normalizerContext, reg, topics, states, mqttEvents, modbusEvents, semanticEvents, normalizerDone)
+	options.FeedbackContext = normalizerContext
+	return options, semanticEvents, func() {
+		cancel()
+		<-normalizerDone
+	}
 }
 
 func normalizeEvents(
@@ -60,86 +81,34 @@ func normalizeEvents(
 			normalizeStateChange(ctx, index, semanticEvents, stateChange)
 		case mqttEvent, ok := <-mqttEvents:
 			if !ok {
-				return
+				mqttEvents = nil
+				continue
 			}
 
-			semanticEvent, handled := semanticEventFromMQTTEvent(index, mqttTopics, mqttEvent)
-			if handled {
-				publishSemanticEvent(ctx, semanticEvents, semanticEvent)
-			}
+			normalizeMQTTEvent(ctx, index, mqttTopics, semanticEvents, mqttEvent)
 		case modbusEvent, ok := <-modbusEvents:
 			if !ok {
 				modbusEvents = nil
 				continue
 			}
 
-			semanticEvent, handled := semanticEventFromModbusEvent(index, modbusEvent)
-			if handled {
-				publishSemanticEvent(ctx, semanticEvents, semanticEvent)
-			}
+			normalizeModbusEvent(ctx, index, semanticEvents, modbusEvent)
 		}
 	}
 }
 
-func dispatchEvents(
-	ctx context.Context,
-	reg *registry.Registry,
-	sysfsCommands chan<- sysfs.Command,
-	mqttCommands chan<- mqtt.Command,
-	modbusCommands chan<- modbus.Command,
-	mqttTopics mqtt.Topics,
-	semanticEvents <-chan event.Event,
-) {
-	var dispatchQueue []event.Event
-	semanticEventsOpen := true
-
-	for {
-		if semanticEvent, remainingEvents, ok := popEvent(dispatchQueue); ok {
-			dispatchQueue = append(remainingEvents, dispatchEvent(ctx, reg, sysfsCommands, mqttCommands, modbusCommands, mqttTopics, semanticEvent)...)
-			continue
-		}
-
-		if !semanticEventsOpen {
-			return
-		}
-
-		select {
-		case <-ctx.Done():
-			return
-		case semanticEvent, ok := <-semanticEvents:
-			if !ok {
-				semanticEventsOpen = false
-				continue
-			}
-
-			dispatchQueue = append(dispatchQueue, semanticEvent)
-		}
+func normalizeMQTTEvent(ctx context.Context, reg *registry.Registry, topics mqtt.Topics, events chan<- event.Event, incoming mqtt.Event) {
+	semanticEvent, handled := semanticEventFromMQTTEvent(reg, topics, incoming)
+	if handled {
+		publishSemanticEvent(ctx, events, semanticEvent)
 	}
 }
 
-func popEvent(events []event.Event) (event.Event, []event.Event, bool) {
-	if len(events) == 0 {
-		return event.Event{}, events, false
+func normalizeModbusEvent(ctx context.Context, reg *registry.Registry, events chan<- event.Event, incoming modbus.Event) {
+	semanticEvent, handled := semanticEventFromModbusEvent(reg, incoming)
+	if handled {
+		publishSemanticEvent(ctx, events, semanticEvent)
 	}
-
-	return events[0], events[1:], true
-}
-
-func publishMQTTStartup(ctx context.Context, reg *registry.Registry, commands chan<- mqtt.Command) error {
-	startupCommands, err := mqtt.StartupCommands(registry.MQTT(reg), registry.Lights(reg))
-	if err != nil {
-		return fmt.Errorf("build mqtt startup commands: %w", err)
-	}
-
-	for _, command := range startupCommands {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case commands <- command:
-		}
-	}
-
-	return nil
 }
 
 func semanticEventFromMQTTEvent(index *registry.Registry, mqttTopics mqtt.Topics, mqttEvent mqtt.Event) (event.Event, bool) {
@@ -165,11 +134,48 @@ func semanticEventFromMQTTEvent(index *registry.Registry, mqttTopics mqtt.Topics
 }
 
 func semanticEventFromMQTTMessage(index *registry.Registry, mqttTopics mqtt.Topics, message mqtt.ReceivedMessage) (event.Event, bool) {
+	if _, isCoverCommand := mqtt.ParseCoverCommandTopic(mqttTopics, message.Topic); isCoverCommand {
+		return semanticCoverEventFromMQTTMessage(index, mqttTopics, message)
+	}
 	if semanticEvent, ok := semanticLightEventFromMQTTMessage(index, mqttTopics, message); ok {
 		return semanticEvent, true
 	}
 
 	return semanticSourceEventFromMQTTMessage(index, mqttTopics, message)
+}
+
+func semanticCoverEventFromMQTTMessage(index *registry.Registry, topics mqtt.Topics, message mqtt.ReceivedMessage) (event.Event, bool) {
+	id, ok := mqtt.ParseCoverCommandTopic(topics, message.Topic)
+	if !ok {
+		return event.Event{}, false
+	}
+	cover, ok := registry.CoverByID(index, id)
+	if !ok {
+		slog.Warn("mqtt command references unknown cover", "cover_id", id)
+		return event.Event{}, false
+	}
+	action, ok := coverActionFromMQTTPayload(message.Payload)
+	if !ok {
+		slog.Warn("invalid mqtt cover command", "cover_id", id)
+		return event.Event{}, false
+	}
+	if message.Retained && action != entity.CoverActionStop {
+		return event.Event{}, false
+	}
+	return event.Event{Kind: event.CoverKind, Cover: &event.Cover{CoverID: cover.ID, Name: cover.Name, Action: action}}, true
+}
+
+func coverActionFromMQTTPayload(payload []byte) (entity.CoverAction, bool) {
+	switch strings.ToUpper(string(bytes.TrimSpace(payload))) {
+	case "OPEN":
+		return entity.CoverActionOpen, true
+	case "CLOSE":
+		return entity.CoverActionClose, true
+	case "STOP":
+		return entity.CoverActionStop, true
+	default:
+		return "", false
+	}
 }
 
 func semanticLightEventFromMQTTMessage(index *registry.Registry, mqttTopics mqtt.Topics, message mqtt.ReceivedMessage) (event.Event, bool) {

@@ -3,16 +3,16 @@ package nest
 import (
 	"context"
 
+	"github.com/mhemeryck/nest/internal/entity"
 	"github.com/mhemeryck/nest/internal/registry"
 	"github.com/mhemeryck/nest/internal/sysfs"
 )
 
 type sysfsActor struct {
-	commands      chan sysfs.Command
-	states        chan sysfs.StateChange
-	done          chan struct{}
-	devices       []*sysfs.Device
-	pollIntervals sysfs.PollIntervals
+	commands chan sysfs.Command
+	states   chan sysfs.StateChange
+	done     chan struct{}
+	workers  []sysfs.WorkerConfig
 }
 
 func newSysfsActor(reg *registry.Registry) (sysfsActor, error) {
@@ -23,16 +23,15 @@ func newSysfsActor(reg *registry.Registry) (sysfsActor, error) {
 	logSysfsDevices(devices)
 
 	return sysfsActor{
-		commands:      make(chan sysfs.Command, 32),
-		states:        make(chan sysfs.StateChange, 32),
-		done:          make(chan struct{}),
-		devices:       devices,
-		pollIntervals: sysfsPollIntervals(reg),
+		commands: make(chan sysfs.Command, 32),
+		states:   make(chan sysfs.StateChange, 32),
+		done:     make(chan struct{}),
+		workers:  sysfsWorkerConfigs(reg, devices),
 	}, nil
 }
 
 func startSysfsActor(ctx context.Context, actor sysfsActor) {
-	go sysfs.Run(ctx, actor.devices, actor.commands, actor.states, actor.done, actor.pollIntervals)
+	go sysfs.RunConfigured(ctx, actor.workers, actor.commands, actor.states, actor.done)
 }
 
 func waitForSysfsActor(actor sysfsActor) {
@@ -48,4 +47,35 @@ func sysfsPollIntervals(reg *registry.Registry) sysfs.PollIntervals {
 		DigitalOutput: pollIntervals.DigitalOutput,
 		RelayOutput:   pollIntervals.RelayOutput,
 	}
+}
+
+func sysfsWorkerConfigs(reg *registry.Registry, devices []*sysfs.Device) []sysfs.WorkerConfig {
+	intervals := sysfsPollIntervals(reg)
+	coverDevices, otherDevices := partitionSysfsDevicesByCover(reg, devices)
+	configs := sysfs.WorkerConfigs(otherDevices, intervals)
+	return append(configs, coverSysfsWorkerConfigs(reg, coverDevices, intervals)...)
+}
+
+func coverSysfsWorkerConfigs(reg *registry.Registry, devices map[entity.CoverID][]*sysfs.Device, intervals sysfs.PollIntervals) []sysfs.WorkerConfig {
+	var configs []sysfs.WorkerConfig
+	for _, cover := range registry.Covers(reg) {
+		configs = append(configs, sysfs.WorkerConfigs(devices[cover.ID], intervals)...)
+	}
+	return configs
+}
+
+func partitionSysfsDevicesByCover(reg *registry.Registry, devices []*sysfs.Device) (map[entity.CoverID][]*sysfs.Device, []*sysfs.Device) {
+	coverDevices := make(map[entity.CoverID][]*sysfs.Device)
+	var otherDevices []*sysfs.Device
+	for _, device := range devices {
+		relay, found := registry.RelayBySysfsDevice(reg, entity.SysfsDeviceID(device.Identifier))
+		if found {
+			if cover, owned := registry.CoverByRelay(reg, relay.ID); owned {
+				coverDevices[cover.ID] = append(coverDevices[cover.ID], device)
+				continue
+			}
+		}
+		otherDevices = append(otherDevices, device)
+	}
+	return coverDevices, otherDevices
 }

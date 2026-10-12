@@ -22,6 +22,7 @@ codebase.
 - [Long-Term Ideas](ideas.md) - Parked ideas and future directions
 - [Repositories](repos.md) - Overview of existing repositories, roles, and migration context
 - [Covers](covers.md) - Cover controller behavior, legacy approach, and planned `nest` implementation
+- [Cover Control Runtime](cover-control.md) - Runtime behavior, configuration, reporting, and migration
 - [Sysfs](sysfs.md) - Unipi sysfs interface and how `nest` uses or plans to use it
 - [Home Automation Landscape](home-automation-landscape.md) - Broader protocol and system context behind `nest`'s transport model
 - [Distributed Light Model](distributed-light-model.md) - Phase 7 semantic entity, binding, and distributed execution model

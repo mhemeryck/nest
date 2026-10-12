@@ -47,6 +47,37 @@ func LightCommandSubscriptionTopic(topics Topics) string {
 	return joinTopic(topics, "units", topics.UnitID, "lights", "+", "command")
 }
 
+func CoverStateTopic(topics Topics, coverID entity.CoverID) string {
+	return joinTopic(topics, "units", topics.UnitID, "covers", coverTopicSegment(coverID), "state")
+}
+
+func CoverCommandTopic(topics Topics, coverID entity.CoverID) string {
+	return joinTopic(topics, "units", topics.UnitID, "covers", coverTopicSegment(coverID), "command")
+}
+
+func CoverCommandSubscriptionTopic(topics Topics) string {
+	return joinTopic(topics, "units", topics.UnitID, "covers", "+", "command")
+}
+
+func ParseCoverCommandTopic(topics Topics, topic string) (entity.CoverID, bool) {
+	prefix := joinTopic(topics, "units", topics.UnitID, "covers") + "/"
+	if !strings.HasPrefix(topic, prefix) || !strings.HasSuffix(topic, "/command") {
+		return "", false
+	}
+	localID := strings.TrimSuffix(strings.TrimPrefix(topic, prefix), "/command")
+	if !entity.IsLocalID(localID) {
+		return "", false
+	}
+	return entity.CoverID(entity.NewID(topics.UnitID, entity.TypeCover, localID)), true
+}
+
+func coverTopicSegment(coverID entity.CoverID) string {
+	if localID, ok := entity.LocalID(string(coverID), entity.TypeCover); ok {
+		return localID
+	}
+	return string(coverID)
+}
+
 func SemanticSourceEventTopic(topics Topics, sourceID entity.ID) string {
 	unitID := topics.UnitID
 	if sourceUnitID, ok := semanticSourceUnitID(sourceID); ok {

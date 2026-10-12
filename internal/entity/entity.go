@@ -9,9 +9,14 @@ type (
 	DigitalInputID      string
 	PushButtonID        string
 	LightID             string
+	CoverID             string
 	RelayID             string
 	Action              string
 	LightAction         string
+	CoverAction         string
+	OutputCommandID     uint64
+	OutputAction        string
+	CoverState          string
 	ExecutionTransport  string
 	ModbusMode          string
 	ModbusEventSignalID string
@@ -23,6 +28,18 @@ const (
 	LightActionToggle        LightAction        = "toggle"
 	LightActionOn            LightAction        = "on"
 	LightActionOff           LightAction        = "off"
+	CoverActionOpen          CoverAction        = "open"
+	CoverActionClose         CoverAction        = "close"
+	CoverActionStop          CoverAction        = "stop"
+	OutputActionOn           OutputAction       = "on"
+	OutputActionOff          OutputAction       = "off"
+	OutputActionToggle       OutputAction       = "toggle"
+	CoverStateUnknown        CoverState         = "unknown"
+	CoverStateStopped        CoverState         = "stopped"
+	CoverStateOpen           CoverState         = "open"
+	CoverStateClosed         CoverState         = "closed"
+	CoverStateOpening        CoverState         = "opening"
+	CoverStateClosing        CoverState         = "closing"
 	ModbusModeMaster         ModbusMode         = "master"
 	ModbusModeSlave          ModbusMode         = "slave"
 	ExecutionTransportMQTT   ExecutionTransport = "mqtt"
@@ -37,6 +54,9 @@ type Root struct {
 	DigitalInputs        []DigitalInput
 	PushButtons          []PushButton
 	Lights               []Light
+	Covers               []Cover
+	CoverControl         CoverControl
+	PersistencePath      string
 	Relays               []Relay
 	Bindings             []Binding
 	RemoteSourceBindings []Binding
@@ -126,6 +146,21 @@ type Light struct {
 	ID    LightID
 	Name  string
 	Relay RelayID
+}
+
+type Cover struct {
+	ID         CoverID
+	Name       string
+	OpenRelay  RelayID
+	CloseRelay RelayID
+}
+
+type CoverControl struct {
+	FullTravelDuration time.Duration
+	OperationTimeout   time.Duration
+	OffRetryInterval   time.Duration
+	ShutdownPeriod     time.Duration
+	ReportingInterval  time.Duration
 }
 
 type Binding struct {

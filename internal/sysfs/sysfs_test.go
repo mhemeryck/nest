@@ -46,9 +46,27 @@ func TestWriteValueRejectsInvalidValue(t *testing.T) {
 }
 
 func TestPrintableValue(t *testing.T) {
+	assert.Equal(t, -1, PrintableValue(Unknown))
 	assert.Equal(t, 0, PrintableValue(Off))
 	assert.Equal(t, 1, PrintableValue(On))
 	assert.Equal(t, int(Value('x')), PrintableValue(Value('x')))
+}
+
+func TestRelayDiscoveryDoesNotRequireReadableValue(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ro_1_1", "ro_value")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+	require.NoError(t, os.WriteFile(path, []byte("invalid\n"), 0o600))
+	device, found, err := newDevice(path)
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, Unknown, device.Value)
+	states := make(chan StateChange, 2)
+	handleCommand(map[string]*Device{device.Identifier: device}, Command{ID: 1, DeviceID: device.Identifier, Kind: OffCommand}, t.Context(), states)
+	observation := <-states
+	assert.Equal(t, Off, observation.NewValue)
+	completion := <-states
+	require.Equal(t, CompletionReportKind, completion.Kind)
+	assert.NoError(t, completion.Completion.Error)
 }
 
 func TestListDevices(t *testing.T) {

@@ -129,3 +129,15 @@ func TestToEntityRoot(t *testing.T) {
 func TestToEntityRootNil(t *testing.T) {
 	assert.Nil(t, ToEntityRoot(nil))
 }
+
+func TestToEntityRootCovers(t *testing.T) {
+	root := ToEntityRoot(&Root{Covers: []CoverConfig{{
+		ID: "controller_1.cover.office", Name: "Office cover",
+		OpenRelay: "office_open", CloseRelay: "office_close",
+	}}})
+	require.NotNil(t, root)
+	assert.Equal(t, []entity.Cover{{
+		ID: entity.CoverID("controller_1.cover.office"), Name: "Office cover",
+		OpenRelay: entity.RelayID("office_open"), CloseRelay: entity.RelayID("office_close"),
+	}}, root.Covers)
+}

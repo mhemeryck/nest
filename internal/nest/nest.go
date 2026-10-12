@@ -29,22 +29,17 @@ func Run(ctx context.Context, opts Options) error {
 		return nil
 	}
 
-	mqttActor := newMQTTActor(reg)
-	sysfsActor, err := newSysfsActor(reg)
+	actors, err := newRuntimeActors(reg)
 	if err != nil {
 		return err
 	}
-	modbusActor := newModbusActor(reg)
-
-	startMQTTActor(ctx, mqttActor)
-	startSysfsActor(ctx, sysfsActor)
-	startModbusActor(ctx, modbusActor)
-
-	controllerDone := startController(ctx, reg, sysfsActor, mqttActor, modbusActor)
+	actorContext, cancelActors := startRuntimeActors(ctx, actors)
+	defer cancelActors()
+	controllerDone := startRuntimeController(ctx, actorContext, reg, actors)
 
 	slog.Info("runtime started", "message", "press Ctrl+C to exit")
 
-	err = waitForShutdown(ctx, cancel, controllerDone, sysfsActor, mqttActor, modbusActor)
+	err = waitForRuntimeShutdown(ctx, cancel, cancelActors, controllerDone, reg, actors)
 
 	slog.Info("shutting down")
 	return err

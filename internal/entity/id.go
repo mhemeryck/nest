@@ -11,6 +11,7 @@ type Type string
 const (
 	TypeButton Type = "button"
 	TypeLight  Type = "light"
+	TypeCover  Type = "cover"
 )
 
 type ID string

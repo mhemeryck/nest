@@ -19,7 +19,7 @@ func TestStartupCommands(t *testing.T) {
 		Relay: entity.RelayID("office_light_relay"),
 	}}
 
-	commands, err := StartupCommands(cfg, lights)
+	commands, err := StartupCommands(cfg, lights, nil)
 	require.NoError(t, err)
 	require.Len(t, commands, 2)
 

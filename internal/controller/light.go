@@ -22,10 +22,8 @@ func handleLightToggle(ctx context.Context, index *registry.Registry, sysfsComma
 		return
 	}
 
-	select {
-	case <-ctx.Done():
+	if !admitLightCommand(ctx, sysfsCommands, light.ID, cmd) {
 		return
-	case sysfsCommands <- cmd:
 	}
 
 	slog.Info(
@@ -51,10 +49,8 @@ func handleLightSet(ctx context.Context, index *registry.Registry, sysfsCommands
 		return
 	}
 
-	select {
-	case <-ctx.Done():
+	if !admitLightCommand(ctx, sysfsCommands, light.ID, cmd) {
 		return
-	case sysfsCommands <- cmd:
 	}
 
 	slog.Info(
@@ -68,6 +64,17 @@ func handleLightSet(ctx context.Context, index *registry.Registry, sysfsCommands
 		"device_id",
 		cmd.DeviceID,
 	)
+}
+
+func admitLightCommand(ctx context.Context, commands chan<- sysfs.Command, lightID entity.LightID, command sysfs.Command) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+	if failure := sysfs.AdmitCommand(commands, command); failure != nil {
+		slog.Error("light command rejected", "light_id", lightID, "error", failure.Error)
+		return false
+	}
+	return true
 }
 
 func relayToggleCommandForLight(index *registry.Registry, light entity.Light) (sysfs.Command, bool) {

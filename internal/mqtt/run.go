@@ -24,22 +24,38 @@ const (
 func Run(ctx context.Context, cfg entity.MQTT, sourceEventTopics []string, commands <-chan Command, events chan<- Event, done chan<- struct{}) {
 	defer close(done)
 
-	topics := NewTopics(cfg.TopicPrefix, cfg.UnitID)
-	client := paho.NewClient(clientOptions(ctx, cfg, topics, sourceEventTopics, events))
-	if err := waitToken(ctx, client.Connect()); err != nil {
-		slog.Error("mqtt connect failed", "broker", brokerURL(cfg), "error", err)
-		publishEvent(ctx, events, ConnectFailedEvent(err))
+	client := newRuntimeClient(ctx, cfg, sourceEventTopics, events)
+	if !connectClient(ctx, client, cfg, events) {
 		return
 	}
+	defer disconnectClient(ctx, client, cfg, events)
+	processCommands(ctx, client, commands, events)
+}
 
-	defer func() {
-		offlineCtx, cancel := context.WithTimeout(context.Background(), gracefulOfflineTimeout)
-		defer cancel()
-		publishGracefulOffline(offlineCtx, client, cfg)
-		client.Disconnect(uint(disconnectQuiesce / time.Millisecond))
-		publishEvent(ctx, events, DisconnectedEvent())
-	}()
+func newRuntimeClient(ctx context.Context, cfg entity.MQTT, sourceEventTopics []string, events chan<- Event) paho.Client {
+	topics := NewTopics(cfg.TopicPrefix, cfg.UnitID)
+	return paho.NewClient(clientOptions(ctx, cfg, topics, sourceEventTopics, events))
+}
 
+func connectClient(ctx context.Context, client paho.Client, cfg entity.MQTT, events chan<- Event) bool {
+	if err := waitToken(ctx, client.Connect()); err != nil {
+		client.Disconnect(0)
+		slog.Error("mqtt connect failed", "broker", brokerURL(cfg), "error", err)
+		publishEvent(ctx, events, ConnectFailedEvent(err))
+		return false
+	}
+	return true
+}
+
+func disconnectClient(ctx context.Context, client paho.Client, cfg entity.MQTT, events chan<- Event) {
+	offlineCtx, cancel := context.WithTimeout(context.Background(), gracefulOfflineTimeout)
+	defer cancel()
+	publishGracefulOffline(offlineCtx, client, cfg)
+	client.Disconnect(uint(disconnectQuiesce / time.Millisecond))
+	publishEvent(ctx, events, DisconnectedEvent())
+}
+
+func processCommands(ctx context.Context, client client, commands <-chan Command, events chan<- Event) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -75,31 +91,57 @@ func publish(ctx context.Context, client client, events chan<- Event, message Pu
 
 func clientOptions(ctx context.Context, cfg entity.MQTT, topics Topics, sourceEventTopics []string, events chan<- Event) *paho.ClientOptions {
 	options := paho.NewClientOptions()
+	configureBrokerClient(options, cfg)
+	configureClientWill(options, topics)
+	configureClientSubscriptions(ctx, options, cfg, topics, sourceEventTopics, events)
+	configureClientAuthentication(options, cfg)
+	configureClientDelivery(options)
+	return options
+}
+
+func configureBrokerClient(options *paho.ClientOptions, cfg entity.MQTT) {
 	options.AddBroker(brokerURL(cfg))
 	options.SetClientID(cfg.ClientID)
+}
+
+func configureClientWill(options *paho.ClientOptions, topics Topics) {
 	offline := AvailabilityMessage(topics, AvailabilityOffline)
 	options.SetWill(offline.Topic, string(offline.Payload), offline.QoS, offline.Retain)
+}
+
+func configureClientSubscriptions(ctx context.Context, options *paho.ClientOptions, cfg entity.MQTT, topics Topics, sourceEventTopics []string, events chan<- Event) {
 	options.SetOnConnectHandler(func(client paho.Client) {
-		if err := subscribeLightCommands(ctx, client, topics, events); err != nil {
-			slog.Error("mqtt subscribe failed", "topic", LightCommandSubscriptionTopic(topics), "error", err)
-		}
-		if err := subscribeSourceEvents(ctx, client, sourceEventTopics, events); err != nil {
-			slog.Error("mqtt source event subscribe failed", "error", err)
-		}
+		subscribeRuntimeTopics(ctx, client, topics, sourceEventTopics, events)
 		slog.Info("mqtt connected", "broker", brokerURL(cfg), "client_id", cfg.ClientID)
 		publishEvent(ctx, events, ConnectedEvent())
 	})
+}
+
+func configureClientAuthentication(options *paho.ClientOptions, cfg entity.MQTT) {
 	if cfg.Username != "" {
 		options.SetUsername(cfg.Username)
 	}
 	if cfg.Password != "" {
 		options.SetPassword(cfg.Password)
 	}
+}
+
+func configureClientDelivery(options *paho.ClientOptions) {
 	options.SetAutoReconnect(true)
 	options.SetConnectRetry(true)
 	options.SetOrderMatters(true)
+}
 
-	return options
+func subscribeRuntimeTopics(ctx context.Context, client client, topics Topics, sourceEventTopics []string, events chan<- Event) {
+	if err := subscribeLightCommands(ctx, client, topics, events); err != nil {
+		slog.Error("mqtt subscribe failed", "topic", LightCommandSubscriptionTopic(topics), "error", err)
+	}
+	if err := subscribeSourceEvents(ctx, client, sourceEventTopics, events); err != nil {
+		slog.Error("mqtt source event subscribe failed", "error", err)
+	}
+	if err := subscribeCoverCommands(ctx, client, topics, events); err != nil {
+		slog.Error("mqtt cover subscribe failed", "error", err)
+	}
 }
 
 func subscribeLightCommands(ctx context.Context, client client, topics Topics, events chan<- Event) error {
@@ -152,6 +194,16 @@ func subscribeSourceEvents(ctx context.Context, client client, topics []string, 
 	}
 
 	return nil
+}
+
+func subscribeCoverCommands(ctx context.Context, client client, topics Topics, events chan<- Event) error {
+	if client == nil {
+		return nil
+	}
+	token := client.Subscribe(CoverCommandSubscriptionTopic(topics), 0, func(_ paho.Client, message paho.Message) {
+		publishEvent(ctx, events, ReceivedEvent(ReceivedMessage{Topic: message.Topic(), Payload: bytes.Clone(message.Payload()), Retained: message.Retained()}))
+	})
+	return waitToken(ctx, token)
 }
 
 func publishGracefulOffline(ctx context.Context, client paho.Client, cfg entity.MQTT) {

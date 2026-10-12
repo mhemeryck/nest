@@ -6,6 +6,8 @@
 - Full sentences only for narrative or necessary precision
 - One sentence per line in Markdown prose
 - Compact scan-oriented comments, lists, and headings
+- Specs: ASD-STE100 Simplified Technical English; active voice, consistent terms, one idea per sentence
+- Format all Markdown files with dprint; run `nest-format` after edits
 
 ## Git
 
@@ -34,6 +36,17 @@
 - Example: `receiveCommand`, `validateCommand`, `persistCommand`
 - Behavior- and direction-oriented names: `handleMasterToSlaveCommand`, `pollSlaveStatePoints`
 - Top-level functions: visible lifecycle or responsibility sequence
+- Orchestration reads like its behavioral explanation; each responsibility appears as a named call
+- Inline orchestration: ordering, branching, continuation, and exit rules
+- Setup, scheduling, state bookkeeping, and integration details belong to cohesive helpers
+- Explain a flow, then compare explanation steps with its calls; extract unnamed responsibilities before completing the review
+- Reference: `internal/controller/dispatch.go` → `dispatchEvent`
+- Helpers own cohesive behavior and related state updates
+- Callers retain visible ordering, branching, and failure rules
+- Discrete behavioral alternatives: `switch` / `case`, one decision dimension at a time
+- Request kinds before phase-specific transitions; guard clauses for prerequisites
+- Avoid predicate switches that only disguise ordered `if` chains
+- Structural reviews: account for every new or modified production function
 - Compact responsibility list above functions when structure alone lacks a clear high-level map
 - Fragment-based comments and lists
 - No helpers for trivial control flow alone
@@ -59,6 +72,18 @@
 - Go assertions: `stretchr/testify`
 - `assert`: non-fatal checks
 - `require`: prerequisite checks
+
+## Specification Workflow
+
+- Use OpenSpec for agreed behavioral changes
+- Start with collaborative exploration of one focused behavior
+- Historical plans and existing code: evidence for discussion, not automatic requirements
+- Resolve material behavior questions with the user before drafting a proposal
+- Concrete scenarios before implementation; revise artifacts as new evidence emerges
+- Accepted specs in `openspec/specs/`; proposed changes in `openspec/changes/`
+- Verify implementation against scenarios before archiving
+- Run `nest-check` inside `devenv shell` before task completion
+- Nushell for development scripts and shell examples
 
 ## Layout
 
