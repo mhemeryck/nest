@@ -31,11 +31,15 @@ func QueueCommand(handoff *Handoff, command Command) *Event {
 	if failure != nil {
 		return failure
 	}
+	wakeHandoff(handoff)
+	return nil
+}
+
+func wakeHandoff(handoff *Handoff) {
 	select {
 	case handoff.wake <- struct{}{}:
 	default:
 	}
-	return nil
 }
 
 // Caller holds the handoff lock across admission and wake-up
@@ -66,18 +70,29 @@ func RunHandoff(ctx context.Context, handoff *Handoff, commands chan<- Command, 
 	defer timer.Stop()
 	for {
 		pending := FlushAvailable(handoff, commands)
-		var retry <-chan time.Time
-		if pending {
-			timer.Reset(10 * time.Millisecond)
-			retry = timer.C
-		}
-		select {
-		case <-ctx.Done():
+		if !waitForHandoffWork(ctx, handoff, timer, pending) {
 			return
-		case <-handoff.wake:
-		case <-retry:
 		}
 	}
+}
+
+func waitForHandoffWork(ctx context.Context, handoff *Handoff, timer *time.Timer, pending bool) bool {
+	retry := scheduleHandoffRetry(timer, pending)
+	select {
+	case <-ctx.Done():
+		return false
+	case <-handoff.wake:
+	case <-retry:
+	}
+	return true
+}
+
+func scheduleHandoffRetry(timer *time.Timer, pending bool) <-chan time.Time {
+	if !pending {
+		return nil
+	}
+	timer.Reset(10 * time.Millisecond)
+	return timer.C
 }
 
 func FlushAvailable(handoff *Handoff, commands chan<- Command) bool {

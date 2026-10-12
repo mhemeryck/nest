@@ -12,6 +12,12 @@ import (
 )
 
 func mqttHandoffCapacity(reg *registry.Registry) int {
+	lightIDs := mqttObservedLightIDs(reg)
+	// Distinct observation topics plus discovery and unit availability
+	return max(32, len(registry.Covers(reg))+len(lightIDs)+2)
+}
+
+func mqttObservedLightIDs(reg *registry.Registry) map[entity.LightID]struct{} {
 	lightIDs := make(map[entity.LightID]struct{})
 	for _, light := range registry.Lights(reg) {
 		lightIDs[light.ID] = struct{}{}
@@ -19,8 +25,7 @@ func mqttHandoffCapacity(reg *registry.Registry) int {
 	for _, poll := range registry.Modbus(reg).StatePolls {
 		lightIDs[entity.LightID(poll.Entity)] = struct{}{}
 	}
-	// Distinct observation topics plus discovery and unit availability
-	return max(32, len(registry.Covers(reg))+len(lightIDs)+2)
+	return lightIDs
 }
 
 func publishMQTTStartup(ctx context.Context, reg *registry.Registry, commands chan<- mqtt.Command, handoff *mqtt.Handoff) error {
@@ -28,6 +33,10 @@ func publishMQTTStartup(ctx context.Context, reg *registry.Registry, commands ch
 	if err != nil {
 		return fmt.Errorf("build mqtt startup commands: %w", err)
 	}
+	return admitMQTTStartupCommands(ctx, commands, handoff, startupCommands)
+}
+
+func admitMQTTStartupCommands(ctx context.Context, commands chan<- mqtt.Command, handoff *mqtt.Handoff, startupCommands []mqtt.Command) error {
 	for _, command := range startupCommands {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -101,13 +110,20 @@ func publishMQTT(ctx context.Context, commands chan<- mqtt.Command, message mqtt
 		return false
 	}
 	if handoff != nil {
-		if err := mqtt.QueueMessage(handoff, message); err != nil {
-			slog.Error("mqtt integration failure", "error", err)
-			return false
-		}
-		return true
+		return queueMQTTPublication(handoff, message)
 	}
+	return admitMQTTPublication(ctx, commands, message)
+}
 
+func queueMQTTPublication(handoff *mqtt.Handoff, message mqtt.PublishMessage) bool {
+	if err := mqtt.QueueMessage(handoff, message); err != nil {
+		slog.Error("mqtt integration failure", "error", err)
+		return false
+	}
+	return true
+}
+
+func admitMQTTPublication(ctx context.Context, commands chan<- mqtt.Command, message mqtt.PublishMessage) bool {
 	select {
 	case <-ctx.Done():
 		return false

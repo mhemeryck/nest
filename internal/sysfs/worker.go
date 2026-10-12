@@ -16,10 +16,7 @@ func pollWorker(
 	ticker := time.NewTicker(cfg.Interval)
 	defer ticker.Stop()
 
-	devicesByID := make(map[string]*Device, len(cfg.Devices))
-	for _, device := range cfg.Devices {
-		devicesByID[device.Identifier] = device
-	}
+	devicesByID := devicesByIdentifier(cfg.Devices)
 
 	for {
 		select {
@@ -34,6 +31,14 @@ func pollWorker(
 			pollDevices(cfg.Devices, ctx, states)
 		}
 	}
+}
+
+func devicesByIdentifier(devices []*Device) map[string]*Device {
+	index := make(map[string]*Device, len(devices))
+	for _, device := range devices {
+		index[device.Identifier] = device
+	}
+	return index
 }
 
 func pollDevices(devices []*Device, ctx context.Context, states chan<- StateChange) {
@@ -67,22 +72,30 @@ func publishInitialRelayStates(ctx context.Context, devices []*Device, states ch
 		if device.Type != RelayOutput {
 			continue
 		}
-		value, err := readDevice(device)
-		if err != nil {
-			slog.Error("sysfs startup read failed", "device_id", device.Identifier, "path", device.Path, "error", err)
-			continue
-		}
-		if !publishState(ctx, states, StateChange{
-			Device:   *device,
-			OldValue: value,
-			NewValue: value,
-			Initial:  true,
-		}) {
+		if !publishInitialRelayState(ctx, device, states) {
 			return false
 		}
 	}
 
 	return true
+}
+
+func publishInitialRelayState(ctx context.Context, device *Device, states chan<- StateChange) bool {
+	value, err := readDevice(device)
+	if err != nil {
+		slog.Error("sysfs startup read failed", "device_id", device.Identifier, "path", device.Path, "error", err)
+		return true
+	}
+	return publishState(ctx, states, StateChange{
+		Device: *device, OldValue: value, NewValue: value, Initial: true,
+	})
+}
+
+type commandExecution struct {
+	oldValue    Value
+	newValue    Value
+	completedAt time.Time
+	err         error
 }
 
 func handleCommand(devicesByID map[string]*Device, cmd Command, ctx context.Context, states chan<- StateChange) {
@@ -92,16 +105,25 @@ func handleCommand(devicesByID map[string]*Device, cmd Command, ctx context.Cont
 		return
 	}
 
+	execution := executeReportedCommand(device, cmd)
+	publishCommandObservation(ctx, states, device, cmd, execution)
+	publishCompletion(ctx, states, cmd, execution.completedAt, execution.err)
+}
+
+func executeReportedCommand(device *Device, cmd Command) commandExecution {
 	oldValue, newValue, err := executeCommand(device, cmd)
-	completedAt := time.Now()
-	if err != nil {
-		slog.Error("sysfs command failed", "device_id", cmd.DeviceID, "command_id", cmd.ID, "error", err)
-	} else if oldValue != newValue {
+	return commandExecution{oldValue: oldValue, newValue: newValue, completedAt: time.Now(), err: err}
+}
+
+func publishCommandObservation(ctx context.Context, states chan<- StateChange, device *Device, cmd Command, execution commandExecution) {
+	if execution.err != nil {
+		slog.Error("sysfs command failed", "device_id", cmd.DeviceID, "command_id", cmd.ID, "error", execution.err)
+	} else if execution.oldValue != execution.newValue {
 		publishState(ctx, states, StateChange{
-			Device: *device, OldValue: oldValue, NewValue: newValue, IsRising: oldValue == Off && newValue == On,
+			Device: *device, OldValue: execution.oldValue, NewValue: execution.newValue,
+			IsRising: execution.oldValue == Off && execution.newValue == On,
 		})
 	}
-	publishCompletion(ctx, states, cmd, completedAt, err)
 }
 
 func executeCommand(device *Device, cmd Command) (Value, Value, error) {
@@ -109,11 +131,18 @@ func executeCommand(device *Device, cmd Command) (Value, Value, error) {
 	if err != nil {
 		return oldValue, oldValue, err
 	}
-	if err := writeValue(device.Path, newValue); err != nil {
-		return oldValue, oldValue, fmt.Errorf("write device %s: %w", device.Identifier, err)
+	if err := writeDeviceValue(device, newValue); err != nil {
+		return oldValue, oldValue, err
 	}
-	device.Value = newValue
 	return oldValue, newValue, nil
+}
+
+func writeDeviceValue(device *Device, value Value) error {
+	if err := writeValue(device.Path, value); err != nil {
+		return fmt.Errorf("write device %s: %w", device.Identifier, err)
+	}
+	device.Value = value
+	return nil
 }
 
 func resolveCommandValues(device *Device, kind CommandKind) (Value, Value, error) {

@@ -57,9 +57,22 @@ func coverOutputOperationExpired(runtime *coverRuntime, now time.Time) bool {
 
 func stopCompletedCoverTravel(controller *coverController, runtime *coverRuntime, now time.Time) []event.Event {
 	runtime.stopReason = coverCompleted
+	clearCoverMovementDeadlines(runtime)
+	return commandBothCoverOutputsOff(controller, runtime, coverStopping, now)
+}
+
+func scheduleCoverMovement(controller *coverController, runtime *coverRuntime, completedAt, now time.Time) {
+	runtime.travelDeadline = completedAt.Add(controller.settings.FullTravelDuration)
+	runtime.reportDeadline = now.Add(controller.settings.ReportingInterval)
+}
+
+func clearCoverMovementDeadlines(runtime *coverRuntime) {
 	runtime.travelDeadline = time.Time{}
 	runtime.reportDeadline = time.Time{}
-	return commandBothCoverOutputsOff(controller, runtime, coverStopping, now)
+}
+
+func scheduleCoverOffRetry(controller *coverController, runtime *coverRuntime, now time.Time) {
+	runtime.retryAt = now.Add(controller.settings.OffRetryInterval)
 }
 
 func retryCoverSwitchOff(controller *coverController, runtime *coverRuntime, now time.Time) []event.Event {

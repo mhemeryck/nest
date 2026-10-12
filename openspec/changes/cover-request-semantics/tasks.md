@@ -84,3 +84,15 @@
 - [x] 11.1 Separate stop and direction request handlers; use action and phase switches while preserving movement restrictions
 - [x] 11.2 Express output outcomes, timeout handling, and shutdown transitions through discrete branches; preserve correlation and deadline priority
 - [x] 11.3 Record branching guidance and transition map; verify controller scenarios, nest-check, and strict OpenSpec validation
+
+## 12. Responsibility-level orchestration
+
+- [x] 12.1 Make controller setup and cover-loop priority explicit through named steps; preserve closed-input and shutdown handling
+- [x] 12.2 Extract transition bookkeeping, output scheduling, integration admission, worker lifecycle, and persistence responsibilities; verify package scenarios
+- [x] 12.3 Apply named steps to runtime wiring, configuration projection, and registry construction; verify conversion and lifecycle tests
+- [x] 12.4 Review every changed production function against its behavioral explanation; record coverage and run nest-format, nest-check, strict OpenSpec validation, and fixture validation
+
+## 13. Cover-loop lifecycle hierarchy
+
+- [x] 13.1 Separate active processing from shutdown draining; share deadline and event processing without changing queue ownership or feedback lifetime
+- [x] 13.2 Verify shutdown priority under queued traffic, switch-off confirmation, input closure, and the shutdown bound; run nest-format, nest-check, and strict OpenSpec validation

@@ -101,14 +101,18 @@ func modbusFromConfig(modbus ModbusConfig) entity.Modbus {
 		Timeout:           modbus.Timeout,
 		PollInterval:      modbus.PollInterval,
 		UnitID:            modbus.UnitID,
-		EventSignals:      make([]entity.ModbusEventSignal, 0, len(modbus.EventSignals)),
-		StatePoints:       make([]entity.ModbusStatePoint, 0, len(modbus.StatePoints)),
-		EventSignalWrites: make([]entity.ModbusEventSignalWrite, 0, len(modbus.EventSignalWrites)),
-		StatePolls:        make([]entity.ModbusStatePoll, 0, len(modbus.StatePolls)),
+		EventSignals:      modbusEventSignalsFromConfig(modbus.EventSignals),
+		StatePoints:       modbusStatePointsFromConfig(modbus.StatePoints),
+		EventSignalWrites: modbusEventSignalWritesFromConfig(modbus.EventSignalWrites),
+		StatePolls:        modbusStatePollsFromConfig(modbus.StatePolls),
 	}
+	return converted
+}
 
-	for _, signal := range modbus.EventSignals {
-		converted.EventSignals = append(converted.EventSignals, entity.ModbusEventSignal{
+func modbusEventSignalsFromConfig(signals []ModbusEventSignalConfig) []entity.ModbusEventSignal {
+	converted := make([]entity.ModbusEventSignal, 0, len(signals))
+	for _, signal := range signals {
+		converted = append(converted, entity.ModbusEventSignal{
 			ID:     entity.ModbusEventSignalID(signal.ID),
 			Coil:   signal.Coil,
 			Source: entity.ID(signal.Source),
@@ -116,17 +120,25 @@ func modbusFromConfig(modbus ModbusConfig) entity.Modbus {
 			Action: entity.Action(signal.Action),
 		})
 	}
+	return converted
+}
 
-	for _, point := range modbus.StatePoints {
-		converted.StatePoints = append(converted.StatePoints, entity.ModbusStatePoint{
+func modbusStatePointsFromConfig(points []ModbusStatePointConfig) []entity.ModbusStatePoint {
+	converted := make([]entity.ModbusStatePoint, 0, len(points))
+	for _, point := range points {
+		converted = append(converted, entity.ModbusStatePoint{
 			ID:     entity.ModbusStatePointID(point.ID),
 			Coil:   point.Coil,
 			Entity: entity.ID(point.Entity),
 		})
 	}
+	return converted
+}
 
-	for _, write := range modbus.EventSignalWrites {
-		converted.EventSignalWrites = append(converted.EventSignalWrites, entity.ModbusEventSignalWrite{
+func modbusEventSignalWritesFromConfig(writes []ModbusEventSignalWriteConfig) []entity.ModbusEventSignalWrite {
+	converted := make([]entity.ModbusEventSignalWrite, 0, len(writes))
+	for _, write := range writes {
+		converted = append(converted, entity.ModbusEventSignalWrite{
 			Unit:   write.Unit,
 			Signal: entity.ModbusEventSignalID(write.Signal),
 			Source: entity.ID(write.Source),
@@ -136,9 +148,13 @@ func modbusFromConfig(modbus ModbusConfig) entity.Modbus {
 			Coil:   write.Coil,
 		})
 	}
+	return converted
+}
 
-	for _, poll := range modbus.StatePolls {
-		converted.StatePolls = append(converted.StatePolls, entity.ModbusStatePoll{
+func modbusStatePollsFromConfig(polls []ModbusStatePollConfig) []entity.ModbusStatePoll {
+	converted := make([]entity.ModbusStatePoll, 0, len(polls))
+	for _, poll := range polls {
+		converted = append(converted, entity.ModbusStatePoll{
 			Unit:   poll.Unit,
 			Point:  entity.ModbusStatePointID(poll.Point),
 			Entity: entity.ID(poll.Entity),

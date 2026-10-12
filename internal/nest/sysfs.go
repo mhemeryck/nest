@@ -53,8 +53,13 @@ func sysfsWorkerConfigs(reg *registry.Registry, devices []*sysfs.Device) []sysfs
 	intervals := sysfsPollIntervals(reg)
 	coverDevices, otherDevices := partitionSysfsDevicesByCover(reg, devices)
 	configs := sysfs.WorkerConfigs(otherDevices, intervals)
+	return append(configs, coverSysfsWorkerConfigs(reg, coverDevices, intervals)...)
+}
+
+func coverSysfsWorkerConfigs(reg *registry.Registry, devices map[entity.CoverID][]*sysfs.Device, intervals sysfs.PollIntervals) []sysfs.WorkerConfig {
+	var configs []sysfs.WorkerConfig
 	for _, cover := range registry.Covers(reg) {
-		configs = append(configs, sysfs.WorkerConfigs(coverDevices[cover.ID], intervals)...)
+		configs = append(configs, sysfs.WorkerConfigs(devices[cover.ID], intervals)...)
 	}
 	return configs
 }

@@ -125,16 +125,32 @@ func indexBindings(bySource map[entity.ID][]entity.Binding, bindings []entity.Bi
 }
 
 func indexModbusRoutes(index *Registry, modbus entity.Modbus) {
-	for _, signal := range modbus.EventSignals {
+	indexModbusEventSignals(index, modbus.EventSignals)
+	indexModbusEventSignalWrites(index, modbus.EventSignalWrites)
+	indexModbusStatePoints(index, modbus.StatePoints)
+	indexModbusStatePolls(index, modbus.StatePolls)
+}
+
+func indexModbusEventSignals(index *Registry, signals []entity.ModbusEventSignal) {
+	for _, signal := range signals {
 		index.modbusEventSignalsByCoil[signal.Coil] = signal
 	}
-	for _, write := range modbus.EventSignalWrites {
+}
+
+func indexModbusEventSignalWrites(index *Registry, writes []entity.ModbusEventSignalWrite) {
+	for _, write := range writes {
 		index.modbusEventSignalWritesBySourceID[write.Source] = append(index.modbusEventSignalWritesBySourceID[write.Source], write)
 	}
-	for _, point := range modbus.StatePoints {
+}
+
+func indexModbusStatePoints(index *Registry, points []entity.ModbusStatePoint) {
+	for _, point := range points {
 		index.modbusStatePointsByEntityID[point.Entity] = append(index.modbusStatePointsByEntityID[point.Entity], point)
 	}
-	for _, poll := range modbus.StatePolls {
+}
+
+func indexModbusStatePolls(index *Registry, polls []entity.ModbusStatePoll) {
+	for _, poll := range polls {
 		index.modbusStatePollsByCoil[modbusCoilKey{unitID: poll.UnitID, coil: poll.Coil}] = poll
 	}
 }

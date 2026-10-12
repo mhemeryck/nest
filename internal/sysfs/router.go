@@ -13,16 +13,21 @@ type workerSet struct {
 }
 
 func startWorkers(ctx context.Context, configs []WorkerConfig, commands <-chan Command, states chan<- StateChange) <-chan struct{} {
-	doneCh := make(chan struct{})
-
 	workers := startConfiguredWorkers(ctx, configs, states)
+	startCommandRouter(ctx, workers, commands, states)
+	return signalWorkerCompletion(workers)
+}
 
+func startCommandRouter(ctx context.Context, workers *workerSet, commands <-chan Command, states chan<- StateChange) {
 	workers.wg.Add(1)
 	go func() {
 		defer workers.wg.Done()
 		routeCommands(ctx, commands, workers.routes, states)
 	}()
+}
 
+func signalWorkerCompletion(workers *workerSet) <-chan struct{} {
+	doneCh := make(chan struct{})
 	go func() {
 		workers.wg.Wait()
 		close(doneCh)
@@ -37,20 +42,23 @@ func startConfiguredWorkers(ctx context.Context, configs []WorkerConfig, states 
 	}
 
 	for _, cfg := range configs {
-		commandCh := make(chan Command, 32)
-		registerWorkerDevices(workers.routes, cfg.Devices, commandCh)
-
-		workers.wg.Add(1)
-		go func(cfg WorkerConfig, commandCh <-chan Command) {
-			defer workers.wg.Done()
-			if !publishInitialRelayStates(ctx, cfg.Devices, states) {
-				return
-			}
-			pollWorker(ctx, cfg, commandCh, states)
-		}(cfg, commandCh)
+		startConfiguredWorker(ctx, workers, cfg, states)
 	}
 
 	return workers
+}
+
+func startConfiguredWorker(ctx context.Context, workers *workerSet, cfg WorkerConfig, states chan<- StateChange) {
+	commandCh := make(chan Command, 32)
+	registerWorkerDevices(workers.routes, cfg.Devices, commandCh)
+	workers.wg.Add(1)
+	go func() {
+		defer workers.wg.Done()
+		if !publishInitialRelayStates(ctx, cfg.Devices, states) {
+			return
+		}
+		pollWorker(ctx, cfg, commandCh, states)
+	}()
 }
 
 func registerWorkerDevices(routes map[string]chan Command, devices []*Device, commandCh chan Command) {

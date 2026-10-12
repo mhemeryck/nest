@@ -24,13 +24,17 @@ const (
 func Run(ctx context.Context, cfg entity.MQTT, sourceEventTopics []string, commands <-chan Command, events chan<- Event, done chan<- struct{}) {
 	defer close(done)
 
-	topics := NewTopics(cfg.TopicPrefix, cfg.UnitID)
-	client := paho.NewClient(clientOptions(ctx, cfg, topics, sourceEventTopics, events))
+	client := newRuntimeClient(ctx, cfg, sourceEventTopics, events)
 	if !connectClient(ctx, client, cfg, events) {
 		return
 	}
 	defer disconnectClient(ctx, client, cfg, events)
 	processCommands(ctx, client, commands, events)
+}
+
+func newRuntimeClient(ctx context.Context, cfg entity.MQTT, sourceEventTopics []string, events chan<- Event) paho.Client {
+	topics := NewTopics(cfg.TopicPrefix, cfg.UnitID)
+	return paho.NewClient(clientOptions(ctx, cfg, topics, sourceEventTopics, events))
 }
 
 func connectClient(ctx context.Context, client paho.Client, cfg entity.MQTT, events chan<- Event) bool {
@@ -87,26 +91,45 @@ func publish(ctx context.Context, client client, events chan<- Event, message Pu
 
 func clientOptions(ctx context.Context, cfg entity.MQTT, topics Topics, sourceEventTopics []string, events chan<- Event) *paho.ClientOptions {
 	options := paho.NewClientOptions()
+	configureBrokerClient(options, cfg)
+	configureClientWill(options, topics)
+	configureClientSubscriptions(ctx, options, cfg, topics, sourceEventTopics, events)
+	configureClientAuthentication(options, cfg)
+	configureClientDelivery(options)
+	return options
+}
+
+func configureBrokerClient(options *paho.ClientOptions, cfg entity.MQTT) {
 	options.AddBroker(brokerURL(cfg))
 	options.SetClientID(cfg.ClientID)
+}
+
+func configureClientWill(options *paho.ClientOptions, topics Topics) {
 	offline := AvailabilityMessage(topics, AvailabilityOffline)
 	options.SetWill(offline.Topic, string(offline.Payload), offline.QoS, offline.Retain)
+}
+
+func configureClientSubscriptions(ctx context.Context, options *paho.ClientOptions, cfg entity.MQTT, topics Topics, sourceEventTopics []string, events chan<- Event) {
 	options.SetOnConnectHandler(func(client paho.Client) {
 		subscribeRuntimeTopics(ctx, client, topics, sourceEventTopics, events)
 		slog.Info("mqtt connected", "broker", brokerURL(cfg), "client_id", cfg.ClientID)
 		publishEvent(ctx, events, ConnectedEvent())
 	})
+}
+
+func configureClientAuthentication(options *paho.ClientOptions, cfg entity.MQTT) {
 	if cfg.Username != "" {
 		options.SetUsername(cfg.Username)
 	}
 	if cfg.Password != "" {
 		options.SetPassword(cfg.Password)
 	}
+}
+
+func configureClientDelivery(options *paho.ClientOptions) {
 	options.SetAutoReconnect(true)
 	options.SetConnectRetry(true)
 	options.SetOrderMatters(true)
-
-	return options
 }
 
 func subscribeRuntimeTopics(ctx context.Context, client client, topics Topics, sourceEventTopics []string, events chan<- Event) {

@@ -312,7 +312,7 @@ Keep ordering, decision rules, and failure handling visible in callers.
 | `completeCoverStop`                 | Resolve final state, clear movement bookkeeping, emit stopped observation              |
 | `processCoverRuntimeDeadlines`      | Handle output timeout, complete travel, retry switch-off, report progress              |
 | `beginCoverShutdown`                | Shut down each cover with its current stop reason                                      |
-| `processCoverLoop`                  | Prioritize shutdown and deadlines, dispatch queued events, receive input               |
+| `processCoverLoop`                  | Prepare input and timer, run active processing, drain shutdown                         |
 | `waitForShutdown`                   | Observe termination, cancel actors, finish bounded actor shutdown                      |
 | `Restore`                           | Read snapshot, check session trust, restore matching cover records                     |
 | `writeSnapshot`                     | Encode snapshot, prepare temporary file, write and sync, replace, sync directory       |
@@ -365,7 +365,73 @@ Reviewed production functions in this pass:
 - Deadlines: `processCoverRuntimeDeadlines`, `handleCoverOutputTimeout`, `processMovingCoverDeadlines`
 - Shutdown: `shutDownCover`, `resolveCoverShutdownReason`
 
-### Function coverage
+### Orchestration review
+
+The orchestration standard applies to the full implementation, including helpers from earlier review passes.
+Each behavioral explanation step appears as a named call in its orchestration function.
+Callers retain ordering, branching, continuation, and exit rules.
+Helpers own setup, scheduling, bookkeeping, and integration details.
+
+The cover loop owns its semantic input channel and closed-input state.
+Waiting records input closure and disables further reads from that channel.
+`processCoverLoop` runs active processing, then a separate shutdown drain.
+Both stages share deadline processing, single-event dispatch, the queue, and the timer.
+Active processing checks shutdown between events and ends after input closure and queued work.
+Waiting wakes on shutdown; the active loop condition owns the shutdown exit rule.
+The shutdown drain begins switch-off once and checks its bound before processing each event.
+Shutdown completion still requires an empty queue and confirmed outputs.
+Input closure initiates shutdown once without resetting its deadline.
+
+| Orchestration                  | Named responsibilities                                                                                    |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| Controller `Run`               | Start normalization, run cover loop, stop normalization                                                   |
+| `runCoverLoop`                 | Resolve feedback lifetime, start handoffs, construct dispatch targets, initialize covers, process loop    |
+| `processCoverLoop`             | Prepare input and timer, run active processing, drain shutdown                                            |
+| `runActiveCoverLoop`           | Check shutdown, process next work, exit on closed input, wait for work                                    |
+| `drainCoverLoopShutdown`       | Begin switch-off, enforce shutdown bound, process next work, finish confirmed shutdown, wait for feedback |
+| `processNextCoverLoopWork`     | Queue due deadlines, dispatch one event                                                                   |
+| `dispatchNextCoverLoopEvent`   | Dequeue event, reject stale output command, dispatch current event                                        |
+| `finishCoverLoopShutdown`      | Record stopped session, flush persistence within the shutdown bound                                       |
+| `prepareCoverMovement`         | Record movement intent, emit start intent, prepare both outputs                                           |
+| `completeCoverActivation`      | Record activation, schedule movement, emit observation                                                    |
+| `commandBothCoverOutputsOff`   | Begin correlated switch-off attempt, command open relay OFF, command close relay OFF                      |
+| `faultCover`                   | Record fault, clear movement deadlines, begin recovery, emit observation                                  |
+| Dispatch handoffs              | Allocate handoffs, start workers, flush available work, cancel and wait                                   |
+| MQTT startup                   | Build startup commands, admit commands in order                                                           |
+| MQTT publication               | Check availability, select queued or direct admission, report rejection                                   |
+| Handoff loops                  | Flush pending commands, schedule retries, wait for wake-up or cancellation                                |
+| MQTT client setup              | Configure identity, offline will, subscriptions, authentication, delivery policy                          |
+| Runtime `Run`                  | Load registry, construct actors, start actors, start controller, wait for shutdown                        |
+| Required actor termination     | Record failure, request controller shutdown                                                               |
+| Sysfs worker startup           | Start configured workers, start command router, signal completion                                         |
+| Sysfs command handling         | Execute and timestamp command, publish observation, publish completion                                    |
+| Persistence admission          | Copy mutable position, admit command, invalidate session on rejection                                     |
+| Persistence writing            | Encode snapshot, prepare file, write and sync, replace snapshot, sync directory                           |
+| Configuration projection       | Select unit, validate global routes, project configuration, classify bindings                             |
+| Cover relay validation         | Validate required reference, validate known relay, claim ownership                                        |
+| Modbus conversion and indexing | Handle event signals, signal writes, state points, and state polls separately                             |
+
+Current inventory: 330 new or modified production functions against the master merge base, including extracted helpers.
+Review classifies each function as named orchestration or a cohesive leaf responsibility.
+The initial coverage table below records the earlier review checkpoint.
+
+Retained leaf responsibilities:
+
+- Boundary parsing, payload mapping, and small constructors
+- Cohesive state transitions and correlated-operation registration
+- Snapshot trust checks, position estimates, and earliest-deadline calculation
+- Capacity checks and queue mutations under the owning lock
+- Individual hardware reads, writes, observations, and completion reports
+- Channel-selection loops that route inputs to named handlers
+- Error formatting and logging at the responsible integration boundary
+
+Preserved sequencing includes completion timestamps before reporting, FIFO before coalesced state, and controller shutdown before actor cancellation.
+`TestClosedSemanticInputStartsBoundedShutdown` verifies input closure starts one switch-off attempt and exits within the shutdown bound.
+`TestCoverLoopShutdownPreemptsQueuedActivationAndRequests` verifies queued movement cannot precede shutdown OFF commands.
+The test also verifies feedback confirms switch-off and derived observations drain before exit.
+Existing tests verify event-traffic deadline priority, delayed results, relay exclusivity, recovery, persistence, and actor termination.
+
+### Initial function coverage
 
 Scope: 132 new or modified production functions in `origin/master...c68a1fa`.
 Inventory uses Go syntax trees and changed-line ranges, excluding test files.
@@ -461,6 +527,8 @@ Review follow-up checks pass: formatting, lint, vet, race tests, builds, and str
 Structural cleanup checks pass: package tests, formatting, lint, vet, race tests, builds, strict OpenSpec validation, and cover fixture validation.
 The structural review retains event ordering, output correlation, actor lifetimes, and handoff lock boundaries.
 FSM branch checks pass: controller and runtime scenarios, formatting, lint, vet, race tests, builds, and strict OpenSpec validation.
+Orchestration checks pass: closed-input shutdown, package scenarios, formatting, lint, vet, race tests, builds, strict validation, and fixture validation.
+Lifecycle hierarchy checks pass: queued-movement shutdown priority, feedback confirmation, input closure, bounded shutdown, and the required project checks.
 Shutdown tests verify failed OFF writes remain errors after actor termination.
 Command ownership tests verify index cleanup across repeated timeouts and completed runs.
 

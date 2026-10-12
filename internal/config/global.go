@@ -92,13 +92,9 @@ type UnitCoverConfig struct {
 }
 
 func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
-	if err := validateID("unit_id", unitID); err != nil {
+	unit, err := selectUnitConfig(global, unitID)
+	if err != nil {
 		return nil, err
-	}
-
-	unit, ok := global.Units[unitID]
-	if !ok {
-		return nil, fmt.Errorf("unit_id: unknown unit %q", unitID)
 	}
 	if err := errors.Join(validateGlobalBindings(global), validateGlobalModbus(global)); err != nil {
 		return nil, err
@@ -110,6 +106,17 @@ func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
 	}
 	projectUnitBindings(local, global.Bindings, unitID)
 	return local, nil
+}
+
+func selectUnitConfig(global *GlobalRoot, unitID string) (UnitConfig, error) {
+	if err := validateID("unit_id", unitID); err != nil {
+		return UnitConfig{}, err
+	}
+	unit, ok := global.Units[unitID]
+	if !ok {
+		return UnitConfig{}, fmt.Errorf("unit_id: unknown unit %q", unitID)
+	}
+	return unit, nil
 }
 
 func projectUnitConfig(global *GlobalRoot, unitID string, unit UnitConfig) (*Root, error) {

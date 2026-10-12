@@ -11,6 +11,50 @@ import (
 	"github.com/mhemeryck/nest/internal/registry"
 )
 
+type runtimeActors struct {
+	sysfs       sysfsActor
+	mqtt        mqttActor
+	modbus      modbusActor
+	persistence persistenceActor
+}
+
+func newRuntimeActors(reg *registry.Registry) (runtimeActors, error) {
+	mqttActor := newMQTTActor(reg)
+	sysfsActor, err := newSysfsActor(reg)
+	if err != nil {
+		return runtimeActors{}, err
+	}
+	return runtimeActors{
+		mqtt: mqttActor, sysfs: sysfsActor,
+		modbus: newModbusActor(reg), persistence: newPersistenceActor(reg),
+	}, nil
+}
+
+func startRuntimeActors(ctx context.Context, actors runtimeActors) (context.Context, context.CancelFunc) {
+	actorContext, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	startMQTTActor(actorContext, actors.mqtt)
+	startSysfsActor(actorContext, actors.sysfs)
+	startModbusActor(actorContext, actors.modbus)
+	startPersistenceActor(actorContext, actors.persistence)
+	return actorContext, cancel
+}
+
+func startRuntimeController(ctx, actorContext context.Context, reg *registry.Registry, actors runtimeActors) <-chan error {
+	options := controller.RuntimeOptions{
+		Persistence: actors.persistence.store, RestoredPositions: actors.persistence.positions,
+		FeedbackContext: actorContext,
+	}
+	return startController(ctx, reg, actors.sysfs, actors.mqtt, actors.modbus, options)
+}
+
+func waitForRuntimeShutdown(ctx context.Context, cancelController, cancelActors context.CancelFunc, controllerDone <-chan error, reg *registry.Registry, actors runtimeActors) error {
+	settings := shutdownOptions{
+		cancelController: cancelController, period: registry.CoverControl(reg).ShutdownPeriod,
+		persistence: actors.persistence,
+	}
+	return waitForShutdown(ctx, cancelActors, controllerDone, actors.sysfs, actors.mqtt, actors.modbus, settings)
+}
+
 func startController(
 	ctx context.Context,
 	reg *registry.Registry,
@@ -48,11 +92,7 @@ func waitForShutdown(
 	modbusActor modbusActor,
 	settings shutdownOptions,
 ) error {
-	requestShutdown := cancel
-	if settings.cancelController != nil {
-		requestShutdown = settings.cancelController
-	}
-	state := &shutdownState{requestController: requestShutdown}
+	state := newShutdownState(cancel, settings)
 	observeRuntimeTermination(ctx, state, controllerDone, sysfsActor, mqttActor, modbusActor, settings)
 	if !state.actorsCancelled {
 		cancel()
@@ -68,6 +108,14 @@ type shutdownState struct {
 	err               error
 }
 
+func newShutdownState(cancelActors context.CancelFunc, settings shutdownOptions) *shutdownState {
+	requestShutdown := cancelActors
+	if settings.cancelController != nil {
+		requestShutdown = settings.cancelController
+	}
+	return &shutdownState{requestController: requestShutdown}
+}
+
 func observeRuntimeTermination(ctx context.Context, state *shutdownState, controllerDone <-chan error, sysfsActor sysfsActor, mqttActor mqttActor, modbusActor modbusActor, settings shutdownOptions) {
 	shutdownSignal := ctx.Done()
 	sysfsDone, mqttDone, modbusDone := sysfsActor.done, mqttActor.done, modbusActor.done
@@ -75,9 +123,7 @@ func observeRuntimeTermination(ctx context.Context, state *shutdownState, contro
 		select {
 		case <-shutdownSignal:
 			shutdownSignal = nil
-			if state.started.IsZero() {
-				state.started = time.Now()
-			}
+			recordShutdownStart(state)
 		case err := <-controllerDone:
 			state.err = errors.Join(state.err, err)
 			return
@@ -86,9 +132,7 @@ func observeRuntimeTermination(ctx context.Context, state *shutdownState, contro
 			handleRequiredActorTermination(ctx, state, "sysfs", settings)
 		case <-mqttDone:
 			mqttDone = nil
-			if ctx.Err() == nil && !state.requested {
-				slog.Error("mqtt actor stopped; local control continues")
-			}
+			handleMQTTActorTermination(ctx, state)
 		case <-modbusDone:
 			modbusDone = nil
 			handleRequiredActorTermination(ctx, state, "modbus", settings)
@@ -97,12 +141,18 @@ func observeRuntimeTermination(ctx context.Context, state *shutdownState, contro
 }
 
 func handleRequiredActorTermination(ctx context.Context, state *shutdownState, actor string, settings shutdownOptions) {
+	recordRequiredActorFailure(ctx, state, actor)
+	requestControllerShutdown(state, settings)
+}
+
+func recordRequiredActorFailure(ctx context.Context, state *shutdownState, actor string) {
 	if ctx.Err() == nil && !state.requested {
 		state.err = fmt.Errorf("%s actor stopped", actor)
 	}
-	if state.started.IsZero() {
-		state.started = time.Now()
-	}
+}
+
+func requestControllerShutdown(state *shutdownState, settings shutdownOptions) {
+	recordShutdownStart(state)
 	if !state.requested {
 		state.requested = true
 		state.requestController()
@@ -110,23 +160,37 @@ func handleRequiredActorTermination(ctx context.Context, state *shutdownState, a
 	state.actorsCancelled = settings.cancelController == nil
 }
 
+func recordShutdownStart(state *shutdownState) {
+	if state.started.IsZero() {
+		state.started = time.Now()
+	}
+}
+
+func handleMQTTActorTermination(ctx context.Context, state *shutdownState) {
+	if ctx.Err() == nil && !state.requested {
+		slog.Error("mqtt actor stopped; local control continues")
+	}
+}
+
 func finishActorShutdown(ctx context.Context, state *shutdownState, sysfsActor sysfsActor, mqttActor mqttActor, modbusActor modbusActor, settings shutdownOptions) error {
 	if settings.period > 0 {
-		if state.started.IsZero() {
-			state.started = time.Now()
-		}
-		waitContext, cancelWait := context.WithDeadline(context.WithoutCancel(ctx), state.started.Add(settings.period))
-		defer cancelWait()
-		if !waitForActorsWithin(waitContext, sysfsActor, mqttActor, modbusActor, settings.persistence) {
-			state.err = errors.Join(state.err, fmt.Errorf("actor shutdown incomplete at deadline"))
-		}
-		return state.err
+		return finishBoundedActorShutdown(ctx, state, sysfsActor, mqttActor, modbusActor, settings)
 	}
 
 	waitForSysfsActor(sysfsActor)
 	waitForMQTTActor(mqttActor)
 	waitForModbusActor(modbusActor)
 
+	return state.err
+}
+
+func finishBoundedActorShutdown(ctx context.Context, state *shutdownState, sysfsActor sysfsActor, mqttActor mqttActor, modbusActor modbusActor, settings shutdownOptions) error {
+	recordShutdownStart(state)
+	waitContext, cancelWait := context.WithDeadline(context.WithoutCancel(ctx), state.started.Add(settings.period))
+	defer cancelWait()
+	if !waitForActorsWithin(waitContext, sysfsActor, mqttActor, modbusActor, settings.persistence) {
+		state.err = errors.Join(state.err, fmt.Errorf("actor shutdown incomplete at deadline"))
+	}
 	return state.err
 }
 

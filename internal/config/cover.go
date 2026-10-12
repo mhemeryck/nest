@@ -9,10 +9,7 @@ import (
 
 func validateCovers(covers []CoverConfig, lights []LightConfig, knownRelayIDs map[string]struct{}) (map[string]struct{}, error) {
 	knownCoverIDs := make(map[string]struct{}, len(covers))
-	owners := make(map[string]string)
-	for _, light := range lights {
-		owners[light.Relay] = "light " + light.ID
-	}
+	owners := lightRelayOwners(lights)
 	var errs error
 	for i, cover := range covers {
 		prefix := fmt.Sprintf("covers[%d]", i)
@@ -23,6 +20,14 @@ func validateCovers(covers []CoverConfig, lights []LightConfig, knownRelayIDs ma
 		)
 	}
 	return knownCoverIDs, errs
+}
+
+func lightRelayOwners(lights []LightConfig) map[string]string {
+	owners := make(map[string]string)
+	for _, light := range lights {
+		owners[light.Relay] = "light " + light.ID
+	}
+	return owners
 }
 
 func validateCoverIdentity(prefix string, cover CoverConfig, knownCoverIDs map[string]struct{}) error {
@@ -38,16 +43,22 @@ func validateCoverRelay(field, relayID, coverID string, knownRelayIDs map[string
 	if err := validateRequiredField(field, relayID); err != nil {
 		return err
 	}
-	var errs error
+	return errors.Join(validateKnownCoverRelay(field, relayID, knownRelayIDs), claimCoverRelay(field, relayID, coverID, owners))
+}
+
+func validateKnownCoverRelay(field, relayID string, knownRelayIDs map[string]struct{}) error {
 	if _, exists := knownRelayIDs[relayID]; !exists {
-		errs = errors.Join(errs, fmt.Errorf("%s: unknown relay %q", field, relayID))
+		return fmt.Errorf("%s: unknown relay %q", field, relayID)
 	}
+	return nil
+}
+
+func claimCoverRelay(field, relayID, coverID string, owners map[string]string) error {
 	if owner, exists := owners[relayID]; exists {
-		errs = errors.Join(errs, fmt.Errorf("%s: relay %q already owned by %s", field, relayID, owner))
-	} else {
-		owners[relayID] = "cover " + coverID
+		return fmt.Errorf("%s: relay %q already owned by %s", field, relayID, owner)
 	}
-	return errs
+	owners[relayID] = "cover " + coverID
+	return nil
 }
 
 func bindingTargetType(target string) entity.Type {

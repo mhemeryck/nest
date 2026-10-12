@@ -33,21 +33,28 @@ func Run(
 	modbusEvents <-chan modbus.Event,
 	runtimeOptions RuntimeOptions,
 ) error {
-	feedbackContext := runtimeOptions.FeedbackContext
-	if feedbackContext == nil {
-		feedbackContext = context.WithoutCancel(ctx)
+	runtimeOptions, semanticEvents, stopNormalizer := startEventNormalizer(ctx, reg, mqttTopics, stateChanges, mqttEvents, modbusEvents, runtimeOptions)
+	defer stopNormalizer()
+	return runCoverLoop(ctx, reg, sysfsCommands, mqttCommands, modbusCommands, mqttTopics, semanticEvents, runtimeOptions)
+}
+
+func coverFeedbackContext(ctx context.Context, options RuntimeOptions) context.Context {
+	if options.FeedbackContext != nil {
+		return options.FeedbackContext
 	}
-	normalizerContext, cancelNormalizer := context.WithCancel(feedbackContext)
-	defer cancelNormalizer()
-	runtimeOptions.FeedbackContext = normalizerContext
+	return context.WithoutCancel(ctx)
+}
+
+func startEventNormalizer(ctx context.Context, reg *registry.Registry, topics mqtt.Topics, states <-chan sysfs.StateChange, mqttEvents <-chan mqtt.Event, modbusEvents <-chan modbus.Event, options RuntimeOptions) (RuntimeOptions, <-chan event.Event, func()) {
+	normalizerContext, cancel := context.WithCancel(coverFeedbackContext(ctx, options))
 	semanticEvents := make(chan event.Event, 32)
 	normalizerDone := make(chan struct{})
-	go normalizeEvents(normalizerContext, reg, mqttTopics, stateChanges, mqttEvents, modbusEvents, semanticEvents, normalizerDone)
-
-	err := runCoverLoop(ctx, reg, sysfsCommands, mqttCommands, modbusCommands, mqttTopics, semanticEvents, runtimeOptions)
-	cancelNormalizer()
-	<-normalizerDone
-	return err
+	go normalizeEvents(normalizerContext, reg, topics, states, mqttEvents, modbusEvents, semanticEvents, normalizerDone)
+	options.FeedbackContext = normalizerContext
+	return options, semanticEvents, func() {
+		cancel()
+		<-normalizerDone
+	}
 }
 
 func normalizeEvents(
@@ -78,21 +85,29 @@ func normalizeEvents(
 				continue
 			}
 
-			semanticEvent, handled := semanticEventFromMQTTEvent(index, mqttTopics, mqttEvent)
-			if handled {
-				publishSemanticEvent(ctx, semanticEvents, semanticEvent)
-			}
+			normalizeMQTTEvent(ctx, index, mqttTopics, semanticEvents, mqttEvent)
 		case modbusEvent, ok := <-modbusEvents:
 			if !ok {
 				modbusEvents = nil
 				continue
 			}
 
-			semanticEvent, handled := semanticEventFromModbusEvent(index, modbusEvent)
-			if handled {
-				publishSemanticEvent(ctx, semanticEvents, semanticEvent)
-			}
+			normalizeModbusEvent(ctx, index, semanticEvents, modbusEvent)
 		}
+	}
+}
+
+func normalizeMQTTEvent(ctx context.Context, reg *registry.Registry, topics mqtt.Topics, events chan<- event.Event, incoming mqtt.Event) {
+	semanticEvent, handled := semanticEventFromMQTTEvent(reg, topics, incoming)
+	if handled {
+		publishSemanticEvent(ctx, events, semanticEvent)
+	}
+}
+
+func normalizeModbusEvent(ctx context.Context, reg *registry.Registry, events chan<- event.Event, incoming modbus.Event) {
+	semanticEvent, handled := semanticEventFromModbusEvent(reg, incoming)
+	if handled {
+		publishSemanticEvent(ctx, events, semanticEvent)
 	}
 }
 

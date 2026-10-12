@@ -22,11 +22,7 @@ func handleLightToggle(ctx context.Context, index *registry.Registry, sysfsComma
 		return
 	}
 
-	if ctx.Err() != nil {
-		return
-	}
-	if failure := sysfs.AdmitCommand(sysfsCommands, cmd); failure != nil {
-		slog.Error("light command rejected", "light_id", light.ID, "error", failure.Error)
+	if !admitLightCommand(ctx, sysfsCommands, light.ID, cmd) {
 		return
 	}
 
@@ -53,11 +49,7 @@ func handleLightSet(ctx context.Context, index *registry.Registry, sysfsCommands
 		return
 	}
 
-	if ctx.Err() != nil {
-		return
-	}
-	if failure := sysfs.AdmitCommand(sysfsCommands, cmd); failure != nil {
-		slog.Error("light command rejected", "light_id", light.ID, "error", failure.Error)
+	if !admitLightCommand(ctx, sysfsCommands, light.ID, cmd) {
 		return
 	}
 
@@ -72,6 +64,17 @@ func handleLightSet(ctx context.Context, index *registry.Registry, sysfsCommands
 		"device_id",
 		cmd.DeviceID,
 	)
+}
+
+func admitLightCommand(ctx context.Context, commands chan<- sysfs.Command, lightID entity.LightID, command sysfs.Command) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+	if failure := sysfs.AdmitCommand(commands, command); failure != nil {
+		slog.Error("light command rejected", "light_id", lightID, "error", failure.Error)
+		return false
+	}
+	return true
 }
 
 func relayToggleCommandForLight(index *registry.Registry, light entity.Light) (sysfs.Command, bool) {

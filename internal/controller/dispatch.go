@@ -30,23 +30,44 @@ type dispatchTargets struct {
 	handoffs       dispatchHandoffs
 }
 
+func newDispatchTargets(reg *registry.Registry, sysfsCommands chan<- sysfs.Command, mqttCommands chan<- mqtt.Command, modbusCommands chan<- modbus.Command, topics mqtt.Topics, store *persistence.Store, handoffs dispatchHandoffs) dispatchTargets {
+	return dispatchTargets{
+		reg: reg, sysfsCommands: sysfsCommands, mqttCommands: mqttCommands,
+		modbusCommands: modbusCommands, mqttTopics: topics,
+		persistence: store, handoffs: handoffs,
+	}
+}
+
 func startDispatchHandoffs(ctx context.Context, reg *registry.Registry, mqttCommands chan<- mqtt.Command, modbusCommands chan<- modbus.Command) (dispatchHandoffs, func()) {
 	handoffContext, cancel := context.WithCancel(ctx)
-	handoffs := dispatchHandoffs{
+	handoffs := newDispatchHandoffs(reg)
+	mqttDone, modbusDone := startDispatchHandoffWorkers(handoffContext, handoffs, mqttCommands, modbusCommands)
+	return handoffs, func() {
+		stopDispatchHandoffs(handoffs, mqttCommands, modbusCommands, mqttDone, modbusDone, cancel)
+	}
+}
+
+func newDispatchHandoffs(reg *registry.Registry) dispatchHandoffs {
+	return dispatchHandoffs{
 		modbus: modbus.NewHandoff(max(32, len(registry.Modbus(reg).StatePoints))),
 		mqtt:   mqtt.NewHandoff(mqttHandoffCapacity(reg)),
 	}
+}
+
+func startDispatchHandoffWorkers(ctx context.Context, handoffs dispatchHandoffs, mqttCommands chan<- mqtt.Command, modbusCommands chan<- modbus.Command) (<-chan struct{}, <-chan struct{}) {
 	modbusDone := make(chan struct{})
 	mqttDone := make(chan struct{})
-	go modbus.RunHandoff(handoffContext, handoffs.modbus, modbusCommands, modbusDone)
-	go mqtt.RunHandoff(handoffContext, handoffs.mqtt, mqttCommands, mqttDone)
-	return handoffs, func() {
-		mqtt.FlushAvailable(handoffs.mqtt, mqttCommands)
-		cancel()
-		<-mqttDone
-		modbus.FlushAvailable(handoffs.modbus, modbusCommands)
-		<-modbusDone
-	}
+	go modbus.RunHandoff(ctx, handoffs.modbus, modbusCommands, modbusDone)
+	go mqtt.RunHandoff(ctx, handoffs.mqtt, mqttCommands, mqttDone)
+	return mqttDone, modbusDone
+}
+
+func stopDispatchHandoffs(handoffs dispatchHandoffs, mqttCommands chan<- mqtt.Command, modbusCommands chan<- modbus.Command, mqttDone, modbusDone <-chan struct{}, cancel context.CancelFunc) {
+	mqtt.FlushAvailable(handoffs.mqtt, mqttCommands)
+	cancel()
+	<-mqttDone
+	modbus.FlushAvailable(handoffs.modbus, modbusCommands)
+	<-modbusDone
 }
 
 func popEvent(events []event.Event) (event.Event, []event.Event, bool) {
@@ -82,19 +103,25 @@ func dispatchCoverOutputCommand(ctx context.Context, reg *registry.Registry, com
 	if ctx.Err() != nil {
 		return nil
 	}
-	relay, found := registry.RelayByID(reg, output.RelayID)
-	if !found {
+	command, err := coverSysfsCommand(reg, output)
+	if err != nil {
 		return []event.Event{{Kind: event.OutputResultKind, OutputResult: &event.OutputResult{
-			CommandID: output.CommandID, Action: output.Action, CompletedAt: time.Now(), Error: fmt.Errorf("unknown cover relay %q", output.RelayID),
+			CommandID: output.CommandID, Action: output.Action, CompletedAt: time.Now(), Error: err,
 		}}}
 	}
-	command := sysfs.Command{ID: output.CommandID, DeviceID: string(relay.SysfsDevice), Kind: sysfs.CommandKind(output.Action)}
 	if failure := sysfs.AdmitCommand(commands, command); failure != nil {
-		return []event.Event{{Kind: event.OutputResultKind, OutputResult: &event.OutputResult{
-			CommandID: command.ID, SysfsDevice: relay.SysfsDevice, Action: output.Action, CompletedAt: failure.CompletedAt, Error: failure.Error,
-		}}}
+		events, _ := semanticEventsFromCompletion(failure)
+		return events
 	}
 	return nil
+}
+
+func coverSysfsCommand(reg *registry.Registry, output event.OutputCommand) (sysfs.Command, error) {
+	relay, found := registry.RelayByID(reg, output.RelayID)
+	if !found {
+		return sysfs.Command{}, fmt.Errorf("unknown cover relay %q", output.RelayID)
+	}
+	return sysfs.Command{ID: output.CommandID, DeviceID: string(relay.SysfsDevice), Kind: sysfs.CommandKind(output.Action)}, nil
 }
 
 func dispatchSysfsCommand(ctx context.Context, index *registry.Registry, commands chan<- sysfs.Command, busEvent event.Event) {
@@ -158,21 +185,29 @@ func submitModbusCommand(ctx context.Context, commands chan<- modbus.Command, co
 	if ctx.Err() != nil {
 		return nil
 	}
-	errorMessage := ""
+	errorMessage := admitModbusCommand(commands, command, handoff)
+	if errorMessage == "" {
+		return nil
+	}
+	return reportModbusAdmissionFailure(command, errorMessage)
+}
+
+func admitModbusCommand(commands chan<- modbus.Command, command modbus.Command, handoff *modbus.Handoff) string {
 	if handoff != nil {
 		if failure := modbus.QueueCommand(handoff, command); failure != nil {
-			errorMessage = failure.Error
+			return failure.Error
 		}
 	} else {
 		select {
 		case commands <- command:
 		default:
-			errorMessage = "command admission exhausted"
+			return "command admission exhausted"
 		}
 	}
-	if errorMessage == "" {
-		return nil
-	}
+	return ""
+}
+
+func reportModbusAdmissionFailure(command modbus.Command, errorMessage string) []event.Event {
 	slog.Error("modbus integration failure", "unit_id", command.UnitID, "coil", command.Coil, "error", errorMessage)
 	return []event.Event{{Kind: event.IntegrationFailureKind, IntegrationFailure: &event.IntegrationFailure{Integration: "modbus", Error: errorMessage}}}
 }

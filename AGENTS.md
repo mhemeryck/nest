@@ -36,6 +36,10 @@
 - Example: `receiveCommand`, `validateCommand`, `persistCommand`
 - Behavior- and direction-oriented names: `handleMasterToSlaveCommand`, `pollSlaveStatePoints`
 - Top-level functions: visible lifecycle or responsibility sequence
+- Orchestration reads like its behavioral explanation; each responsibility appears as a named call
+- Inline orchestration: ordering, branching, continuation, and exit rules
+- Setup, scheduling, state bookkeeping, and integration details belong to cohesive helpers
+- Explain a flow, then compare explanation steps with its calls; extract unnamed responsibilities before completing the review
 - Reference: `internal/controller/dispatch.go` → `dispatchEvent`
 - Helpers own cohesive behavior and related state updates
 - Callers retain visible ordering, branching, and failure rules

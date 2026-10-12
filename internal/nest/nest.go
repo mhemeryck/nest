@@ -6,7 +6,6 @@ import (
 	"log/slog"
 
 	"github.com/mhemeryck/nest/internal/config"
-	"github.com/mhemeryck/nest/internal/controller"
 	"github.com/mhemeryck/nest/internal/registry"
 )
 
@@ -30,30 +29,17 @@ func Run(ctx context.Context, opts Options) error {
 		return nil
 	}
 
-	mqttActor := newMQTTActor(reg)
-	sysfsActor, err := newSysfsActor(reg)
+	actors, err := newRuntimeActors(reg)
 	if err != nil {
 		return err
 	}
-	modbusActor := newModbusActor(reg)
-	persistenceActor := newPersistenceActor(reg)
-	actorContext, cancelActors := context.WithCancel(context.WithoutCancel(ctx))
+	actorContext, cancelActors := startRuntimeActors(ctx, actors)
 	defer cancelActors()
-
-	startMQTTActor(actorContext, mqttActor)
-	startSysfsActor(actorContext, sysfsActor)
-	startModbusActor(actorContext, modbusActor)
-	startPersistenceActor(actorContext, persistenceActor)
-
-	controllerDone := startController(ctx, reg, sysfsActor, mqttActor, modbusActor, controller.RuntimeOptions{
-		Persistence: persistenceActor.store, RestoredPositions: persistenceActor.positions, FeedbackContext: actorContext,
-	})
+	controllerDone := startRuntimeController(ctx, actorContext, reg, actors)
 
 	slog.Info("runtime started", "message", "press Ctrl+C to exit")
 
-	err = waitForShutdown(ctx, cancelActors, controllerDone, sysfsActor, mqttActor, modbusActor, shutdownOptions{
-		cancelController: cancel, period: registry.CoverControl(reg).ShutdownPeriod, persistence: persistenceActor,
-	})
+	err = waitForRuntimeShutdown(ctx, cancel, cancelActors, controllerDone, reg, actors)
 
 	slog.Info("shutting down")
 	return err

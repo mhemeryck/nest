@@ -17,25 +17,15 @@ var (
 )
 
 func Validate(f *Root) error {
-	var errs error
-
 	knownInputIDs, inputErr := validateDigitalInputs(f.DigitalInputs)
 	knownButtonIDs, buttonErr := validatePushButtons(f.PushButtons, knownInputIDs)
 	knownRelayIDs, relayErr := validateRelays(f.Relays)
 	knownLightIDs, lightErr := validateLights(f.Lights, knownRelayIDs)
 	knownCoverIDs, coverErr := validateCovers(f.Covers, f.Lights, knownRelayIDs)
 
-	if len(f.DigitalInputs) == 0 && len(f.Relays) == 0 {
-		errs = errors.Join(errs, fmt.Errorf("at least one digital_input or relay is required"))
-	}
-	if len(f.Covers) > 0 {
-		errs = errors.Join(errs, validateRequiredField("persistence.path", f.Persistence.Path))
-	} else {
-		errs = errors.Join(errs, validateOptionalField("persistence.path", f.Persistence.Path))
-	}
-
-	errs = errors.Join(
-		errs,
+	return errors.Join(
+		validateConfiguredHardware(f),
+		validatePersistence(f.Persistence, len(f.Covers) > 0),
 		validateSysfs(f.Sysfs),
 		validateMQTT(f.MQTT),
 		validateModbus(f.Modbus),
@@ -49,8 +39,20 @@ func Validate(f *Root) error {
 		validateRemoteBindings("remote_source_bindings", f.RemoteSourceBindings),
 		validateRemoteBindings("remote_target_bindings", f.RemoteTargetBindings),
 	)
+}
 
-	return errs
+func validateConfiguredHardware(root *Root) error {
+	if len(root.DigitalInputs) == 0 && len(root.Relays) == 0 {
+		return fmt.Errorf("at least one digital_input or relay is required")
+	}
+	return nil
+}
+
+func validatePersistence(settings PersistenceConfig, required bool) error {
+	if required {
+		return validateRequiredField("persistence.path", settings.Path)
+	}
+	return validateOptionalField("persistence.path", settings.Path)
 }
 
 func validateModbus(modbus ModbusConfig) error {
@@ -421,28 +423,35 @@ func validateGlobalBindingEndpoint(global *GlobalRoot, field string, value strin
 	}
 
 	localID := parts[2]
+	if globalUnitEntityExists(unit, localID, entityType) {
+		return nil
+	}
+	return fmt.Errorf("%s: unknown %s %q", field, entityType, value)
+}
+
+func globalUnitEntityExists(unit UnitConfig, localID string, entityType entity.Type) bool {
 	switch entityType {
 	case entity.TypeButton:
 		for _, button := range unit.Entities.Buttons {
 			if button.ID == localID {
-				return nil
+				return true
 			}
 		}
 	case entity.TypeLight:
 		for _, light := range unit.Entities.Lights {
 			if light.ID == localID {
-				return nil
+				return true
 			}
 		}
 	case entity.TypeCover:
 		for _, cover := range unit.Entities.Covers {
 			if cover.ID == localID {
-				return nil
+				return true
 			}
 		}
 	}
 
-	return fmt.Errorf("%s: unknown %s %q", field, entityType, value)
+	return false
 }
 
 func validateGlobalModbus(global *GlobalRoot) error {

@@ -63,14 +63,18 @@ type Store struct {
 }
 
 func NewStore(path string, unitID string, assignments []Assignment, capacity int) *Store {
-	store := &Store{path: path, commands: make(chan Command, capacity), invalidate: make(chan struct{}, 1),
-		snapshot: Snapshot{Version: 1, UnitID: unitID, Covers: make(map[entity.CoverID]Record)},
+	return &Store{path: path, commands: make(chan Command, capacity), invalidate: make(chan struct{}, 1),
+		snapshot: initialSnapshot(unitID, assignments),
 	}
+}
+
+func initialSnapshot(unitID string, assignments []Assignment) Snapshot {
+	snapshot := Snapshot{Version: 1, UnitID: unitID, Covers: make(map[entity.CoverID]Record)}
 	for _, assignment := range assignments {
-		store.snapshot.Covers[assignment.CoverID] = Record{OpenRelay: assignment.OpenRelay, CloseRelay: assignment.CloseRelay,
+		snapshot.Covers[assignment.CoverID] = Record{OpenRelay: assignment.OpenRelay, CloseRelay: assignment.CloseRelay,
 			OpenDevice: assignment.OpenDevice, CloseDevice: assignment.CloseDevice, Unfinished: true}
 	}
-	return store
+	return snapshot
 }
 
 func Restore(store *Store) map[entity.CoverID]*float64 {
@@ -82,10 +86,14 @@ func Restore(store *Store) map[entity.CoverID]*float64 {
 		}
 		return positions
 	}
-	if saved.Version != 1 || saved.UnitID != store.snapshot.UnitID || !saved.Clean {
+	if !trustedSnapshotForUnit(saved, store.snapshot.UnitID) {
 		return positions
 	}
 	return restoreCoverPositions(store, saved)
+}
+
+func trustedSnapshotForUnit(snapshot Snapshot, unitID string) bool {
+	return snapshot.Version == 1 && snapshot.UnitID == unitID && snapshot.Clean
 }
 
 func readSnapshot(path string) (Snapshot, error) {
@@ -121,20 +129,29 @@ func trustedCoverRecord(record, expected Record) bool {
 }
 
 func QueueCommand(store *Store, command Command) error {
-	if command.Position != nil {
-		position := *command.Position
-		command.Position = &position
-	}
+	command = ownedStorageCommand(command)
 	select {
 	case store.commands <- command:
 		return nil
 	default:
-		store.untrusted.Store(true)
-		select {
-		case store.invalidate <- struct{}{}:
-		default:
-		}
+		invalidateStoredSession(store)
 		return fmt.Errorf("persistence handoff capacity exhausted")
+	}
+}
+
+func ownedStorageCommand(command Command) Command {
+	if command.Position != nil {
+		position := *command.Position
+		command.Position = &position
+	}
+	return command
+}
+
+func invalidateStoredSession(store *Store) {
+	store.untrusted.Store(true)
+	select {
+	case store.invalidate <- struct{}{}:
+	default:
 	}
 }
 
@@ -145,8 +162,7 @@ func Run(ctx context.Context, store *Store, done chan<- struct{}) {
 		case <-ctx.Done():
 			return
 		case <-store.invalidate:
-			store.snapshot.Clean = false
-			persistSnapshot(store)
+			persistUncleanSnapshot(store)
 		case command := <-store.commands:
 			handleStorageCommand(store, command)
 		}
@@ -154,15 +170,25 @@ func Run(ctx context.Context, store *Store, done chan<- struct{}) {
 }
 
 func handleStorageCommand(store *Store, command Command) {
-	if command.Kind == Flush {
-		if store.untrusted.Load() {
-			persistSnapshot(store)
-		}
-		close(command.Done)
-		return
+	switch command.Kind {
+	case Flush:
+		flushStoredCommands(store, command.Done)
+	default:
+		applyCommand(store, command)
+		persistSnapshot(store)
 	}
-	applyCommand(store, command)
+}
+
+func persistUncleanSnapshot(store *Store) {
+	store.snapshot.Clean = false
 	persistSnapshot(store)
+}
+
+func flushStoredCommands(store *Store, done chan struct{}) {
+	if store.untrusted.Load() {
+		persistSnapshot(store)
+	}
+	close(done)
 }
 
 func applyCommand(store *Store, command Command) {
@@ -204,16 +230,20 @@ func persistSnapshot(store *Store) {
 		store.snapshot.Clean = false
 	}
 	if err := writeSnapshot(store.path, store.snapshot); err != nil {
-		store.untrusted.Store(true)
-		store.snapshot.Clean = false
-		slog.Error("persistence write failed", "path", store.path, "error", err)
+		recordSnapshotWriteFailure(store, err)
 	}
 }
 
+func recordSnapshotWriteFailure(store *Store, failure error) {
+	store.untrusted.Store(true)
+	store.snapshot.Clean = false
+	slog.Error("persistence write failed", "path", store.path, "error", failure)
+}
+
 func writeSnapshot(path string, snapshot Snapshot) error {
-	data, err := json.Marshal(snapshot)
+	data, err := encodeSnapshot(snapshot)
 	if err != nil {
-		return fmt.Errorf("encode snapshot: %w", err)
+		return err
 	}
 	directory := filepath.Dir(path)
 	file, err := createSnapshotFile(directory)
@@ -224,10 +254,25 @@ func writeSnapshot(path string, snapshot Snapshot) error {
 	if err := writeAndSyncSnapshot(file, data); err != nil {
 		return err
 	}
-	if err := os.Rename(file.Name(), path); err != nil {
-		return fmt.Errorf("replace snapshot: %w", err)
+	if err := replaceSnapshotFile(file.Name(), path); err != nil {
+		return err
 	}
 	return syncSnapshotDirectory(directory)
+}
+
+func encodeSnapshot(snapshot Snapshot) ([]byte, error) {
+	data, err := json.Marshal(snapshot)
+	if err != nil {
+		return nil, fmt.Errorf("encode snapshot: %w", err)
+	}
+	return data, nil
+}
+
+func replaceSnapshotFile(temporaryPath, path string) error {
+	if err := os.Rename(temporaryPath, path); err != nil {
+		return fmt.Errorf("replace snapshot: %w", err)
+	}
+	return nil
 }
 
 func createSnapshotFile(directory string) (*os.File, error) {
