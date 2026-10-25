@@ -7,7 +7,7 @@
 - One sentence per line in Markdown prose
 - Compact scan-oriented comments, lists, and headings
 - Specs: ASD-STE100 Simplified Technical English; active voice, consistent terms, one idea per sentence
-- Format all Markdown files with dprint; run `nest-format` after edits
+- Format all Markdown files with dprint; run `devenv tasks run dev:format` after edits
 
 ## Git
 
@@ -71,7 +71,7 @@
 - Concrete scenarios before implementation; revise artifacts as new evidence emerges
 - Accepted specs in `openspec/specs/`; proposed changes in `openspec/changes/`
 - Verify implementation against scenarios before archiving
-- Run `nest-check` inside `devenv shell` before task completion
+- Run `devenv tasks run dev:check` before task completion
 - Nushell for development scripts and shell examples
 
 ## Layout

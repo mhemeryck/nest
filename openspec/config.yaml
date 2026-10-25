@@ -4,11 +4,11 @@ context: |
   Nest is a Go 1.26 home automation controller for Unipi hardware.
   Runtime integrations include sysfs, MQTT, Home Assistant discovery, and Modbus RTU.
   Follow AGENTS.md for code, architecture, testing, Git, and writing conventions.
-  Format all Markdown files with dprint; run nest-format after artifact edits.
+  Format all Markdown files with dprint; run devenv tasks run dev:format after artifact edits.
   Keep parsed configuration, domain entities, runtime registries, and integration types separate.
   Controllers own semantic behavior; actors own external protocol details.
   Local hardware control must operate independently of MQTT and Home Assistant connectivity.
-  Use the pinned devenv environment; run nest-check for lint, vet, race tests, and builds.
+  Use the pinned devenv environment; run devenv tasks run dev:check for formatting, lint, vet, race tests, and builds.
   Use testify assertions in Go tests.
   docs/ contains architecture, hardware mappings, migration context, and the implementation roadmap.
   openspec/specs/ records accepted behavior from completed changes.
@@ -30,7 +30,7 @@ rules:
     - Preserve existing package boundaries unless a concrete dependency issue requires a change.
   tasks:
     - Group tasks into small, verifiable increments.
-    - Include relevant scenario tests and nest-check before completion.
+    - Include relevant scenario tests and devenv tasks run dev:check before completion.
 
 operations:
   apply:
