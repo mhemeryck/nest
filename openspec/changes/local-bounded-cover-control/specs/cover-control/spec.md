@@ -147,10 +147,12 @@ It SHALL NOT allow a new start until switch-off succeeds.
 
 A slow or failed output operation for one cover SHALL NOT delay another cover's requests, stops, or movement deadline.
 MQTT and Modbus backpressure SHALL NOT delay local cover stops or movement deadlines.
+This independence SHALL apply while the process runs; a stuck-write timeout SHALL cause fatal process failure.
 
 #### Scenario: One cover has a blocked output
 
 - **GIVEN** an output operation for one cover is blocked
+- **AND** the write timeout has not caused fatal process failure
 - **WHEN** another cover receives a request or reaches its movement deadline
 - **THEN** the controller handles that cover without waiting for the blocked operation
 
@@ -189,25 +191,53 @@ Button readability SHALL NOT control the movement deadline or movement admission
 
 ### Requirement: Output fault containment
 
-An output-command failure or timeout SHALL block movement for the affected cover and initiate OFF recovery.
-The controller SHALL NOT treat a failed or timed-out command as confirmed OFF.
+A returned output write error SHALL block movement for the affected cover and initiate OFF recovery.
+The controller SHALL NOT treat a failed write as confirmed OFF.
+Stuck-write timeouts SHALL follow fatal failure handling rather than automatic recovery.
 
-#### Scenario: ON command fails or times out
+#### Scenario: ON write returns an error
 
 - **GIVEN** a cover starting movement
-- **WHEN** its ON command fails or exceeds the output-command timeout
+- **WHEN** its ON write returns an error
 - **THEN** the controller cancels movement intent and attempts to switch both outputs OFF
 - **AND** it blocks new movement until both outputs are confirmed OFF
 
-#### Scenario: OFF command fails or times out
+#### Scenario: OFF write returns an error
 
 - **GIVEN** a cover switching outputs OFF
-- **WHEN** an OFF command fails or exceeds the output-command timeout
+- **WHEN** an OFF write returns an error
 - **THEN** the controller keeps movement blocked and continues OFF recovery
+
+### Requirement: Fatal stuck-write handling
+
+An in-progress sysfs write that exceeds the configured output-command timeout SHALL cause fatal process failure.
+The process SHALL NOT recover from that timeout or start replacement writes.
+Fatal failure SHALL NOT imply confirmed OFF.
+
+#### Scenario: ON write remains blocked
+
+- **GIVEN** an ON write has started but has not returned
+- **WHEN** stuck-write supervision detects that the write exceeds its timeout
+- **THEN** the process fails fatally instead of entering per-cover timeout recovery
+- **AND** no replacement worker or write attempts to bypass the blocked write
+- **AND** the process does not claim the output is OFF
+
+#### Scenario: OFF retry remains blocked
+
+- **GIVEN** an OFF retry has started but has not returned
+- **WHEN** stuck-write supervision detects that the write exceeds its timeout
+- **THEN** the process fails fatally rather than continuing OFF retries
+
+#### Scenario: Restart after fatal failure
+
+- **GIVEN** the process previously failed during a write
+- **WHEN** a new process starts
+- **THEN** startup confirms both outputs OFF before allowing movement
+- **AND** it does not infer safe outputs from the previous process exit
 
 ### Requirement: Automatic OFF recovery
 
-The executor SHALL retry failed OFF writes at a fixed interval until OFF succeeds or execution stops during bounded shutdown.
+The executor SHALL retry OFF writes that return errors at a fixed interval until OFF succeeds or execution stops.
 It SHALL NOT accumulate retries while an earlier OFF write remains pending.
 Recovery SHALL NOT retry movement commands or resume interrupted movement.
 After confirmed OFF, the controller SHALL allow fresh movement requests without an explicit reset.
@@ -247,7 +277,7 @@ Startup SHALL NOT resume previous movement.
 
 #### Scenario: Startup switch-off fails
 
-- **WHEN** startup switch-off fails or times out for a cover
+- **WHEN** startup switch-off returns an error for a cover
 - **THEN** that cover remains blocked and enters automatic OFF recovery
 - **AND** other covers can become available independently
 
@@ -299,6 +329,7 @@ No cover relay SHALL also belong to another cover or another controlled entity.
 The configuration SHALL provide separate positive durations for full travel, output-command timeout, OFF-retry interval, and shutdown timeout.
 These values SHALL apply to all covers.
 Each cover's output execution SHALL track commands and deadlines independently.
+The output-command timeout SHALL measure an in-progress write, not queue waiting or the bounded activation duration.
 
 #### Scenario: Shared durations with independent deadlines
 
@@ -310,6 +341,13 @@ Each cover's output execution SHALL track commands and deadlines independently.
 
 - **WHEN** any configured cover timing duration is zero or negative
 - **THEN** configuration validation rejects startup
+
+#### Scenario: Activation lasts longer than write timeout
+
+- **GIVEN** the full-travel duration exceeds the output-command timeout
+- **WHEN** ON returns successfully within its write timeout
+- **THEN** the bounded activation can continue until its full-travel deadline
+- **AND** stuck-write supervision does not treat normal activation time as a pending write
 
 ### Requirement: Bounded activation feedback
 
@@ -337,6 +375,34 @@ Successful unchanged writes SHALL still produce a result.
 - **WHEN** an explicit OFF write succeeds
 - **THEN** execution returns a successful result despite the unchanged value
 
+### Requirement: Bounded lifecycle feedback
+
+Execution SHALL retain lifecycle results within bounded feedback capacity without delaying deadlines, deactivation, or OFF retries.
+Admission SHALL limit accepted operations to the capacity needed for their lifecycle results.
+Each operation SHALL emit at most one failure event; repeated retry errors SHALL be logged.
+Successful OFF after failure SHALL still produce confirmed completion.
+
+#### Scenario: Feedback delivery is delayed at expiry
+
+- **GIVEN** ON succeeds but the states channel cannot accept its activation result
+- **WHEN** the activation duration expires
+- **THEN** the executor attempts OFF without waiting for result delivery
+- **AND** it retains lifecycle results for delivery in order
+
+#### Scenario: Repeated OFF failures during delayed feedback
+
+- **GIVEN** OFF returns an error and failure feedback is pending or delivered
+- **WHEN** subsequent OFF retries return errors
+- **THEN** the executor continues fixed-interval retries and logs the errors without adding failure events
+- **WHEN** OFF succeeds
+- **THEN** it retains confirmed completion for delivery
+
+#### Scenario: Feedback capacity is reserved
+
+- **WHEN** accepting another operation would exceed available lifecycle feedback capacity
+- **THEN** admission rejects that operation explicitly
+- **AND** cleanup of accepted operations continues using their reserved feedback capacity
+
 ### Requirement: Explicit queue rejection
 
 Full command queues SHALL reject commands explicitly rather than block local cover control.
@@ -355,3 +421,25 @@ Rejected MQTT and Modbus commands SHALL be logged without a deferred-delivery gu
 - **WHEN** an MQTT or Modbus command cannot enter its bounded queue
 - **THEN** dispatch logs an explicit rejection without retaining the command for later delivery
 - **AND** local cover control continues
+
+### Requirement: Deactivation admission retry
+
+The controller SHALL retry rejected deactivation admission at the configured retry interval while cleanup remains required and execution runs.
+After admission succeeds, the executor SHALL own OFF execution and retries.
+The controller SHALL NOT resubmit admitted deactivation as an admission retry.
+Movement SHALL remain blocked until both outputs are confirmed OFF.
+
+#### Scenario: Rejected stop is later admitted
+
+- **GIVEN** the cover is stopping and its deactivation submission is rejected
+- **WHEN** the admission retry interval elapses
+- **THEN** the controller retries submission without retaining a new movement request
+- **WHEN** deactivation is admitted
+- **THEN** the controller stops admission retries for that operation
+- **AND** the executor handles OFF writes and any returned errors
+
+#### Scenario: Activation deadline remains effective during admission congestion
+
+- **GIVEN** a bounded activation is admitted and early deactivation is rejected
+- **WHEN** its activation duration expires before deactivation admission succeeds
+- **THEN** the executor initiates OFF without waiting for the rejected deactivation to be resubmitted

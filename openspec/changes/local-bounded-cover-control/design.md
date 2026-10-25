@@ -3,8 +3,8 @@
 ## Context
 
 See `proposal.md` for motivation and `specs/cover-control/spec.md` for behavior.
-This document captures agreed design decisions, not an implementation-ready task plan.
-The FSM outline still needs review before task planning.
+This document captures agreed design decisions and both reviewed FSMs.
+Implementation increments and tasks follow separately.
 
 The current controller normalizes inputs and dispatches semantic events through a central loop.
 Sysfs accepts commands and returns state observations through `states`.
@@ -16,7 +16,7 @@ MQTT and Modbus command sends can block the controller's dispatch path.
 
 **Goals:**
 
-- Keep cover decisions visible in one FSM module
+- Keep cover and executor decisions visible in separate cohesive FSM modules
 - Keep output activation, its deadline, and its cleanup under one executor's ownership
 - Preserve sequential hardware writes without blocking unrelated covers
 - Reuse existing package boundaries, channels, and central dispatch
@@ -25,6 +25,7 @@ MQTT and Modbus command sends can block the controller's dispatch path.
 **Non-Goals:**
 
 - A generic transaction framework or a history of all timed-out commands
+- Recovery from hung writes, replacement workers, or concurrent writes after timeout
 - A custom cancelable mailbox, queued-command removal, or command TTL
 - Dimming-specific behavior, despite possible future bounded-activation reuse
 - Receiver methods for cover FSM logic
@@ -87,6 +88,9 @@ Bounded activation returns:
 - Failed: a write failed, identifying the failed operation and write
 
 Failure does not imply OFF and need not be the last result: cleanup can later succeed.
+Emit at most one failure event per operation.
+Log subsequent OFF retry errors without adding failure events.
+Still emit finished after OFF eventually succeeds.
 Successful unchanged writes still return results.
 An observation does not substitute for command completion.
 
@@ -94,6 +98,37 @@ Alternative: separate channels for observations and results.
 Keep the existing channel structure instead of adding another controller input.
 Establish the local deadline and cleanup obligation before potentially delayed result delivery.
 Result publication must not prevent deadline handling or OFF retries.
+
+The executor event loop selects between commands, timers, and sending pending results through `states`.
+If result delivery cannot proceed, command and timer handling remains available.
+Keep pending lifecycle feedback bounded and reserve capacity for accepted operations' lifecycle results.
+Reject operations when that capacity is unavailable rather than drop results or accumulate an unbounded backlog.
+Retain result order for each operation, including activated feedback followed by completion.
+Cleanup of accepted operations uses their retained feedback capacity, even when delivery is delayed.
+
+Alternative: a blocking result send after each write, or another publisher worker.
+Reject blocking publication because a full states channel could prevent required OFF.
+Use the executor event loop rather than adding a publisher worker.
+
+### Shared stuck-write watchdog
+
+Use one shared watchdog for in-progress sysfs writes.
+Each worker records the write start time before its synchronous write and clears that record after the write returns.
+The watchdog independently checks active writes against the configured output-command timeout.
+Do not hold bookkeeping synchronization during hardware I/O.
+Queue waiting and normal activation duration are not in-progress writes.
+
+An exceeded write timeout causes fatal process failure, not cover or executor recovery.
+Do not create replacement workers, bypass the write, or process late results as a timeout-recovery workflow.
+A returned write error remains a normal executor recovery input.
+Fatal exit does not confirm OFF or replace startup switch-off in the next process.
+
+The watchdog does not own activation deadlines, OFF retries, or cover state.
+Keep one synchronous, sequential I/O path within each worker.
+
+Alternative: a responsive executor plus another I/O worker for every cover, with late-result recovery.
+Reject that machinery for exceptional hung-write failures.
+The shared watchdog only supervises fatal liveness failure; it is not another FSM.
 
 ### Explicit writes without preliminary reads
 
@@ -121,28 +156,81 @@ Alternative: distribute cover transition rules through the main loop, registry, 
 Reject it because the FSM would become difficult to inspect as one behavior.
 One FSM per cover does not require one controller goroutine per cover.
 
-### FSM outline for review
+### Cover FSM
 
-The earlier FSM diagram assumed controller-owned movement deadlines.
-Revise that diagram before treating it as final.
-The current responsibility outline is:
-
-| Phase      | Responsibility                                             |
-| ---------- | ---------------------------------------------------------- |
-| Stopped    | Accept a fresh direction request                           |
-| Preparing  | Obtain confirmed OFF for both outputs                      |
-| Activating | Wait for submitted bounded activation to report ON success |
-| Moving     | Handle requests and wait for executor-driven completion    |
-| Stopping   | Wait for deactivation behind any submitted activation      |
-| Recovering | Block movement until both outputs are confirmed OFF        |
-
+Keep the cover transition function and its state handlers together in the controller FSM module.
 Direction is separate state rather than duplicated opening and closing phases.
-Startup begins by establishing confirmed OFF, not by resuming previous movement.
-Stop or opposite direction leads toward stopping without automatic reversal.
-Same-direction requests do not submit another activation or extend its duration.
-Direction requests during stopping or recovery are not retained.
+The main loop routes inputs but does not contain cover transition rules.
 
-This table is a review outline, not an approved complete transition table.
+| State                | Input                                            | Next state and action                                 |
+| -------------------- | ------------------------------------------------ | ----------------------------------------------------- |
+| Stopped              | Direction request                                | Preparing; request both outputs OFF                   |
+| Preparing            | Both outputs confirmed OFF                       | Activating; submit bounded activation                 |
+| Preparing            | Stop or opposite direction                       | Stopping; abandon unsubmitted start and establish OFF |
+| Activating           | Activated result                                 | Moving                                                |
+| Activating or Moving | Stop or opposite direction                       | Stopping; submit deactivation behind activation       |
+| Moving               | Finished with confirmed OFF                      | Stopped, with both direction outputs confirmed OFF    |
+| Stopping             | Delayed activated result                         | Stay Stopping; do not restore intent                  |
+| Stopping             | Both OFF confirmed after submitted activation    | Stopped                                               |
+| Operational state    | Returned write error or output admission failure | Recovering; establish both outputs OFF                |
+| Recovering           | Both OFF confirmed after outstanding writes      | Stopped                                               |
+
+Startup enters switch-off handling with unknown output state, not Stopped or resumed movement.
+Same-direction requests during Preparing, Activating, or Moving do not add activation or extend its duration.
+Direction requests during Stopping or Recovering are not retained.
+Stop in Stopped leaves the cover stopped; stop during cleanup preserves the cleanup obligation.
+Delayed activation feedback in Recovering does not restore intent.
+Only results for the relevant operations establish confirmed OFF; earlier OFF results cannot override later submitted activation.
+Fatal stuck-write timeout terminates the process instead of transitioning this FSM into recovery.
+
+### Executor FSM
+
+Keep executor transition logic in one sysfs FSM module, separate from cover logic and routing.
+Use plain functions with explicit state and input arguments, without receiver methods.
+The worker executes the FSM's writes sequentially and returns lifecycle feedback through `states`.
+
+The phases below describe an output operation.
+Initial output state is unknown; deactivation establishes confirmed OFF before cover movement is admitted.
+
+| State                 | Input or result                               | Next state and action                                       |
+| --------------------- | --------------------------------------------- | ----------------------------------------------------------- |
+| Unknown               | Deactivation                                  | Deactivating; attempt OFF                                   |
+| Off                   | Bounded activation                            | Activating; execute ON                                      |
+| Activating            | ON succeeds                                   | Active; arm deadline and retain activated feedback          |
+| Active                | Duration expires or deactivation is processed | Deactivating; attempt OFF                                   |
+| Deactivating          | OFF succeeds                                  | Off; retain finished feedback                               |
+| Write-executing phase | Write returns an error                        | Recovering; retain first failure feedback and establish OFF |
+| Recovering            | Retry interval expires                        | Attempt OFF, preserving sequential writes                   |
+| Recovering            | OFF returns another error                     | Stay Recovering; log error and schedule next retry          |
+| Recovering            | OFF succeeds                                  | Off; retain finished feedback                               |
+| Off                   | Deactivation                                  | Confirm OFF through an explicit write and return its result |
+
+Deactivation queued behind activation is processed without waiting for the activation duration.
+The deadline is armed after ON succeeds, before waiting to publish its feedback.
+Never retry ON as part of recovery.
+A stuck write is fatal through the shared watchdog, not an executor recovery transition.
+
+The executor's Off phase describes an output.
+The cover's Stopped phase means both direction outputs are safe for a fresh request.
+Do not substitute one for the other.
+
+### Normal interaction
+
+```text
+Cover FSM                         Executor
+---------                         --------
+Preparing  -- deactivate both --> OFF writes
+           <-- confirmed OFF ----
+Activating -- bounded activate -> ON write; arm deadline
+           <-- activated --------
+Moving                            deadline expires; OFF succeeds
+           <-- finished ---------
+Stopped
+```
+
+Normal expiry needs no second controller command.
+Release after activation submission moves the cover to Stopping and queues deactivation in FIFO order.
+Activated feedback received while Stopping does not return the cover to Moving.
 
 ### Bounded, non-blocking admission
 
@@ -150,6 +238,13 @@ Use bounded command queues at controller submission and worker routing boundarie
 Reject an unadmitted command explicitly instead of blocking the central loop or shared router.
 Cover output rejection blocks movement and requires establishing confirmed OFF.
 A rejected deactivation is not an accepted cleanup operation or evidence of safe outputs.
+
+Keep pending deactivation admission explicit in cover state, within Stopping or Recovering.
+The controller retries rejected admission at the configured retry interval while cleanup remains required and execution runs.
+After admission succeeds, the executor owns OFF execution and retries.
+Do not resubmit an admitted operation as an admission retry.
+Do not add a top-level cover phase merely for the pending admission detail.
+An accepted bounded activation retains its own deadline while early deactivation admission is congested.
 
 MQTT and Modbus queue rejection is logged without retaining rejected commands for deferred delivery.
 Preserve the order of admitted commands.
@@ -183,27 +278,35 @@ Keep ordering, branching, continuation, and failure rules visible in the caller.
 Keep integration details and related bookkeeping inside the responsible helper.
 Resolve mismatches between explanation and calls during each increment's review.
 Do not postpone this criterion to a later structural cleanup.
+Apply the same criterion to both FSMs, including their states, inputs, and transition handlers.
+Use transition tests for normal paths, early stops, returned errors, and delayed feedback.
+Keep event-loop orchestration separate from behavioral rules in both modules.
 
 ## Risks / Trade-offs
 
 - Delayed queued activation after release: accept brief activation and preserve subsequent FIFO deactivation
-- A timed-out operating-system write can still finish: retain write order and follow uncertain ON with OFF
-- Permanently blocked hardware I/O: isolate other covers; do not claim bounded activation guarantees physical switch-off during an I/O hang
+- Hung sysfs write: shared watchdog causes fatal process failure instead of introducing timeout recovery machinery
+- Fatal exit can leave relays energized: do not claim safe outputs; require startup switch-off in the next process
+- Slow writes below the fatal timeout: isolate workers; do not claim activation duration can interrupt an operating-system write
 - Full command queues: reject explicitly, keep the affected cover blocked, and do not assume rejected OFF was admitted
-- Shared states delivery congestion: keep deadline and cleanup execution independent of feedback delivery
+- Shared states delivery congestion: select between result delivery, commands, and timers; reserve bounded lifecycle feedback capacity
+- Repeated OFF errors: log each error but emit one failure event per operation, followed by eventual confirmed completion
 - Integration rejection: accept lost integration commands during congestion; log failures without a deferred-delivery promise
 - Shutdown timeout: end the wait without reporting unconfirmed outputs as safe
 
-## Review Before Task Planning
+## Verification Before Implementation Completion
 
-Review the complete FSM transition table against FIFO execution and executor-owned completion.
-Trace queue rejection through deactivation admission so saturation cannot leave cleanup responsibility unassigned.
-Trace output timeouts and delayed states delivery without concurrent or reordered writes.
-These are remaining design checks, not permission to choose additional mechanisms during implementation.
+- Normal activation: executor arms its deadline before result delivery and switches OFF without another controller command
+- Queued activation then release: FIFO allows brief ON, followed by OFF; delayed activated feedback does not restore intent
+- Rejected deactivation: controller retries admission until accepted; executor then owns execution retries
+- Hung ON or OFF write: watchdog causes fatal failure without replacement writes or per-cover timeout recovery
+- Full states channel: deadlines, deactivation, and returned-error retries continue with bounded retained feedback
+- Repeated OFF errors: one FSM failure event, repeated error logs, and a finished result after successful OFF
+- Shutdown during activation or recovery: block new submissions and keep cleanup alive until confirmed OFF or the bounded wait ends
 
 ## Migration Plan
 
-Select implementation increments only after the remaining design review.
+Select small implementation increments from these agreed boundaries and scenario checks.
 Introduce prerequisites before exposing configured cover movement.
 Verify the spec scenarios, including delayed activation, queue rejection, OFF failures, and staged shutdown.
 Before deployment or rollback, request confirmed OFF through the bounded shutdown sequence.
