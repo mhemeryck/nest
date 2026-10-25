@@ -9,6 +9,7 @@ type Root struct {
 	DigitalInputs []DigitalInputConfig `yaml:"digital_inputs"`
 	PushButtons   []PushButtonConfig   `yaml:"push_buttons"`
 	Lights        []LightConfig        `yaml:"lights"`
+	Covers        []CoverConfig        `yaml:"covers"`
 	Relays        []RelayConfig        `yaml:"relays"`
 	Bindings      []BindingConfig      `yaml:"bindings"`
 
@@ -111,6 +112,15 @@ type BindingConfig struct {
 	Target             string `yaml:"target"`
 	Action             string `yaml:"action"`
 	ExecutionTransport string `yaml:"execution_transport"`
+}
+
+type CoverConfig struct {
+	ID              string        `yaml:"id"`
+	Name            string        `yaml:"name"`
+	OpenRelay       string        `yaml:"open_relay"`
+	CloseRelay      string        `yaml:"close_relay"`
+	MovementTimeout time.Duration `yaml:"movement_timeout"`
+	ReversalDelay   time.Duration `yaml:"reversal_delay"`
 }
 
 const BindingActionToggle = "toggle"

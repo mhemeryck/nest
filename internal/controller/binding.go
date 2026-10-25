@@ -22,6 +22,9 @@ func lightEventsFromPushButton(index *registry.Registry, pushButton event.PushBu
 	bindings = append(bindings, remoteTargetBindingsBySourceAndTransport(index, entity.ID(pushButton.ButtonID), pushButton.Delivery)...)
 	lightEvents := make([]event.Event, 0, len(bindings))
 	for _, binding := range bindings {
+		if entity.IsID(string(binding.Target), entity.TypeCover) {
+			continue
+		}
 		name := ""
 		lightID := entity.LightID(binding.Target)
 		if light, ok := registry.LightByID(index, lightID); ok {

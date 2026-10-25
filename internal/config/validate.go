@@ -37,6 +37,7 @@ func Validate(f *Root) error {
 		buttonErr,
 		relayErr,
 		lightErr,
+		validateCoverConfiguration(f, knownRelayIDs, knownButtonIDs),
 		validateBindings(f.Bindings, knownButtonIDs, knownLightIDs),
 		validateRemoteBindings("remote_source_bindings", f.RemoteSourceBindings),
 		validateRemoteBindings("remote_target_bindings", f.RemoteTargetBindings),
@@ -324,6 +325,19 @@ func validateGlobalBindings(global *GlobalRoot) error {
 	seen := make(map[string]int, len(global.Bindings))
 	for i, binding := range global.Bindings {
 		prefix := fmt.Sprintf("bindings[%d]", i)
+		if entity.IsID(binding.Target, entity.TypeCover) {
+			key := binding.Source + "\x00" + binding.Target
+			if _, ok := seen[key]; ok {
+				errs = errors.Join(errs, fmt.Errorf("%s: duplicate or conflicting cover binding", prefix))
+			}
+			seen[key] = i
+			errs = errors.Join(errs,
+				validateGlobalBindingEndpoint(global, prefix+".source", binding.Source, entity.TypeButton),
+				validateGlobalBindingEndpoint(global, prefix+".target", binding.Target, entity.TypeCover),
+				validateCoverBinding(prefix, BindingConfig(binding)),
+			)
+			continue
+		}
 		sourceErr := validateGlobalBindingEndpoint(global, prefix+".source", binding.Source, entity.TypeButton)
 		targetErr := validateGlobalBindingEndpoint(global, prefix+".target", binding.Target, entity.TypeLight)
 		actionErr := validateModbusBindingAction(prefix+".action", binding.Action)
@@ -403,6 +417,12 @@ func validateGlobalBindingEndpoint(global *GlobalRoot, field string, value strin
 
 	localID := parts[2]
 	switch entityType {
+	case entity.TypeCover:
+		for _, cover := range unit.Entities.Covers {
+			if cover.ID == localID {
+				return nil
+			}
+		}
 	case entity.TypeButton:
 		for _, button := range unit.Entities.Buttons {
 			if button.ID == localID {
@@ -711,6 +731,9 @@ func validateBindings(bindings []BindingConfig, knownButtonIDs map[string]struct
 	seen := make(map[string]int, len(bindings))
 
 	for i, binding := range bindings {
+		if entity.IsID(binding.Target, entity.TypeCover) {
+			continue
+		}
 		prefix := fmt.Sprintf("bindings[%d]", i)
 		var sourceErr error
 		if err := validateRequiredField(prefix+".source", binding.Source); err != nil {
