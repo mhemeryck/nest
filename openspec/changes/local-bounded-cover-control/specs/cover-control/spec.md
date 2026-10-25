@@ -62,16 +62,24 @@ The request SHALL NOT extend the movement deadline.
 
 ### Requirement: Opposite-direction requests
 
-An opposite-direction request SHALL cancel a pending start or stop current movement.
+An opposite-direction request SHALL cancel an unsubmitted start or request switch-off after a submitted activation.
 The controller SHALL NOT reverse automatically.
 A fresh direction request after confirmed switch-off SHALL be required to start again.
 
 #### Scenario: Opposite request during start preparation
 
-- **GIVEN** opening is pending
+- **GIVEN** opening is pending but activation has not been submitted
 - **WHEN** a close request arrives
 - **THEN** the controller cancels opening and completes switch-off
 - **AND** the controller does not start closing
+
+#### Scenario: Opposite request after activation submission
+
+- **GIVEN** opening activation is submitted but has not executed
+- **WHEN** a close request arrives
+- **THEN** deactivation follows the submitted activation in FIFO order
+- **AND** brief opening is permitted before deactivation
+- **AND** closing does not start automatically
 
 #### Scenario: Opposite request during movement
 
@@ -84,20 +92,23 @@ A fresh direction request after confirmed switch-off SHALL be required to start 
 ### Requirement: Stop cancels movement intent
 
 The controller SHALL accept stop requests in every cover state.
-A stop request SHALL cancel pending movement intent and initiate or continue switch-off.
+A stop request SHALL cancel unsubmitted movement intent and initiate or continue switch-off.
+Submitted activations SHALL execute in FIFO order before subsequent deactivation.
+Brief activation after release SHALL be permitted for an already-submitted activation.
 A late ON completion SHALL NOT restore canceled movement intent.
 
-#### Scenario: Release before ON submission
+#### Scenario: Release before activation submission
 
 - **GIVEN** opening is pending while the controller confirms both outputs OFF
-- **WHEN** a stop request arrives before ON submission
+- **WHEN** a stop request arrives before activation submission
 - **THEN** the controller completes switch-off without activating the opening output
 
-#### Scenario: Stop after ON submission
+#### Scenario: Stop after activation submission
 
-- **GIVEN** an opening ON command is submitted but has not completed
+- **GIVEN** an opening activation is submitted but has not completed
 - **WHEN** a stop request arrives
 - **THEN** the controller ensures OFF executes after the submitted ON
+- **AND** brief activation after release is permitted if ON has not executed yet
 - **AND** an ON completion does not restore movement intent
 - **AND** the cover remains unavailable for movement until both outputs are confirmed OFF
 
@@ -147,19 +158,19 @@ MQTT and Modbus backpressure SHALL NOT delay local cover stops or movement deadl
 
 - **GIVEN** MQTT or Modbus dispatch is congested
 - **WHEN** a local cover receives stop or reaches its movement deadline
-- **THEN** the controller initiates switch-off without waiting for that integration
+- **THEN** switch-off proceeds without waiting for that integration
 
 ### Requirement: Bounded movement independent of position
 
 Each cover SHALL have an independent full-travel deadline starting when its direction ON command succeeds.
-At the deadline, the controller SHALL initiate relay switch-off regardless of estimated position or physical end-limit switches.
+The bounded-activation executor SHALL initiate switch-off at that deadline, regardless of estimated position or physical end-limit switches.
 Button readability SHALL NOT control the movement deadline or movement admission.
 
 #### Scenario: Full-travel deadline expires
 
 - **GIVEN** a direction ON command succeeds
 - **WHEN** the configured full-travel duration elapses without an earlier stop
-- **THEN** the controller initiates switch-off
+- **THEN** the executor initiates switch-off without requiring another controller command
 - **AND** it requires confirmed OFF before allowing another start
 
 #### Scenario: Motor reaches its physical endpoint first
@@ -173,7 +184,7 @@ Button readability SHALL NOT control the movement deadline or movement admission
 - **GIVEN** a cover moving with an active deadline
 - **WHEN** a button becomes unreadable and no stop request arrives
 - **THEN** the existing movement deadline remains in effect
-- **AND** the controller initiates switch-off at that deadline
+- **AND** the executor initiates switch-off at that deadline
 - **AND** button readability does not create a cover movement lockout
 
 ### Requirement: Output fault containment
@@ -196,8 +207,8 @@ The controller SHALL NOT treat a failed or timed-out command as confirmed OFF.
 
 ### Requirement: Automatic OFF recovery
 
-The controller SHALL retry OFF commands at a fixed interval while running until both outputs are confirmed OFF.
-It SHALL NOT accumulate retries while an earlier OFF attempt remains pending.
+The executor SHALL retry failed OFF writes at a fixed interval until OFF succeeds or execution stops during bounded shutdown.
+It SHALL NOT accumulate retries while an earlier OFF write remains pending.
 Recovery SHALL NOT retry movement commands or resume interrupted movement.
 After confirmed OFF, the controller SHALL allow fresh movement requests without an explicit reset.
 
@@ -205,14 +216,14 @@ After confirmed OFF, the controller SHALL allow fresh movement requests without 
 
 - **GIVEN** an OFF attempt fails
 - **WHEN** the retry interval elapses
-- **THEN** the controller retries switch-off with the same interval for subsequent retries
+- **THEN** the executor retries switch-off with the same interval for subsequent retries
 - **AND** movement remains blocked
 
 #### Scenario: Earlier OFF attempt remains pending
 
 - **GIVEN** an OFF attempt is still pending
 - **WHEN** another retry would otherwise become due
-- **THEN** the controller does not accumulate additional pending attempts
+- **THEN** the executor does not accumulate additional pending attempts
 
 #### Scenario: Recovery succeeds
 
@@ -242,15 +253,24 @@ Startup SHALL NOT resume previous movement.
 
 ### Requirement: Bounded shutdown
 
-On shutdown, the controller SHALL prevent new starts and attempt to confirm both outputs OFF for all covers.
+On shutdown, the controller SHALL prevent new activation submissions and attempt to confirm both outputs OFF for all covers.
+Already-submitted activations SHALL retain FIFO order before shutdown deactivation.
 The shutdown wait SHALL NOT exceed the configured shutdown timeout.
 
 #### Scenario: Outputs switch OFF during shutdown
 
 - **GIVEN** covers moving or preparing to move
 - **WHEN** shutdown starts
-- **THEN** the controller cancels movement intent and attempts switch-off for every cover
-- **AND** it does not start new movement
+- **THEN** the controller cancels unsubmitted movement intent and requests switch-off for every cover
+- **AND** executors continue deadlines and OFF retries until confirmed OFF or the shutdown timeout
+- **AND** the controller submits no new activations
+
+#### Scenario: Shutdown with queued activation
+
+- **GIVEN** an activation is submitted but has not executed
+- **WHEN** shutdown starts
+- **THEN** deactivation follows that activation in FIFO order
+- **AND** brief activation is permitted before switch-off
 
 #### Scenario: Shutdown switch-off cannot complete
 
@@ -278,7 +298,7 @@ No cover relay SHALL also belong to another cover or another controlled entity.
 
 The configuration SHALL provide separate positive durations for full travel, output-command timeout, OFF-retry interval, and shutdown timeout.
 These values SHALL apply to all covers.
-Each cover SHALL track its own commands and deadlines independently.
+Each cover's output execution SHALL track commands and deadlines independently.
 
 #### Scenario: Shared durations with independent deadlines
 
@@ -290,3 +310,48 @@ Each cover SHALL track its own commands and deadlines independently.
 
 - **WHEN** any configured cover timing duration is zero or negative
 - **THEN** configuration validation rejects startup
+
+### Requirement: Bounded activation feedback
+
+Output execution SHALL distinguish successful activation, confirmed OFF completion, and write failure.
+A failed write SHALL NOT imply confirmed OFF.
+Successful unchanged writes SHALL still produce a result.
+
+#### Scenario: Bounded activation completes
+
+- **WHEN** ON succeeds for a bounded activation
+- **THEN** execution returns activation feedback with its actual activation time
+- **WHEN** OFF succeeds after expiry or early stop
+- **THEN** execution returns confirmed completion
+
+#### Scenario: Failed switch-off followed by recovery
+
+- **WHEN** an OFF write fails
+- **THEN** execution returns failure feedback without claiming confirmed OFF
+- **WHEN** a subsequent OFF retry succeeds
+- **THEN** execution returns confirmed completion
+
+#### Scenario: Output already OFF
+
+- **GIVEN** a direction output is already OFF
+- **WHEN** an explicit OFF write succeeds
+- **THEN** execution returns a successful result despite the unchanged value
+
+### Requirement: Explicit queue rejection
+
+Full command queues SHALL reject commands explicitly rather than block local cover control.
+A rejected cover output command SHALL cause the affected cover to remain blocked and seek confirmed OFF.
+Rejected MQTT and Modbus commands SHALL be logged without a deferred-delivery guarantee.
+
+#### Scenario: Cover output queue is full
+
+- **WHEN** a cover output command cannot enter its bounded queue
+- **THEN** submission returns an explicit failure
+- **AND** the cover blocks movement and seeks confirmed OFF
+- **AND** other covers continue independently
+
+#### Scenario: Integration queue is full
+
+- **WHEN** an MQTT or Modbus command cannot enter its bounded queue
+- **THEN** dispatch logs an explicit rejection without retaining the command for later delivery
+- **AND** local cover control continues
