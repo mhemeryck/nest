@@ -4,6 +4,55 @@
 
 Motorized window shades controlled via relays on Unipi Neuron, with both physical push buttons and Home Assistant integration.
 
+## Implementation Roadmap
+
+Four agreed slices, in order:
+
+1. **Local bounded cover control**
+   - Open, close, and stop requests; physical press-and-hold behavior
+   - Exclusive relay ownership, output interlocking, completion feedback, and pending-command ordering
+   - Independent covers and bounded movement deadlines
+   - Output failures, timeouts, OFF retries, and recovery
+   - Startup, bounded shutdown, and affected-input failures
+2. **Position reporting**
+   - Time-based estimates and unknown position
+   - Confirmed endpoints after full travel and successful switch-off
+   - Estimates never restrict movement or shorten a full-travel run
+3. **Position persistence**
+   - Trusted position restoration without resumed movement
+   - Unfinished movement and unclean restart detection
+   - Storage failures independent of local control
+4. **MQTT / Home Assistant integration**
+   - Remote commands and retained-command rules
+   - State, position, availability, and discovery
+   - Reconnect reporting without changed movement intent or deadlines
+
+These slices define planning scope, not detailed requirements or delivered behavior.
+Review concrete scenarios before creating each OpenSpec change.
+Use `spec-driven-covers` as reference, not as automatically accepted requirements or mandatory architecture.
+Plan only the next slice in detail.
+
+Each slice can require several independently reviewable implementation increments.
+Identify prerequisites through design, including output feedback and non-blocking integration dispatch.
+Keep local stopping and deadlines independent of MQTT and Modbus backpressure.
+Do not expose cover control before its safety behavior works together.
+
+### Design Criterion
+
+A multi-step function reads as the ordered sequence of named responsibilities used to explain its behavior.
+
+- Represent each responsibility with a named helper call
+- Keep ordering, branching, and failure rules visible in the caller
+- Keep implementation details and related state updates inside the responsible helper
+- Resolve differences between the behavioral explanation and the function calls during each increment's review
+- Apply this criterion during implementation, not as a later cleanup phase
+
+### Existing Reference Material
+
+The following sections contain earlier hardware, behavior, integration, and configuration notes.
+They do not define accepted requirements for the roadmap.
+Resolve differences through scenario review before implementation.
+
 ## Hardware
 
 ### Wiring
