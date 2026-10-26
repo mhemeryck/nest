@@ -8,7 +8,8 @@ Define local bounded cover movement with independent deadlines, exclusive direct
 
 ### Requirement: Source-independent requests
 
-The controller SHALL apply open, close, and stop requests without tracking the initiating source.
+The controller SHALL route open, close, and stop requests to the shade runtime without tracking the initiating source.
+The shade runtime SHALL apply the same request behavior for every source.
 A physical direction-button press SHALL produce its bound direction request.
 A release of either bound direction button SHALL produce a stop request.
 
@@ -24,35 +25,52 @@ A release of either bound direction button SHALL produce a stop request.
 
 - **GIVEN** a cover opening after a request from another source
 - **WHEN** either bound direction button produces a release
-- **THEN** the controller stops the cover without checking the initiating source
+- **THEN** the shade runtime stops the cover without checking the initiating source
+
+### Requirement: Single lifecycle authority
+
+The shade runtime SHALL own movement intent, direction interlocking, movement deadlines, and OFF recovery for each cover.
+The controller SHALL send requests and retain reported state without independently transitioning the movement lifecycle.
+
+#### Scenario: Controller sends a movement request
+
+- **WHEN** the controller routes an open request to a ready cover
+- **THEN** the shade runtime prepares, activates, and bounds that movement
+- **AND** it reports lifecycle state without requiring controller relay commands between those steps
+
+#### Scenario: Report delivery is delayed
+
+- **GIVEN** a cover is stopping or recovering
+- **WHEN** the controller receives an older movement report
+- **THEN** that report does not restore movement intent or change authoritative lifecycle state
 
 ### Requirement: Direction requests while stopped
 
-The controller SHALL start the requested direction only after confirming both direction outputs OFF.
+The shade runtime SHALL start the requested direction only after confirming both direction outputs OFF.
 An unknown or estimated position SHALL NOT restrict movement.
 
 #### Scenario: Start opening
 
 - **GIVEN** a stopped cover ready for movement
 - **WHEN** an open request arrives
-- **THEN** the controller confirms both direction outputs OFF before activating the opening output
+- **THEN** the shade runtime confirms both direction outputs OFF before activating the opening output
 
 #### Scenario: Start closing with unknown position
 
 - **GIVEN** a stopped cover with unknown position
 - **WHEN** a close request arrives
-- **THEN** the controller prepares and starts closing without a position restriction
+- **THEN** the shade runtime prepares and starts closing without a position restriction
 
 ### Requirement: Repeated direction requests
 
-The controller SHALL preserve the existing start intent or movement on a same-direction request.
+The shade runtime SHALL preserve the existing start intent or movement on a same-direction request.
 The request SHALL NOT extend the movement deadline.
 
 #### Scenario: Repeat during start preparation
 
 - **GIVEN** opening is pending
 - **WHEN** another open request arrives
-- **THEN** the controller keeps the existing opening intent without adding another start
+- **THEN** the shade runtime keeps the existing opening intent without adding another start
 
 #### Scenario: Repeat during movement
 
@@ -62,22 +80,22 @@ The request SHALL NOT extend the movement deadline.
 
 ### Requirement: Opposite-direction requests
 
-An opposite-direction request SHALL cancel an unsubmitted start or request switch-off after a submitted activation.
-The controller SHALL NOT reverse automatically.
+An opposite-direction request SHALL cancel unstarted movement or request switch-off after an ON write already in progress.
+The shade runtime SHALL NOT reverse automatically.
 A fresh direction request after confirmed switch-off SHALL be required to start again.
 
 #### Scenario: Opposite request during start preparation
 
-- **GIVEN** opening is pending but activation has not been submitted
+- **GIVEN** opening is pending but its ON write has not started
 - **WHEN** a close request arrives
-- **THEN** the controller cancels opening and completes switch-off
-- **AND** the controller does not start closing
+- **THEN** the shade runtime cancels opening and completes switch-off
+- **AND** it does not start closing
 
-#### Scenario: Opposite request after activation submission
+#### Scenario: Opposite request after ON starts
 
-- **GIVEN** opening activation is submitted but has not executed
+- **GIVEN** an opening ON write has started but has not returned
 - **WHEN** a close request arrives
-- **THEN** deactivation follows the submitted activation in FIFO order
+- **THEN** OFF follows the ON write without concurrent or reordered writes
 - **AND** brief opening is permitted before deactivation
 - **AND** closing does not start automatically
 
@@ -85,30 +103,31 @@ A fresh direction request after confirmed switch-off SHALL be required to start 
 
 - **GIVEN** a cover opening
 - **WHEN** a close request arrives
-- **THEN** the controller switches both direction outputs OFF without starting closing
+- **THEN** the shade runtime switches both direction outputs OFF without starting closing
 - **WHEN** switch-off succeeds and a fresh close request arrives
-- **THEN** the controller prepares and starts closing
+- **THEN** the shade runtime prepares and starts closing
 
 ### Requirement: Stop cancels movement intent
 
-The controller SHALL accept stop requests in every cover state.
-A stop request SHALL cancel unsubmitted movement intent and initiate or continue switch-off.
-Submitted activations SHALL execute in FIFO order before subsequent deactivation.
-Brief activation after release SHALL be permitted for an already-submitted activation.
+Stop handling SHALL initiate or continue switch-off in every cover state.
+A stop request SHALL cancel unstarted movement intent.
+An ON write already in progress SHALL finish before subsequent OFF writes.
+Brief activation after release SHALL be permitted when ON has already started.
+If stop admission fails because the request queue is full, per-shade recovery SHALL establish switch-off instead.
 A late ON completion SHALL NOT restore canceled movement intent.
 
-#### Scenario: Release before activation submission
+#### Scenario: Release before ON starts
 
-- **GIVEN** opening is pending while the controller confirms both outputs OFF
-- **WHEN** a stop request arrives before activation submission
-- **THEN** the controller completes switch-off without activating the opening output
+- **GIVEN** opening is pending while the shade runtime confirms both outputs OFF
+- **WHEN** a stop request is handled before ON starts
+- **THEN** the shade runtime completes switch-off without activating the opening output
 
-#### Scenario: Stop after activation submission
+#### Scenario: Stop after ON starts
 
-- **GIVEN** an opening activation is submitted but has not completed
+- **GIVEN** an opening ON write has started but has not completed
 - **WHEN** a stop request arrives
-- **THEN** the controller ensures OFF executes after the submitted ON
-- **AND** brief activation after release is permitted if ON has not executed yet
+- **THEN** the shade runtime ensures OFF executes after that ON write
+- **AND** brief activation after release is permitted
 - **AND** an ON completion does not restore movement intent
 - **AND** the cover remains unavailable for movement until both outputs are confirmed OFF
 
@@ -120,27 +139,27 @@ A late ON completion SHALL NOT restore canceled movement intent.
 
 ### Requirement: No retained starts during switch-off
 
-The controller SHALL NOT retain direction requests received while switch-off is pending.
+The shade runtime SHALL NOT retain direction requests received while switch-off is pending.
 A fresh direction request after confirmed switch-off SHALL be required for movement.
 
 #### Scenario: Direction request during switch-off
 
 - **GIVEN** a cover switching its outputs OFF
 - **WHEN** an open or close request arrives
-- **THEN** the controller continues switch-off without retaining the request
+- **THEN** the shade runtime continues switch-off without retaining the request
 - **WHEN** both outputs are confirmed OFF
 - **THEN** the cover remains stopped until a fresh direction request arrives
 
 ### Requirement: Direction output exclusivity
 
-The controller SHALL NOT activate both direction outputs together.
+The shade runtime SHALL NOT activate both direction outputs together.
 It SHALL confirm both outputs OFF before activating a direction.
 It SHALL NOT allow a new start until switch-off succeeds.
 
 #### Scenario: Switch-off remains incomplete
 
 - **GIVEN** one direction output has not been confirmed OFF
-- **WHEN** the controller prepares a start or completes a stop
+- **WHEN** the shade runtime prepares a start or completes a stop
 - **THEN** it does not activate either direction until both outputs are confirmed OFF
 
 ### Requirement: Independent covers
@@ -154,7 +173,7 @@ This independence SHALL apply while the process runs; a stuck-write timeout SHAL
 - **GIVEN** an output operation for one cover is blocked
 - **AND** the write timeout has not caused fatal process failure
 - **WHEN** another cover receives a request or reaches its movement deadline
-- **THEN** the controller handles that cover without waiting for the blocked operation
+- **THEN** that cover handles its request or deadline without waiting for the blocked operation
 
 #### Scenario: Integration backpressure during movement
 
@@ -165,48 +184,48 @@ This independence SHALL apply while the process runs; a stuck-write timeout SHAL
 ### Requirement: Bounded movement independent of position
 
 Each cover SHALL have an independent full-travel deadline starting when its direction ON command succeeds.
-The bounded-activation executor SHALL initiate switch-off at that deadline, regardless of estimated position or physical end-limit switches.
+The shade runtime SHALL initiate switch-off at that deadline, regardless of estimated position or physical end-limit switches.
 Button readability SHALL NOT control the movement deadline or movement admission.
 
 #### Scenario: Full-travel deadline expires
 
 - **GIVEN** a direction ON command succeeds
 - **WHEN** the configured full-travel duration elapses without an earlier stop
-- **THEN** the executor initiates switch-off without requiring another controller command
+- **THEN** the shade runtime initiates switch-off without requiring another controller command
 - **AND** it requires confirmed OFF before allowing another start
 
 #### Scenario: Motor reaches its physical endpoint first
 
 - **GIVEN** the motor stops at its built-in end-limit switch before the movement deadline
 - **WHEN** the deadline expires
-- **THEN** the controller still switches the direction relay OFF
+- **THEN** the shade runtime still switches the direction relay OFF
 
 #### Scenario: Button release cannot be read
 
 - **GIVEN** a cover moving with an active deadline
 - **WHEN** a button becomes unreadable and no stop request arrives
 - **THEN** the existing movement deadline remains in effect
-- **AND** the executor initiates switch-off at that deadline
+- **AND** the shade runtime initiates switch-off at that deadline
 - **AND** button readability does not create a cover movement lockout
 
 ### Requirement: Output fault containment
 
 A returned output write error SHALL block movement for the affected cover and initiate OFF recovery.
-The controller SHALL NOT treat a failed write as confirmed OFF.
+The shade runtime SHALL NOT treat a failed write as confirmed OFF.
 Stuck-write timeouts SHALL follow fatal failure handling rather than automatic recovery.
 
 #### Scenario: ON write returns an error
 
 - **GIVEN** a cover starting movement
 - **WHEN** its ON write returns an error
-- **THEN** the controller cancels movement intent and attempts to switch both outputs OFF
+- **THEN** the shade runtime cancels movement intent and attempts to switch both outputs OFF
 - **AND** it blocks new movement until both outputs are confirmed OFF
 
 #### Scenario: OFF write returns an error
 
 - **GIVEN** a cover switching outputs OFF
 - **WHEN** an OFF write returns an error
-- **THEN** the controller keeps movement blocked and continues OFF recovery
+- **THEN** the shade runtime keeps movement blocked and continues OFF recovery
 
 ### Requirement: Fatal stuck-write handling
 
@@ -237,41 +256,41 @@ Fatal failure SHALL NOT imply confirmed OFF.
 
 ### Requirement: Automatic OFF recovery
 
-The executor SHALL retry OFF writes that return errors at a fixed interval until OFF succeeds or execution stops.
+The shade runtime SHALL retry OFF writes that return errors at a fixed interval until OFF succeeds or execution stops.
 It SHALL NOT accumulate retries while an earlier OFF write remains pending.
 Recovery SHALL NOT retry movement commands or resume interrupted movement.
-After confirmed OFF, the controller SHALL allow fresh movement requests without an explicit reset.
+After confirmed OFF, the shade runtime SHALL allow fresh movement requests without an explicit reset unless shutdown has started.
 
 #### Scenario: Repeated switch-off failure
 
 - **GIVEN** an OFF attempt fails
 - **WHEN** the retry interval elapses
-- **THEN** the executor retries switch-off with the same interval for subsequent retries
+- **THEN** the shade runtime retries switch-off with the same interval for subsequent retries
 - **AND** movement remains blocked
 
 #### Scenario: Earlier OFF attempt remains pending
 
 - **GIVEN** an OFF attempt is still pending
 - **WHEN** another retry would otherwise become due
-- **THEN** the executor does not accumulate additional pending attempts
+- **THEN** the shade runtime does not accumulate additional pending attempts
 
 #### Scenario: Recovery succeeds
 
-- **GIVEN** a cover in OFF recovery after interrupted movement
+- **GIVEN** a cover in OFF recovery after interrupted movement outside shutdown
 - **WHEN** both outputs are confirmed OFF
-- **THEN** the controller permits fresh direction requests without an explicit reset
+- **THEN** the shade runtime permits fresh direction requests without an explicit reset
 - **AND** the interrupted movement does not resume
 
 ### Requirement: Startup switch-off
 
-At startup, the controller SHALL switch both direction outputs OFF for each cover.
+At startup, each shade runtime SHALL switch both direction outputs OFF for its cover.
 It SHALL NOT accept movement for a cover before confirming both outputs OFF.
 Startup SHALL NOT resume previous movement.
 
 #### Scenario: Successful startup
 
 - **WHEN** the controller starts
-- **THEN** it attempts to switch both outputs OFF for every cover
+- **THEN** each shade runtime attempts to switch both outputs OFF for its cover
 - **AND** each cover becomes available for fresh movement only after its outputs are confirmed OFF
 - **AND** no previous movement resumes
 
@@ -283,24 +302,38 @@ Startup SHALL NOT resume previous movement.
 
 ### Requirement: Bounded shutdown
 
-On shutdown, the controller SHALL prevent new activation submissions and attempt to confirm both outputs OFF for all covers.
-Already-submitted activations SHALL retain FIFO order before shutdown deactivation.
+On shutdown, the runtime SHALL block new requests and attempt to confirm both outputs OFF for all covers.
+Shutdown SHALL cancel unstarted movement and discard queued movement requests.
+An in-progress write SHALL finish before cleanup writes start.
+Shutdown signalling SHALL remain available independently of request-queue capacity.
 The shutdown wait SHALL NOT exceed the configured shutdown timeout.
 
 #### Scenario: Outputs switch OFF during shutdown
 
 - **GIVEN** covers moving or preparing to move
 - **WHEN** shutdown starts
-- **THEN** the controller cancels unsubmitted movement intent and requests switch-off for every cover
-- **AND** executors continue deadlines and OFF retries until confirmed OFF or the shutdown timeout
-- **AND** the controller submits no new activations
+- **THEN** each shade runtime cancels unstarted movement intent and establishes switch-off
+- **AND** shade workers continue cleanup and OFF retries until confirmed OFF or the shutdown timeout
+- **AND** no new movement starts
 
-#### Scenario: Shutdown with queued activation
+#### Scenario: Shutdown with queued movement
 
-- **GIVEN** an activation is submitted but has not executed
+- **GIVEN** a movement request is queued but its ON write has not started
 - **WHEN** shutdown starts
-- **THEN** deactivation follows that activation in FIFO order
-- **AND** brief activation is permitted before switch-off
+- **THEN** the shade runtime discards that movement and establishes both outputs OFF
+- **AND** it does not activate the queued direction
+
+#### Scenario: Shutdown during recovery
+
+- **GIVEN** a cover is recovering with movement admission blocked
+- **WHEN** shutdown starts and OFF recovery then succeeds
+- **THEN** admission remains blocked and no movement resumes
+
+#### Scenario: Shutdown with a full request queue
+
+- **GIVEN** a shade request queue is full
+- **WHEN** shutdown starts
+- **THEN** the shade runtime receives shutdown independently of that queue and performs cleanup
 
 #### Scenario: Shutdown switch-off cannot complete
 
@@ -329,7 +362,7 @@ No cover relay SHALL also belong to another cover or another controlled entity.
 The configuration SHALL provide separate positive durations for full travel, output-command timeout, OFF-retry interval, and shutdown timeout.
 These values SHALL apply to all covers.
 Each cover's output execution SHALL track commands and deadlines independently.
-The output-command timeout SHALL measure an in-progress write, not queue waiting or the bounded activation duration.
+The output-command timeout SHALL measure an in-progress write, not queue waiting or the movement duration.
 
 #### Scenario: Shared durations with independent deadlines
 
@@ -346,100 +379,111 @@ The output-command timeout SHALL measure an in-progress write, not queue waiting
 
 - **GIVEN** the full-travel duration exceeds the output-command timeout
 - **WHEN** ON returns successfully within its write timeout
-- **THEN** the bounded activation can continue until its full-travel deadline
+- **THEN** movement can continue until its full-travel deadline
 - **AND** stuck-write supervision does not treat normal activation time as a pending write
 
-### Requirement: Bounded activation feedback
+### Requirement: Reported lifecycle state
 
-Output execution SHALL distinguish successful activation, confirmed OFF completion, and write failure.
-A failed write SHALL NOT imply confirmed OFF.
-Successful unchanged writes SHALL still produce a result.
+The shade runtime SHALL report lifecycle phase and direction to the controller.
+Stopped SHALL mean both direction outputs are confirmed OFF with no pending movement.
+Stopped SHALL NOT imply a known fully open or fully closed position.
+Relay observations SHALL NOT substitute for successful write results in the shade lifecycle.
 
-#### Scenario: Bounded activation completes
+#### Scenario: Movement finishes
 
-- **WHEN** ON succeeds for a bounded activation
-- **THEN** execution returns activation feedback with its actual activation time
-- **WHEN** OFF succeeds after expiry or early stop
-- **THEN** execution returns confirmed completion
+- **WHEN** both outputs are confirmed OFF after movement
+- **THEN** the shade runtime reports Stopped without claiming a known physical endpoint
 
 #### Scenario: Failed switch-off followed by recovery
 
 - **WHEN** an OFF write fails
-- **THEN** execution returns failure feedback without claiming confirmed OFF
-- **WHEN** a subsequent OFF retry succeeds
-- **THEN** execution returns confirmed completion
+- **THEN** the shade runtime enters Recovering without claiming confirmed OFF
+- **WHEN** subsequent OFF writes confirm both outputs OFF
+- **THEN** it transitions to Stopped unless shutdown requires admission to remain blocked
 
 #### Scenario: Output already OFF
 
 - **GIVEN** a direction output is already OFF
 - **WHEN** an explicit OFF write succeeds
-- **THEN** execution returns a successful result despite the unchanged value
+- **THEN** the shade runtime uses that successful result despite the unchanged value
 
-### Requirement: Bounded lifecycle feedback
+### Requirement: Bounded non-blocking state reporting
 
-Execution SHALL retain lifecycle results within bounded feedback capacity without delaying deadlines, deactivation, or OFF retries.
-Admission SHALL limit accepted operations to the capacity needed for their lifecycle results.
-Each operation SHALL emit at most one failure event; repeated retry errors SHALL be logged.
-Successful OFF after failure SHALL still produce confirmed completion.
+State reporting SHALL use bounded storage without delaying requests, movement deadlines, recovery, OFF retries, or shutdown cleanup.
+After delayed delivery becomes available, reporting SHALL provide the latest lifecycle state without requiring every intermediate transition.
+Reports for one cover SHALL NOT overwrite newer delivered state with older state.
+Repeated OFF retry errors SHALL be logged without requiring repeated lifecycle transitions.
 
-#### Scenario: Feedback delivery is delayed at expiry
+#### Scenario: State delivery is delayed at expiry
 
-- **GIVEN** ON succeeds but the states channel cannot accept its activation result
-- **WHEN** the activation duration expires
-- **THEN** the executor attempts OFF without waiting for result delivery
-- **AND** it retains lifecycle results for delivery in order
+- **GIVEN** ON succeeds but the controller cannot receive the movement report
+- **WHEN** the movement duration expires
+- **THEN** the shade runtime attempts OFF without waiting for report delivery
+- **WHEN** state delivery becomes available
+- **THEN** the controller receives the latest lifecycle state
 
-#### Scenario: Repeated OFF failures during delayed feedback
+#### Scenario: Repeated OFF failures during delayed reporting
 
-- **GIVEN** OFF returns an error and failure feedback is pending or delivered
+- **GIVEN** a cover is Recovering and state delivery is delayed
 - **WHEN** subsequent OFF retries return errors
-- **THEN** the executor continues fixed-interval retries and logs the errors without adding failure events
-- **WHEN** OFF succeeds
-- **THEN** it retains confirmed completion for delivery
+- **THEN** the shade runtime continues fixed-interval retries and logs the errors
+- **AND** state-reporting storage remains bounded
+- **WHEN** both outputs are confirmed OFF and delivery becomes available
+- **THEN** the controller receives the resulting state without controlling completion of recovery
 
-#### Scenario: Feedback capacity is reserved
+### Requirement: Per-shade request saturation recovery
 
-- **WHEN** accepting another operation would exceed available lifecycle feedback capacity
-- **THEN** admission rejects that operation explicitly
-- **AND** cleanup of accepted operations continues using their reserved feedback capacity
+Each cover SHALL have bounded request admission that does not block other covers or the central controller loop.
+A full request queue SHALL return an explicit failure and trigger recovery only for the affected cover.
+Admission SHALL block before recovery is signalled.
+Recovery signalling SHALL remain available independently of request-queue capacity.
+The existing shade worker SHALL discard queued movement and establish both outputs OFF without replacement workers or concurrent writes.
+Requests during recovery SHALL be rejected rather than retained.
+Admission SHALL reopen only after both outputs are confirmed OFF and stale movement can no longer execute.
+A fresh request after recovery SHALL be required to move again.
 
-### Requirement: Explicit queue rejection
+#### Scenario: Shade request queue is full
 
-Full command queues SHALL reject commands explicitly rather than block local cover control.
-A rejected cover output command SHALL cause the affected cover to remain blocked and seek confirmed OFF.
+- **WHEN** an open, close, or stop request cannot enter a cover's bounded queue
+- **THEN** submission returns an explicit failure and blocks that cover's admission
+- **AND** the existing shade worker receives recovery independently of the full queue
+- **AND** it discards queued movement and establishes both outputs OFF
+- **AND** other covers continue without an application restart
+
+#### Scenario: Request arrives during recovery handover
+
+- **GIVEN** queue saturation has blocked admission but cleanup has not finished
+- **WHEN** a new direction request or stop request arrives
+- **THEN** submission rejects it without retaining movement or removing the cleanup obligation
+
+#### Scenario: Recovery waits for an in-progress ON write
+
+- **GIVEN** ON is in progress when saturation triggers recovery
+- **WHEN** that write returns within its timeout
+- **THEN** the same worker follows it with OFF cleanup
+- **AND** the ON result does not restore movement intent
+
+#### Scenario: OFF recovery fails after saturation
+
+- **GIVEN** saturation recovery is switching both outputs OFF
+- **WHEN** an OFF write returns an error
+- **THEN** the shade runtime keeps admission blocked and retries OFF at the configured interval
+
+#### Scenario: Fresh request after recovery
+
+- **GIVEN** queued movement has been discarded and both outputs are confirmed OFF
+- **WHEN** recovery completes outside shutdown
+- **THEN** admission reopens without replaying queued or rejected requests
+- **WHEN** a fresh direction request is admitted
+- **THEN** the shade runtime prepares that new movement
+
+### Requirement: Explicit integration queue rejection
+
 Rejected MQTT and Modbus commands SHALL be logged without a deferred-delivery guarantee.
-
-#### Scenario: Cover output queue is full
-
-- **WHEN** a cover output command cannot enter its bounded queue
-- **THEN** submission returns an explicit failure
-- **AND** the cover blocks movement and seeks confirmed OFF
-- **AND** other covers continue independently
+Integration queue saturation SHALL NOT block local cover control.
 
 #### Scenario: Integration queue is full
 
 - **WHEN** an MQTT or Modbus command cannot enter its bounded queue
 - **THEN** dispatch logs an explicit rejection without retaining the command for later delivery
 - **AND** local cover control continues
-
-### Requirement: Deactivation admission retry
-
-The controller SHALL retry rejected deactivation admission at the configured retry interval while cleanup remains required and execution runs.
-After admission succeeds, the executor SHALL own OFF execution and retries.
-The controller SHALL NOT resubmit admitted deactivation as an admission retry.
-Movement SHALL remain blocked until both outputs are confirmed OFF.
-
-#### Scenario: Rejected stop is later admitted
-
-- **GIVEN** the cover is stopping and its deactivation submission is rejected
-- **WHEN** the admission retry interval elapses
-- **THEN** the controller retries submission without retaining a new movement request
-- **WHEN** deactivation is admitted
-- **THEN** the controller stops admission retries for that operation
-- **AND** the executor handles OFF writes and any returned errors
-
-#### Scenario: Activation deadline remains effective during admission congestion
-
-- **GIVEN** a bounded activation is admitted and early deactivation is rejected
-- **WHEN** its activation duration expires before deactivation admission succeeds
-- **THEN** the executor initiates OFF without waiting for the rejected deactivation to be resubmitted

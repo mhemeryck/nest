@@ -8,14 +8,16 @@ Define the agreed safety behavior before selecting small implementation incremen
 ## What Changes
 
 - Add source-independent open, close, and stop requests with physical press-and-hold mapping
-- Cancel unsubmitted starts; follow submitted activations with FIFO deactivation on stop or opposite-direction requests
-- Accept brief activation after release when activation was already submitted; never reverse automatically
+- Keep the complete cover lifecycle in one shade runtime near sysfs, separate from low-level hardware access
+- Route open, close, and stop requests through the controller; retain reported state without a second movement FSM
+- Cancel unstarted movement; follow an ON write already in progress with OFF on stop or opposite-direction requests
+- Never reverse automatically or resume interrupted movement
 - Confirm both direction outputs OFF before activation and after stopping
-- Use generic bounded activation with executor-owned deadlines and fixed-interval OFF retries
-- Return activation, confirmed completion, and failure feedback through the existing states channel
-- Bound lifecycle feedback without delaying deadlines or cleanup; log repeated retry failures without repeated FSM events
-- Isolate cover output execution and reject commands explicitly when bounded queues are full
-- Retry rejected deactivation admission in the controller; transfer OFF execution retries to the executor after admission
+- Keep movement deadlines, interlocking, and fixed-interval OFF retries inside the shade runtime
+- Report lifecycle state without delaying deadlines or cleanup; keep relay write results internal to the shade runtime
+- Use bounded per-shade request channels and independent execution for each cover
+- Recover queue saturation within the affected shade; block requests, discard queued movement, and establish both outputs OFF
+- Reopen admission only after confirmed OFF and require a fresh movement request
 - Treat stuck sysfs writes as fatal process failure, detected by one shared watchdog
 - Reject congested MQTT / Modbus commands explicitly rather than block local control
 - Confirm safe outputs at startup and attempt safe outputs within a bounded shutdown wait
@@ -41,14 +43,14 @@ None
 ## Impact
 
 - Cover configuration, domain entities, relay ownership validation, and controller request handling
-- Sysfs bounded activation, FIFO output ordering, worker isolation, and execution feedback
+- Dedicated shade lifecycle model and workers beside sysfs, with sequential relay writes and reported state
 - Shared stuck-write supervision without replacement workers or timeout recovery
 - Physical button normalization and controller lifecycle
 - Shared integration dispatch where blocking could delay local stops or movement deadlines
 - Scenario tests for normal movement, pending commands, failures, and lifecycle behavior
 
 See `design.md` for agreed ownership and execution decisions.
-The design records both reviewed FSMs and their admission and feedback responsibilities.
+The design records one authoritative shade FSM, controller request and status handling, and per-shade recovery.
 Implementation increments follow separately.
 The historical `spec-driven-covers` branch provides reference material, not mandatory requirements or architecture.
 During design, multi-step functions must expose the ordered named responsibilities used to explain their behavior.
