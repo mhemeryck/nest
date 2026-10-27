@@ -36,6 +36,10 @@
 - Example: `receiveCommand`, `validateCommand`, `persistCommand`
 - Behavior- and direction-oriented names: `handleMasterToSlaveCommand`, `pollSlaveStatePoints`
 - Top-level functions: visible lifecycle or responsibility sequence
+- Keep the normal responsibility sequence visible in multi-step functions
+- Keep failure decisions beside the affected step: stop, continue, retry, or recover
+- Use helpers for implementation details, not to hide control flow or suppress errors
+- Make normal and failure paths understandable without tracing multiple files
 - Compact responsibility list above functions when structure alone lacks a clear high-level map
 - Fragment-based comments and lists
 - No helpers for trivial control flow alone
