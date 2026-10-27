@@ -73,6 +73,10 @@
 - Historical plans and existing code: evidence for discussion, not automatic requirements
 - Resolve material behavior questions with the user before drafting a proposal
 - Concrete scenarios before implementation; revise artifacts as new evidence emerges
+- Split implementation tasks into small, separately reviewable increments
+- Give each increment a clear responsibility and its own verification
+- Keep required safety behavior complete before exposing the feature
+- Prefer meaningful review boundaries over arbitrary task counts
 - Accepted specs in `openspec/specs/`; proposed changes in `openspec/changes/`
 - Verify implementation against scenarios before archiving
 - Run `devenv tasks run dev:check` before task completion
