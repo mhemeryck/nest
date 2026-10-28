@@ -136,20 +136,18 @@ func selectNextWrite(state *lifecycle, now time.Time) (write, bool) {
 		return write{}, false
 	}
 
-	var next write
-	var available bool
-
 	switch state.phase {
 	case preparing, stopping, recovering:
-		next, available = nextOffWrite(state, now)
+		return nextOffWrite(state, now)
 	case activating:
-		next = write{direction: state.direction, on: true}
-		available = true
+		return write{direction: state.direction, on: true}, true
+	default:
+		return write{}, false
 	}
-
-	return next, available
 }
 
+// Select the first output not confirmed OFF whose retry time has arrived,
+// checking opening before closing. No state changes or hardware access.
 func nextOffWrite(state *lifecycle, now time.Time) (write, bool) {
 	for _, selected := range []direction{opening, closing} {
 		output := state.outputs[int(selected)-1]
