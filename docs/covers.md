@@ -47,6 +47,57 @@ A multi-step function reads as the ordered sequence of named responsibilities us
 - Resolve differences between the behavioral explanation and the function calls during each increment's review
 - Apply this criterion during implementation, not as a later cleanup phase
 
+### Shade Lifecycle Model
+
+The first increment provides the lifecycle model in `internal/shade/lifecycle.go` and its transition tests.
+It does not enable cover movement.
+Hardware execution, request admission, state delivery, and application wiring follow in separate increments.
+
+Normal movement follows this sequence:
+
+```text
+Stopped --> Preparing --> Activating --> Moving --> Stopping --> Stopped
+```
+
+| Phase      | Responsibility                                                      |
+| ---------- | ------------------------------------------------------------------- |
+| Preparing  | Confirm both direction outputs OFF through successful writes        |
+| Stopped    | Keep both outputs confirmed OFF with no movement intent             |
+| Activating | Start the selected ON write if movement intent remains              |
+| Moving     | Preserve the direction and original full-travel deadline            |
+| Stopping   | Cancel movement and confirm both outputs OFF                        |
+| Recovering | Cancel movement and retry required OFF writes after returned errors |
+
+Startup uses Recovering with unknown outputs until both OFF writes succeed.
+Stopped does not identify a physical endpoint or position.
+
+The model separates requests, write starts, write completions, deadline expiry, and shutdown.
+All transitions use plain functions with explicit state arguments.
+The caller supplies times; the model performs no hardware access and starts no timers or goroutines.
+
+- `handleRequest`: prepare movement, preserve the same direction, or initiate stopping
+- `claimNextWrite`: select and mark one write in progress; do not claim another until completion
+- `completeWrite`: record success and advance the lifecycle, or enter recovery and return the write error
+- `expireMovement`: initiate stopping at the deadline established by successful ON completion
+- `beginShutdown`: prevent further movement and continue required cleanup
+
+Stop or an opposite-direction request cancels ON before its write starts.
+After ON starts, cleanup waits for that write to return and then establishes OFF.
+A late ON result does not restore canceled movement.
+An opposite-direction request never reverses movement automatically.
+Same-direction requests do not issue duplicate ON writes or extend the deadline.
+
+Only successful writes confirm output state.
+Preparation requires fresh OFF confirmation for both outputs before every activation.
+Cleanup retains successful OFF confirmation for outputs that have not changed.
+A failed OFF write remains unknown and becomes eligible for retry after the configured interval.
+Failure on one output does not prevent an OFF attempt on the other output.
+An in-progress retry prevents additional write attempts from accumulating.
+
+Direction requests during cleanup do not become later movement.
+After cleanup, movement requires a fresh request.
+Shutdown remains authoritative after cleanup succeeds; the model does not allow further movement.
+
 ### Existing Reference Material
 
 The following sections contain earlier hardware, behavior, integration, and configuration notes.

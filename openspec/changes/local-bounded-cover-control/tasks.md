@@ -2,10 +2,10 @@
 
 ## 1. Shade lifecycle model and transition tests
 
-- [ ] 1.1 Define the shade lifecycle states, inputs, and effects as plain functions in a dedicated runtime module beside sysfs; verify the model builds and exposes no receiver-based transition API
-- [ ] 1.2 Implement startup preparation, movement intent, direction interlocking, stop, opposite-direction cancellation, and deadline transitions; add transition tests for normal movement, same-direction requests, stop timing, and no automatic reversal
-- [ ] 1.3 Implement returned-write-error and shutdown transition behavior in the lifecycle model; add tests proving movement is canceled, OFF remains required, and shutdown never reopens admission
-- [ ] 1.4 Document the lifecycle phases and transition invariants in the existing cover documentation; verify the documented behavior matches the model and its tests
+- [x] 1.1 Define the shade lifecycle states, inputs, and effects as plain functions in a dedicated runtime module beside sysfs; verify the model builds and exposes no receiver-based transition API
+- [x] 1.2 Implement startup preparation, movement intent, direction interlocking, stop, opposite-direction cancellation, and deadline transitions; add transition tests for normal movement, same-direction requests, stop timing, and no automatic reversal
+- [x] 1.3 Implement returned-write-error and shutdown transition behavior in the lifecycle model; add tests proving movement is canceled, OFF remains required, and shutdown never reopens admission
+- [x] 1.4 Document the lifecycle phases and transition invariants in the existing cover documentation; verify the documented behavior matches the model and its tests
 
 ## 2. Sequential sysfs execution and watchdog
 
