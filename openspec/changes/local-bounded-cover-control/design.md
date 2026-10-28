@@ -3,8 +3,9 @@
 ## Context
 
 See `proposal.md` for motivation and `specs/cover-control/spec.md` for behavior.
-This document records the agreed single shade lifecycle model and per-shade recovery.
-Implementation increments and tasks follow separately.
+This document records agreed runtime boundaries and remaining interface decisions.
+The committed lifecycle model is a checkpoint, not an accepted worker interface.
+Complete the caller and worker design before further runtime implementation.
 
 The current controller normalizes inputs and dispatches semantic events through a central loop.
 Sysfs accepts commands and returns state observations through `states`.
@@ -16,11 +17,12 @@ MQTT and Modbus command sends can block the controller's dispatch path.
 
 **Goals:**
 
-- Keep the complete shade lifecycle visible in one cohesive FSM module
+- Keep the complete shade lifecycle visible under one worker's ownership
 - Keep interlocking, movement deadlines, and OFF recovery under one runtime's ownership
 - Preserve sequential hardware writes without blocking unrelated shades
 - Separate source routing, shade behavior, and low-level sysfs access
-- Make multi-step functions read as their named behavioral responsibilities
+- Make runtime interfaces understandable from concrete caller examples
+- Make multi-step functions expose meaningful behavioral responsibilities
 
 **Non-Goals:**
 
@@ -29,31 +31,72 @@ MQTT and Modbus command sends can block the controller's dispatch path.
 - Recovery from hung writes, replacement workers, or concurrent writes after timeout
 - Custom request coalescing, reserved stop slots, or controller admission-retry timers
 - Receiver methods for shade FSM logic
-- Final task breakdown or implementation in this planning step
+- Callback-based hardware access or function fields for relay operations
+- Position commands or payloads in this slice
 
 ## Decisions
 
 ### One authoritative shade lifecycle
 
-Put the complete lifecycle in a dedicated shade runtime module beside sysfs.
-Keep source-independent shade semantics in that module, not in low-level sysfs device access.
-Use plain functions with explicit state and input arguments, without receiver methods.
-Keep states, transitions, and behavioral helpers together so the full lifecycle remains inspectable.
+Put the complete lifecycle in `internal/sysfs/shade`.
+Keep shade behavior separate from low-level writes in the parent `sysfs` package.
+The shade package imports sysfs; sysfs does not import the shade package.
+Application wiring connects both packages without an import cycle.
+Use concrete relay references and plain package-level functions, without receiver methods or hardware callbacks.
+The package location makes the concrete sysfs dependency explicit.
+Do not add a hardware-independent abstraction without a demonstrated need.
 
 The shade runtime owns both direction relays, interlocking, movement intent, deadlines, and OFF retries.
 It also owns startup switch-off, per-shade recovery, and shutdown cleanup.
-Hardware write outcomes and timer expiry are internal FSM inputs.
-They do not require relay-operation round trips through the central controller.
+Hardware write outcomes and timer expiry remain internal to the worker.
+Handle a synchronous write result beside its call.
+Do not require callers to coordinate a claim-and-completion protocol through hidden lifecycle mutations.
+Private state and transition helpers remain possible where they simplify the demonstrated worker flow.
 
 Alternative: a controller cover FSM cooperating with a generic bounded-activation executor FSM.
 Reject that split because the full lifecycle requires reconstructing transitions across both models and their result handover.
 Do not merely relocate both FSMs into the same package.
-Sequential I/O and timers execute one lifecycle model rather than form another independently authoritative FSM.
+Sequential I/O and timers share one lifecycle authority.
+
+### Per-shade public interface
+
+Use the singular package name `shade`.
+Construct one handle with the opening relay, closing relay, and shared timing settings.
+Store `openingRelay` and `closingRelay` directly in private handle fields.
+Do not introduce a separate `Outputs` struct.
+
+The agreed caller-facing shape is:
+
+```go
+handle, err := shade.New(openingRelay, closingRelay, timing)
+err = shade.Submit(handle, shade.Open)
+states := shade.States(handle)
+```
+
+The fragment shows the interface shape, not complete application wiring or implemented declarations.
+Check construction errors before using the handle.
+`New` validates local arguments and creates bounded storage.
+It starts no goroutine and performs no hardware writes.
+Application wiring starts one blocking `Run` call in a goroutine for each handle and collects its result.
+The exact `Run` arguments depend on the remaining watchdog and application lifecycle decisions.
+
+`Submit` accepts the commands Open, Close, and Stop.
+It does not accept a position payload.
+It returns acceptance or explicit rejection without waiting for hardware or queue capacity.
+Acceptance does not promise that movement starts.
+Reject submission before startup confirms both relays OFF and after shutdown begins.
+
+Keep lifecycle state private.
+The public boundary exposes commands and state snapshots, not relay-write bookkeeping.
+Alternative: expose the isolated lifecycle model as the runtime interface.
+Reject that approach because its use depends on coordination that the caller has not demonstrated.
 
 ### Controller requests and reported state
 
 The controller maps buttons and other sources to Open, Close, and Stop requests.
-Route each request by typed cover ID to its shade runtime.
+The controller selects a shade handle by typed cover ID before submitting a command.
+`Submit` receives one handle, not all shades or a cover ID.
+The shade worker accesses only its own two relays and state.
 Keep configured definitions and relay lookups in the registry, separate from runtime state.
 Only the owning shade worker changes authoritative lifecycle state.
 
@@ -82,6 +125,9 @@ Reject duplicate authority; the controller needs a state snapshot, not another m
 Give each shade's two relays one worker and one bounded request channel.
 Keep unrelated devices in the existing sysfs worker groups.
 Each worker owns its FSM state and executes hardware writes synchronously and sequentially.
+A write blocks only its owning shade, not other shades or controller submission.
+Commands can enter the bounded queue while a write runs.
+The worker handles them after the write returns; it does not process commands concurrently with that write.
 Waiting for a movement deadline or retry interval must not block request or recovery handling.
 Do not implement movement as ON followed by an uninterruptible sleep.
 
@@ -89,6 +135,9 @@ The worker arms the full-travel deadline immediately after ON succeeds, before a
 The same model switches both outputs OFF after expiry, stop, opposite-direction request, or recovery.
 Retry returned OFF errors at the configured interval without accumulating attempts or retrying ON.
 An in-progress write finishes before another write starts; watchdog supervision handles a write that remains stuck.
+Before activation, process already queued commands in FIFO order so a pending Stop can cancel unstarted movement.
+Check shutdown and saturation recovery before starting another write.
+Do not infer that admission can interrupt an active sysfs call.
 
 Alternative: one shared relay worker.
 Reject it because a slow write could delay another shade's stop.
@@ -97,7 +146,8 @@ An idle worker waits rather than continuously consuming CPU.
 ### Lifecycle transitions
 
 Direction is separate state rather than duplicated opening and closing phases.
-Track confirmed outputs, movement intent, deadline, recovery admission, and shutdown intent within the same model.
+The worker owns confirmed outputs, movement intent, deadlines, and cleanup state.
+Admission synchronization is separate from worker-owned lifecycle state.
 Startup begins in cleanup with unknown output state, not Stopped or resumed movement.
 
 | State             | Input or outcome                              | Next state and action                                                      |
@@ -150,6 +200,10 @@ Full admission returns an explicit failure and triggers recovery for that shade,
 Block admission before signalling recovery.
 Use a recovery signal independent of the request channel so a full channel cannot prevent cleanup.
 Keep the admission gate and recovery handover coordinated so requests cannot enter between blocking and signalling.
+Protect shared admission state with a mutex used by submission and the worker.
+The command channel provides queue synchronization; the mutex coordinates admission closure and reopening.
+Never hold the admission mutex during hardware writes.
+Worker-owned lifecycle state does not need a mutex.
 The existing worker checks recovery before starting further queued movement and clears stale requests before reopening admission.
 An in-progress write returns before that worker performs cleanup.
 
@@ -172,7 +226,13 @@ Those integration queues must not block shade requests, deadlines, or cleanup.
 
 ### State reporting without blocking cleanup
 
-Report shade lifecycle state through the existing `states` path with a distinct message kind and typed cover ID.
+Expose per-shade snapshots through `shade.States(handle)`.
+Use the term states consistently with the existing application.
+Use a bounded latest-state slot for each shade; newer snapshots replace unread older snapshots without blocking the worker.
+Only the owning worker publishes snapshots.
+Application wiring merges per-shade states into the controller event path and attaches the typed cover ID.
+Keep the merging mechanism pending until its caller example is reviewed.
+Do not make the parent sysfs package import shade snapshot types.
 Relay observations remain distinct from shade state; observations do not replace successful write results inside the model.
 The controller stores reported state but does not feed it back as an authoritative transition input.
 
@@ -202,7 +262,10 @@ Reject it because a failed read must not prevent an OFF attempt.
 ### Shared stuck-write watchdog
 
 Use one shared watchdog for in-progress sysfs writes.
-Each worker records the start time before its synchronous write and clears that record after the write returns.
+Use the name watchdog for shared write supervision.
+The proposed sysfs write boundary registers an active write and clears its record after the synchronous call returns.
+Keep registration beside the low-level write rather than requiring each shade call site to wrap it.
+The exact relay type, write signature, watchdog construction, and fatal-error delivery remain unresolved.
 Do not hold bookkeeping synchronization during hardware I/O.
 The watchdog checks active writes against the configured output-command timeout.
 Queue waiting, movement duration, and waiting between retries are not in-progress writes.
@@ -234,6 +297,9 @@ Shutdown sequence:
 Shutdown uses the same cleanup behavior as per-shade recovery but never reopens admission.
 Keep shutdown intent authoritative if recovery completes concurrently.
 Use separate begin-shutdown and execution-stop signals.
+Keep watchdog supervision active while workers perform shutdown cleanup.
+Do not cancel the watchdog with the signal that initiates shade cleanup.
+Concrete application wiring and bounded waiting during an active synchronous write still require caller review.
 
 Alternative: cancel controller and workers together.
 Reject it because workers could exit before attempting required OFF writes.
@@ -241,9 +307,16 @@ Reject it because workers could exit before attempting required OFF writes.
 ### Responsibility-level functions
 
 Describe each multi-step function as named behavioral responsibilities.
-Represent those responsibilities with helper calls in the same order.
+Make those responsibilities recognizable in the function structure.
+Extract helpers for meaningful concepts, not mechanical steps or request renaming.
 Keep ordering, branching, continuation, and failure rules visible in the caller.
 Keep integration details and related bookkeeping inside the responsible helper.
+Keep small, cohesive transition updates together.
+Use explicit phase handling rather than exclusion lists with different hidden reasons.
+Separate shutdown policy from temporary cleanup policy.
+Prefer direct selection returns over temporary result variables.
+Use early returns where each exit has a consistent responsibility.
+Keep selection separate from mutation when both responsibilities exist.
 Apply this criterion to the lifecycle transitions, admission handover, and worker orchestration.
 Keep event-loop orchestration separate from behavioral rules without splitting lifecycle authority.
 Resolve structural mismatches during each increment's review, not in a later cleanup.
@@ -274,8 +347,24 @@ Resolve structural mismatches during each increment's review, not in a later cle
 
 ## Migration Plan
 
-Select small implementation increments from these agreed boundaries and scenario checks.
+Preserve the existing model and tests as a checkpoint, not a required implementation shape.
+Complete caller examples and worker interaction before choosing the remaining internal model API.
+Review open, stop during ON, queue saturation, and shutdown across the same runtime boundary.
+Replace or adapt existing model code only after that review.
 Introduce prerequisites before exposing configured cover movement.
 Verify the specification scenarios before completing implementation.
 Before deployment or rollback, request confirmed OFF through the bounded shutdown sequence.
 Do not infer safe physical outputs from process exit or timeout alone.
+
+## Pending Design Review
+
+These decisions block further runtime implementation; they are not optional implementation details.
+
+- Concrete sysfs relay references and the direct write API, without callbacks or receiver methods
+- Watchdog construction, monitoring lifetime, registration API, and fatal-error delivery
+- Application startup, cleanup signalling, bounded waiting, and execution-stop wiring
+- Per-shade state merging into the controller event path without delaying workers
+- Private state and helpers justified by the complete worker flow, including whether pending-write bookkeeping remains necessary
+
+Resolve these boundaries with caller examples before implementing the revised tasks.
+The behavioral spec remains unchanged.
