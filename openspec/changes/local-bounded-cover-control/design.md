@@ -63,6 +63,8 @@ Sequential I/O and timers share one lifecycle authority.
 Use the singular package name `shade`.
 Construct one handle with the opening relay, closing relay, and shared timing settings.
 Store `openingRelay` and `closingRelay` directly in private handle fields.
+Reuse `*sysfs.Device` for both relay references rather than introducing a separate relay type.
+Exclude shade-owned devices from shared sysfs workers to prevent competing writes and cached-state access.
 Do not introduce a separate `Outputs` struct.
 
 The agreed caller-facing shape is:
@@ -70,7 +72,6 @@ The agreed caller-facing shape is:
 ```go
 handle, err := shade.New(openingRelay, closingRelay, timing)
 err = shade.Submit(handle, shade.Open)
-states := shade.States(handle)
 ```
 
 The fragment shows the interface shape, not complete application wiring or implemented declarations.
@@ -78,7 +79,9 @@ Check construction errors before using the handle.
 `New` validates local arguments and creates bounded storage.
 It starts no goroutine and performs no hardware writes.
 Application wiring starts one blocking `Run` call in a goroutine for each handle and collects its result.
-The exact `Run` arguments depend on the remaining watchdog and application lifecycle decisions.
+Application wiring supplies the typed cover ID, shared state output, and fatal write-failure output to the worker.
+The exact `Run` signature and shutdown function names remain tentative.
+Replace the earlier per-handle `States` proposal with the shared state output described below.
 
 `Submit` accepts the commands Open, Close, and Stop.
 It does not accept a position payload.
@@ -128,13 +131,15 @@ Each worker owns its FSM state and executes hardware writes synchronously and se
 A write blocks only its owning shade, not other shades or controller submission.
 Commands can enter the bounded queue while a write runs.
 The worker handles them after the write returns; it does not process commands concurrently with that write.
+The existing worker loop handles commands, timers, state publication, and hardware writes sequentially.
+Only communication with other components and write-deadline handling run independently of that loop.
 Waiting for a movement deadline or retry interval must not block request or recovery handling.
 Do not implement movement as ON followed by an uninterruptible sleep.
 
 The worker arms the full-travel deadline immediately after ON succeeds, before attempting state publication.
 The same model switches both outputs OFF after expiry, stop, opposite-direction request, or recovery.
 Retry returned OFF errors at the configured interval without accumulating attempts or retrying ON.
-An in-progress write finishes before another write starts; watchdog supervision handles a write that remains stuck.
+An in-progress write finishes before another write starts; context deadline supervision detects a write that remains stuck.
 Before activation, process already queued commands in FIFO order so a pending Stop can cancel unstarted movement.
 Check shutdown and saturation recovery before starting another write.
 Do not infer that admission can interrupt an active sysfs call.
@@ -226,12 +231,20 @@ Those integration queues must not block shade requests, deadlines, or cleanup.
 
 ### State reporting without blocking cleanup
 
-Expose per-shade snapshots through `shade.States(handle)`.
+Use one shared shade-state channel as a controller input, consistent with the existing actor boundaries.
 Use the term states consistently with the existing application.
-Use a bounded latest-state slot for each shade; newer snapshots replace unread older snapshots without blocking the worker.
+Each state message contains the typed cover ID, lifecycle phase, and direction.
+Application wiring supplies the cover ID to each worker; handle lookup remains outside the worker.
+Each worker retains at most one latest unsent snapshot in its private state.
+New snapshots replace the pending snapshot without blocking the worker.
 Only the owning worker publishes snapshots.
-Application wiring merges per-shade states into the controller event path and attaches the typed cover ID.
-Keep the merging mechanism pending until its caller example is reviewed.
+Use an unbuffered shared state channel so unsent snapshots remain replaceable inside their owning workers.
+Enable a send case in the existing worker loop only while a snapshot is pending.
+If the controller cannot receive, continue command handling, timers, and required hardware work.
+Clear pending publication after a successful send; a later state change enables it again.
+The controller normalizes shade states into its existing central event dispatch path.
+Do not add forwarding goroutines, reflection-based selection, or a shared snapshot map read by the controller.
+These mechanisms are unnecessary when workers publish directly through their existing loops.
 Do not make the parent sysfs package import shade snapshot types.
 Relay observations remain distinct from shade state; observations do not replace successful write results inside the model.
 The controller stores reported state but does not feed it back as an authoritative transition input.
@@ -249,32 +262,46 @@ Only successful writes establish confirmed OFF, including writes whose requested
 Alternative: reserve lifecycle feedback capacity for every relay operation admitted by the controller.
 Remove that handover because relay results now stay inside the shade runtime.
 Do not block cleanup on state publication or add an unbounded result backlog.
+The controller can stop receiving during shutdown without preventing worker cleanup.
+Use worker completion results, not state snapshots, to establish shutdown completion.
 
 ### Explicit writes without preliminary reads
 
 Explicit ON/OFF writes use the requested value directly.
 Return the result to the shade runtime even when a cached value matches the requested value.
+The parent sysfs package provides a plain synchronous write function for a device and an explicit value.
+It does not publish shade states or mutate the device's cached value for shade lifecycle bookkeeping.
 Toggle still reads first because the current value determines its target.
+Keep existing light behavior outside this shade-specific supervision change.
 
 Alternative: retain read-before-write for all commands.
 Reject it because a failed read must not prevent an OFF attempt.
 
-### Shared stuck-write watchdog
+### Context-based stuck-write supervision
 
-Use one shared watchdog for in-progress sysfs writes.
-Use the name watchdog for shared write supervision.
-The proposed sysfs write boundary registers an active write and clears its record after the synchronous call returns.
-Keep registration beside the low-level write rather than requiring each shade call site to wrap it.
-The exact relay type, write signature, watchdog construction, and fatal-error delivery remain unresolved.
-Do not hold bookkeeping synchronization during hardware I/O.
-The watchdog checks active writes against the configured output-command timeout.
+Keep shade write supervision inside `internal/sysfs/shade`, not in generic sysfs device setup.
+Use a deadline context for each in-progress write with the configured output-command timeout.
+Do not introduce a custom watchdog object, active-write registry, or polling monitor.
+Do not attach watchdog references or supervision settings to `sysfs.Device`.
+A private shade helper supervises the synchronous parent-package write and returns its actual result.
+Register deadline handling with `context.AfterFunc` before starting the write.
+On deadline expiry, notify the application through a shared bounded fatal-error channel without blocking the handler.
+After write completion, stop deadline handling and cancel the deadline context.
+Normal completion cancellation is not a write timeout.
+Coordinate completion and expiry so a handler cannot report a timeout after supervision has successfully ended.
+Verify the completion-versus-expiry race explicitly; the exact coordination remains a review item.
+The deadline handler runs independently because the worker cannot observe context expiry while blocked in synchronous I/O.
+The context does not interrupt the sysfs call or automatically propagate failure to the application.
 Queue waiting, movement duration, and waiting between retries are not in-progress writes.
 
 An exceeded write timeout causes fatal process failure, not per-shade recovery.
 Do not create replacement workers or bypass a blocked write with concurrent I/O.
 A returned write error remains a normal shade recovery input.
 Fatal exit does not confirm OFF or replace startup switch-off in the next process.
-The watchdog does not own movement deadlines, OFF retries, or lifecycle transitions.
+Write supervision does not own movement deadlines, OFF retries, or lifecycle transitions.
+The application receives fatal write errors during normal operation and shutdown cleanup.
+It returns an error through the existing process-exit path without waiting for a blocked worker.
+Keep the failure channel available until process exit or all supervised writes have ended.
 
 Alternative: separate I/O workers and late-result recovery after timeout.
 Reject that machinery for exceptional hung-write failures.
@@ -290,16 +317,21 @@ Shutdown sequence:
 1. Block new requests and signal shutdown independently of request-channel capacity
 2. Cancel unstarted movement and discard queued movement requests
 3. Finish any in-progress write, then establish both outputs OFF
-4. Keep workers and state handling running, including OFF retries
-5. Wait for confirmed OFF or the configured shutdown timeout
-6. Signal execution stop without claiming unconfirmed outputs are OFF
+4. Stop command producers and the controller; keep shade workers performing cleanup and OFF retries
+5. Wait for worker results while also observing fatal write errors and the configured shutdown timeout
+6. After confirmed OFF, stop remaining infrastructure; on fatal error or timeout, return an error without unconditional actor waits
 
 Shutdown uses the same cleanup behavior as per-shade recovery but never reopens admission.
 Keep shutdown intent authoritative if recovery completes concurrently.
 Use separate begin-shutdown and execution-stop signals.
-Keep watchdog supervision active while workers perform shutdown cleanup.
-Do not cancel the watchdog with the signal that initiates shade cleanup.
-Concrete application wiring and bounded waiting during an active synchronous write still require caller review.
+Beginning shutdown synchronously closes admission and signals cleanup without waiting for hardware.
+Keep per-write deadline supervision active while workers perform shutdown cleanup.
+Do not derive write deadlines from the normal shutdown cancellation context.
+Worker completion results establish confirmed cleanup; state publication is not a prerequisite for completion.
+An execution-stop signal cannot interrupt an active sysfs call.
+If shutdown timeout expires before a write deadline, return a shutdown error without claiming confirmed OFF.
+The existing command entry point exits with failure when the application returns an error.
+Exact function signatures and lifecycle wiring still require a final caller review.
 
 Alternative: cancel controller and workers together.
 Reject it because workers could exit before attempting required OFF writes.
@@ -326,7 +358,8 @@ Resolve structural mismatches during each increment's review, not in a later cle
 - Full request channel: block admission and signal independent per-shade recovery; discard stale movement
 - Concurrent request and recovery: coordinate admission closure and reopening; test the handover explicitly
 - Stop during synchronous ON: follow the completed write with OFF; do not claim interruptible hardware writes
-- Hung sysfs write: shared watchdog causes fatal failure rather than introducing replacement workers
+- Hung sysfs write: context deadline handling signals fatal failure without introducing replacement workers
+- Write completion races with expiry: coordinate handler cancellation and verify the terminal decision
 - Fatal exit can leave relays energized: require startup switch-off; restart alone does not guarantee safe outputs
 - Delayed state delivery: retain bounded current state without making cleanup depend on the controller
 - No position tracking: Stopped confirms relay state, not a physical endpoint
@@ -340,7 +373,8 @@ Resolve structural mismatches during each increment's review, not in a later cle
 - Queue saturation: block only that shade, discard queued movement, and confirm OFF before reopening
 - Recovery races: reject concurrent requests, clear stale movement, and require a fresh request after confirmed OFF
 - Returned errors: retry OFF at the fixed interval without resuming movement or accumulating writes
-- Hung ON or OFF: watchdog causes fatal failure without replacement writes
+- Hung ON or OFF: context deadline handling causes fatal failure without replacement writes
+- Completed write: cancel deadline handling without false fatal notification; verify races with expiry
 - Delayed state reports: deadlines and cleanup continue; stale reports cannot change authoritative state
 - Shutdown during activation or recovery: discard unstarted movement and never reopen admission
 - Controller boundary: route source-independent requests and retain state without implementing movement transitions
@@ -360,10 +394,10 @@ Do not infer safe physical outputs from process exit or timeout alone.
 
 These decisions block further runtime implementation; they are not optional implementation details.
 
-- Concrete sysfs relay references and the direct write API, without callbacks or receiver methods
-- Watchdog construction, monitoring lifetime, registration API, and fatal-error delivery
-- Application startup, cleanup signalling, bounded waiting, and execution-stop wiring
-- Per-shade state merging into the controller event path without delaying workers
+- Final caller signatures using concrete devices, shared state output, fatal-error output, and separate shutdown signalling
+- Deadline completion-versus-expiry coordination and non-blocking fatal-error delivery
+- Application startup and shutdown wiring that preserves supervision and avoids unconditional waits on failure
+- Shared shade-state input through controller normalization and dispatch, with bounded downstream delivery
 - Private state and helpers justified by the complete worker flow, including whether pending-write bookkeeping remains necessary
 
 Resolve these boundaries with caller examples before implementing the revised tasks.
