@@ -4,6 +4,106 @@
 
 Motorized window shades controlled via relays on Unipi Neuron, with both physical push buttons and Home Assistant integration.
 
+## Implementation Roadmap
+
+Four agreed slices, in order:
+
+1. **Local bounded cover control**
+   - Open, close, and stop requests; physical press-and-hold behavior
+   - Exclusive relay ownership, output interlocking, completion feedback, and pending-command ordering
+   - Independent covers and bounded movement deadlines
+   - Output failures, timeouts, OFF retries, and recovery
+   - Startup, bounded shutdown, and affected-input failures
+2. **Position reporting**
+   - Time-based estimates and unknown position
+   - Confirmed endpoints after full travel and successful switch-off
+   - Estimates never restrict movement or shorten a full-travel run
+3. **Position persistence**
+   - Trusted position restoration without resumed movement
+   - Unfinished movement and unclean restart detection
+   - Storage failures independent of local control
+4. **MQTT / Home Assistant integration**
+   - Remote commands and retained-command rules
+   - State, position, availability, and discovery
+   - Reconnect reporting without changed movement intent or deadlines
+
+These slices define planning scope, not detailed requirements or delivered behavior.
+Review concrete scenarios before creating each OpenSpec change.
+Use `spec-driven-covers` as reference, not as automatically accepted requirements or mandatory architecture.
+Plan only the next slice in detail.
+
+Each slice can require several independently reviewable implementation increments.
+Identify prerequisites through design, including output feedback and non-blocking integration dispatch.
+Keep local stopping and deadlines independent of MQTT and Modbus backpressure.
+Do not expose cover control before its safety behavior works together.
+
+### Design Criterion
+
+A multi-step function reads as the ordered sequence of named responsibilities used to explain its behavior.
+
+- Represent each responsibility with a named helper call
+- Keep ordering, branching, and failure rules visible in the caller
+- Keep implementation details and related state updates inside the responsible helper
+- Resolve differences between the behavioral explanation and the function calls during each increment's review
+- Apply this criterion during implementation, not as a later cleanup phase
+
+### Shade Lifecycle Model
+
+The first increment provides the lifecycle model in `internal/shade/lifecycle.go` and its transition tests.
+It does not enable cover movement.
+Hardware execution, request admission, state delivery, and application wiring follow in separate increments.
+
+Normal movement follows this sequence:
+
+```text
+Stopped --> Preparing --> Activating --> Moving --> Stopping --> Stopped
+```
+
+| Phase      | Responsibility                                                      |
+| ---------- | ------------------------------------------------------------------- |
+| Preparing  | Confirm both direction outputs OFF through successful writes        |
+| Stopped    | Keep both outputs confirmed OFF with no movement intent             |
+| Activating | Start the selected ON write if movement intent remains              |
+| Moving     | Preserve the direction and original full-travel deadline            |
+| Stopping   | Cancel movement and confirm both outputs OFF                        |
+| Recovering | Cancel movement and retry required OFF writes after returned errors |
+
+Startup uses Recovering with unknown outputs until both OFF writes succeed.
+Stopped does not identify a physical endpoint or position.
+
+The model separates requests, write starts, write completions, deadline expiry, and shutdown.
+All transitions use plain functions with explicit state arguments.
+The caller supplies times; the model performs no hardware access and starts no timers or goroutines.
+
+- `handleRequest`: prepare movement, preserve the same direction, or initiate stopping
+- `claimNextWrite`: select and mark one write in progress; do not claim another until completion
+- `completeWrite`: record success and advance the lifecycle, or enter recovery and return the write error
+- `expireMovement`: initiate stopping at the deadline established by successful ON completion
+- `beginShutdown`: prevent further movement and continue required cleanup
+
+Stop or an opposite-direction request cancels ON before its write starts.
+After ON starts, cleanup waits for that write to return and then establishes OFF.
+A late ON result does not restore canceled movement.
+An opposite-direction request never reverses movement automatically.
+Same-direction requests do not issue duplicate ON writes or extend the deadline.
+
+Only successful writes confirm output state.
+Preparation requires fresh OFF confirmation for both outputs before every activation.
+Cleanup retains successful OFF confirmation for outputs that have not changed.
+A failed OFF write remains unknown and becomes eligible for retry after the configured interval.
+Failure on one output does not prevent an OFF attempt on the other output.
+An in-progress retry prevents additional write attempts from accumulating.
+
+Direction requests during cleanup do not become later movement.
+After cleanup, movement requires a fresh request.
+Shutdown remains authoritative after cleanup succeeds; the model does not allow further movement.
+
+### Existing Reference Material
+
+The following sections contain earlier hardware, behavior, integration, and configuration notes.
+They do not define accepted requirements for the roadmap.
+Resolve differences through scenario review before implementation.
+
 ## Hardware
 
 ### Wiring

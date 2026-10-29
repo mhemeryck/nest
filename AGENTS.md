@@ -7,7 +7,7 @@
 - One sentence per line in Markdown prose
 - Compact scan-oriented comments, lists, and headings
 - Specs: ASD-STE100 Simplified Technical English; active voice, consistent terms, one idea per sentence
-- Format all Markdown files with dprint; run `nest-format` after edits
+- Format all Markdown files with dprint; run `devenv tasks run dev:format` after edits
 
 ## Git
 
@@ -36,6 +36,10 @@
 - Example: `receiveCommand`, `validateCommand`, `persistCommand`
 - Behavior- and direction-oriented names: `handleMasterToSlaveCommand`, `pollSlaveStatePoints`
 - Top-level functions: visible lifecycle or responsibility sequence
+- Keep the normal responsibility sequence visible in multi-step functions
+- Keep failure decisions beside the affected step: stop, continue, retry, or recover
+- Use helpers for implementation details, not to hide control flow or suppress errors
+- Make normal and failure paths understandable without tracing multiple files
 - Compact responsibility list above functions when structure alone lacks a clear high-level map
 - Fragment-based comments and lists
 - No helpers for trivial control flow alone
@@ -69,9 +73,13 @@
 - Historical plans and existing code: evidence for discussion, not automatic requirements
 - Resolve material behavior questions with the user before drafting a proposal
 - Concrete scenarios before implementation; revise artifacts as new evidence emerges
+- Split implementation tasks into small, separately reviewable increments
+- Give each increment a clear responsibility and its own verification
+- Keep required safety behavior complete before exposing the feature
+- Prefer meaningful review boundaries over arbitrary task counts
 - Accepted specs in `openspec/specs/`; proposed changes in `openspec/changes/`
 - Verify implementation against scenarios before archiving
-- Run `nest-check` inside `devenv shell` before task completion
+- Run `devenv tasks run dev:check` before task completion
 - Nushell for development scripts and shell examples
 
 ## Layout
