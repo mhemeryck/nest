@@ -15,16 +15,27 @@ Unless explicitly stated otherwise, they should be read as architecture and
 migration documentation rather than as an exact description of the current Go
 codebase.
 
+## Development
+
+| Document                                      | Purpose                                                  |
+| --------------------------------------------- | -------------------------------------------------------- |
+| [Implementation Plan](implementation-plan.md) | Development roadmap, completed phases, and proposed work |
+
+- Discuss substantial changes before implementation; keep agreed models and decisions in living design documents
+- Historical plans provide context, not automatic requirements or mandatory architecture
+
 ## Architecture
 
-- [Overview](architecture.md) - High-level system architecture and guiding principles
-- [Design](design.md) - Target design for `nest` as the consolidated controller
-- [Long-Term Ideas](ideas.md) - Parked ideas and future directions
-- [Repositories](repos.md) - Overview of existing repositories, roles, and migration context
-- [Covers](covers.md) - Cover controller behavior, legacy approach, and planned `nest` implementation
-- [Sysfs](sysfs.md) - Unipi sysfs interface and how `nest` uses or plans to use it
-- [Home Automation Landscape](home-automation-landscape.md) - Broader protocol and system context behind `nest`'s transport model
-- [Distributed Light Model](distributed-light-model.md) - Phase 7 semantic entity, binding, and distributed execution model
+| Document                                                  | Purpose                                                |
+| --------------------------------------------------------- | ------------------------------------------------------ |
+| [Overview](architecture.md)                               | System architecture and guiding principles             |
+| [Design](design.md)                                       | Nest package responsibilities and design direction     |
+| [Long-Term Ideas](ideas.md)                               | Parked ideas and future directions                     |
+| [Repositories](repos.md)                                  | Repository roles and migration context                 |
+| [Covers](covers.md)                                       | Legacy cover behavior and earlier Nest design ideas    |
+| [Sysfs](sysfs.md)                                         | Unipi sysfs interface and current Nest implementation  |
+| [Home Automation Landscape](home-automation-landscape.md) | Protocol context behind the transport model            |
+| [Distributed Light Model](distributed-light-model.md)     | Semantic entities, bindings, and distributed execution |
 
 ## Reading Order
 
@@ -34,19 +45,4 @@ codebase.
 4. Read [home-automation-landscape.md](home-automation-landscape.md) for protocol and transport context
 5. Read [distributed-light-model.md](distributed-light-model.md) for the current distributed light control direction
 6. Use [sysfs.md](sysfs.md) and [covers.md](covers.md) for subsystem details
-
-## Key Decisions
-
-### Why Direct Sysfs Access?
-
-- **Independence**: Doesn't require evok service running
-- **Simplicity**: Direct file I/O vs websocket + parsing
-- **Reliability**: Fewer dependencies to fail
-- **Latency**: Polling is predictable, no network overhead
-
-### Why Go?
-
-- **Simplicity**: Easy to read and maintain
-- **Deployment**: Single static binary
-- **Dependencies**: Minimal
-- **Development Speed**: Faster iteration than Rust
+7. Review [implementation-plan.md](implementation-plan.md) for progress and proposed next steps

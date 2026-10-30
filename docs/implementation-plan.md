@@ -4,6 +4,19 @@
 
 Phased approach to building `nest`, a universal controller for Unipi hardware.
 
+## How to Read This Plan
+
+Completed phases record implementation history, including decisions superseded by later phases.
+Unchecked items describe proposed work, not fixed implementation requirements.
+Discuss the model and next increment before implementation; revise this plan as decisions change.
+Cover configuration and execution remain unimplemented on this branch.
+Historical cover experiments on other branches are reference material only.
+
+## Migration Direction
+
+Deployment names below reflect earlier migration planning, not a verified inventory of the live system.
+Confirm which legacy services own each device before planning a cutover.
+
 This plan is ordered around gradual migration from the existing controller setup.
 The first priority is to make `nest` deployable to the Raspberry Pi controller and safe to run beside the current system.
 After that, `nest` should observe real sysfs behavior and publish what it sees before it takes ownership of relay outputs.
@@ -111,7 +124,7 @@ Current status:
 - Light state publishing is derived from relay state for relay-backed local lights and uses a canonical JSON entity snapshot
 - ~~Controller dispatch currently passes registry, sysfs command channel, MQTT command channel, and MQTT topics through several helpers~~
 - Superseded by splitting semantic event dispatch into actor-specific command dispatchers instead of adding a context bag
-- Reconnect republishing and offline availability are deferred to MQTT contract hardening unless needed earlier
+- Phase 6 adds reconnect discovery, availability republishing, and offline availability
 
 Manual verification sample:
 
@@ -201,10 +214,10 @@ Current status:
 - Source-local remote bindings now publish non-retained MQTT semantic source events for button press and release events
 - Target-local remote bindings now subscribe to MQTT semantic source events and execute matching local light actions
 
-Next useful checks:
+Phase 7 follow-up context:
 
 - Exercise controller and registry behavior from the global config projection rather than hand-built bare-ID entity roots
-- Keep Modbus event-signal representation separate from Modbus execution until the Modbus actor phase
+- Phase 8 adds Modbus event-signal execution and state polling
 
 **Deliverable**: The existing multi-unit light topology can be represented in the global config tree, projected into unit-local runtime indexes, and proven with MQTT-based semantic event sharing before Modbus execution is added.
 
@@ -251,7 +264,7 @@ Current direction:
 - [x] Define no automatic retry behavior for transient transaction and serial failures
 - [x] Keep output-unit semantic execution local; no master-to-slave direct relay-coil writes
 
-**Deliverable**: `nest` has a tested Modbus RTU transport foundation suitable for merging, but it is not yet connected to production runtime control.
+**Deliverable**: `nest` has a tested Modbus RTU transport integrated with its runtime; production hardware verification remains pending.
 
 Current status:
 
@@ -273,7 +286,7 @@ Current status:
 - Fatal serial or Modbus client failures stop the actor and runtime.
 - Production hardware verification remains deferred.
 
-Remaining work is grouped into five chunks:
+Implementation work is recorded in five groups:
 
 ### 1. Slave Transport
 
@@ -317,7 +330,7 @@ Working assumption:
 - [x] Keep fatal serial and Modbus client failures actor-fatal until production evidence justifies reconnect behavior.
 - [x] Add a PTY-backed integration test for the production `modbus.Run` serial-opening path.
 - [x] Test master and slave actors together across the serial abstraction.
-- [ ] ~~Verify the complete path against physical RS-485 hardware when a component migration requires it.~~
+- [ ] Verify the complete path against physical RS-485 hardware when a component migration requires it
 
 ## Phase 9: Local Cover Controller
 
@@ -446,33 +459,29 @@ These should be decided before transport and entity complexity increase.
 - [x] Local event model boundary between actor observations, semantic events, and actor commands
 - [ ] Controller-side button semantics for long press, hold, and repeated presses
 - [x] MQTT topic and autodiscovery schema centered on the Home Assistant discovery contract
-- [ ] Modbus topology and relay addressing model
+- [x] Modbus master/slave topology, event-signal coils, and state-point addressing
 
 ## Open Questions
 
 - [ ] Cover support timing requirements
-- [ ] Output unit relay state publishing to MQTT
+- [x] Publish relay-backed light state to MQTT; raw relay telemetry remains excluded by default
 - [ ] Final topic structure refinements around the HA-facing MQTT contract
 - [ ] Whether command topics should be advertised for disabled entities
-- [ ] Whether Modbus output units execute semantic commands or expose coil-level relay control
+- [x] Modbus output units execute local semantic actions from event-signal writes, not direct remote relay writes
 - [ ] Whether command topics or transport addresses should be parsed by the actor or resolved through registry mappings
 - [ ] Whether actor grouping should move integrations under `internal/actors` once a second actor makes the grouping useful
 
 ## Future Config Distribution Direction
 
-Out of scope for the current MQTT observability phase, but useful for guiding registry and topic-index decisions.
-
-Eventually, configuration may come from a central/global source that describes all controller units and their relationships.
-
-That global configuration could be distributed to each unit, possibly over MQTT or another control plane.
-Each unit would project the global configuration into the subset it needs locally, then build its local runtime state from that projection.
+The global configuration tree and unit-local projection are already implemented.
+Each process reads the configuration from a file and selects its unit explicitly.
+Remote distribution, possibly over MQTT or another control plane, remains a future option rather than an implementation commitment.
 
 The intended layering should stay roughly:
 
 ```text
-global config
+parsed global config
   -> unit-local config projection
-  -> parsed config structs
   -> domain entities
   -> runtime registries/indexes
   -> actor-specific addressing

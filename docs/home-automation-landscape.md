@@ -50,6 +50,8 @@ For `nest`, Modbus can support at least two actor models:
 - concrete command writes, where a coil or register represents actuator state or a direct command
 
 The semantic binding model should not force one interpretation globally.
+The current Nest implementation uses event-signal writes for remote button presses and state-point reads for light feedback.
+Direct remote relay writes remain an alternative discussed here, not an implemented Nest route.
 
 ### CAN And Similar Buses
 
@@ -101,6 +103,7 @@ semantic entities
 
 Bindings should stay transport-independent.
 They describe what semantic relationship should exist, not how a transport carries it.
+Current cross-unit configuration also requires `execution_transport` to select MQTT or Modbus and prevent duplicate execution.
 
 Actor capabilities should decide execution strategy.
 Examples include:

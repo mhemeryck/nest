@@ -2,6 +2,9 @@
 
 ## Summary
 
+External repository descriptions record earlier migration context; their production status is not verified by this checkout.
+The Nest section describes the current code on this branch.
+
 | Repository     | Language       | Purpose                                | Status      |
 | -------------- | -------------- | -------------------------------------- | ----------- |
 | `evok2mqtt`    | Python         | Bridge: Unipi websocket → MQTT         | Production  |
@@ -148,17 +151,20 @@ sysfs (Unipi) ← nest → MQTT ← Home Assistant
 
 **Current State:**
 
-- `pkg/device/` - sysfs device management (DI/DO/RO)
-- `main.go` - PoC with lights and push buttons
-- MQTT layer - not yet added
+- `internal/sysfs/` - sysfs discovery, polling, and output commands
+- `cmd/nest/` - CLI; `internal/nest/` - runtime wiring
+- `internal/config/`, `internal/entity/`, and `internal/registry/` - configuration, domain data, and runtime lookups
+- `internal/controller/` - button bindings, light commands, and integration routing
+- `internal/mqtt/` - Home Assistant light discovery, commands, availability, and state
+- `internal/modbus/` - RTU master/slave execution, event signals, and state polling; production hardware verification pending
 - Cover controller - not yet implemented
 
 **Todo for covers:**
 
-- [ ] Add MQTT client (subscribe commands, publish state)
+- [ ] Extend existing MQTT integration to cover commands, state, and discovery
 - [ ] Implement Cover entity with state machine
 - [ ] Map push button inputs → cover commands
-- [ ] Wire sysfs reads → MQTT state, MQTT commands → sysfs writes
+- [ ] Connect cover control to sysfs and MQTT without making local control depend on MQTT
 
 **Repo:** `github.com/mhemeryck/nest`
 
