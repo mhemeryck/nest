@@ -6,8 +6,8 @@
 - Full sentences only for narrative or necessary precision
 - One sentence per line in Markdown prose
 - Compact scan-oriented comments, lists, and headings
-- Specs: ASD-STE100 Simplified Technical English; active voice, consistent terms, one idea per sentence
-- Format all Markdown files with dprint; run `nest-format` after edits
+- Design documents: ASD-STE100 Simplified Technical English; active voice, consistent terms, one idea per sentence
+- Format all Markdown files with dprint; run `devenv tasks run dev:format` after edits
 
 ## Git
 
@@ -32,13 +32,24 @@
 ## Code Structure
 
 - Multi-step code: logical responsibilities over low-level implementation steps
-- Design sequence mirrored by named helpers
+- Keep the main algorithm and failure decisions visible in the caller
+- Extract helpers when they reduce reasoning, not merely duplication or function length
 - Example: `receiveCommand`, `validateCommand`, `persistCommand`
 - Behavior- and direction-oriented names: `handleMasterToSlaveCommand`, `pollSlaveStatePoints`
 - Top-level functions: visible lifecycle or responsibility sequence
 - Compact responsibility list above functions when structure alone lacks a clear high-level map
 - Fragment-based comments and lists
 - No helpers for trivial control flow alone
+
+## Data and State
+
+- Choose representations that prevent invalid states
+- Explicit alternatives over independent flags for mutually exclusive states
+- Derive state from existing information when possible
+- Make ownership, mutation, resource lifetimes, and side effects explicit
+- Distinguish expected failures from violated invariants
+- Clear failure for violated invariants over silent compensation
+- Safety at hardware boundaries; no speculative retries or recovery mechanisms
 
 ## Architecture
 
@@ -62,16 +73,20 @@
 - `assert`: non-fatal checks
 - `require`: prerequisite checks
 
-## Specification Workflow
+## Development Workflow
 
-- Use OpenSpec for agreed behavioral changes
-- Start with collaborative exploration of one focused behavior
-- Historical plans and existing code: evidence for discussion, not automatic requirements
-- Resolve material behavior questions with the user before drafting a proposal
-- Concrete scenarios before implementation; revise artifacts as new evidence emerges
-- Accepted specs in `openspec/specs/`; proposed changes in `openspec/changes/`
-- Verify implementation against scenarios before archiving
-- Run `nest-check` inside `devenv shell` before task completion
+- Discuss substantial changes before implementation: problem, data model, invariants, and main algorithm
+- Challenge assumptions and compare alternatives; observations do not automatically become requirements
+- Keep lightweight, living design documents in `/docs/`
+- Document responsibilities, data flow, significant decisions, and tradeoffs
+- Representative scenarios only when they clarify the model; no exhaustive scenario catalogs
+- Historical plans, OpenSpec artifacts, and existing code: evidence for discussion, not authoritative implementation instructions
+- Do not generate OpenSpec artifacts or use the OpenSpec workflow
+- Agree on a sufficiently clear model before implementation; refine it through small, reviewable changes
+- Discuss new architectural concepts before introducing them
+- Reconsider an inadequate model instead of accumulating workarounds
+- Optimize for understanding, minimal necessary state, and real failure conditions
+- Run `devenv tasks run dev:check` before task completion
 - Nushell for development scripts and shell examples
 
 ## Layout
