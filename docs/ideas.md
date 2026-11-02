@@ -1,11 +1,12 @@
 # Long-Term Ideas
 
-Deferred ideas.
+Deferred ideas, not implementation commitments.
+Some entries extend behavior that already exists.
 
 ## Input Model
 
-- Button `released`, `long_press`, repeat, and duration semantics
-- Multiple buttons per digital input
+- Extend existing `pressed` / `released` events with long-press, repeat, and duration semantics
+- Evaluate use cases for multiple buttons per digital input; the current model already supports this mapping
 - Debounce in the input event pipeline
 - Duration-driven dimmer control
 
@@ -26,7 +27,7 @@ Deferred ideas.
 
 - Actuator and automation event types
 - Event tracing and structured flow logging
-- Controller-centered integration topology
+- Extend the existing controller-centered integration topology only when new integrations require it
 
 ## Transport And Integration
 

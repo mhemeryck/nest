@@ -6,8 +6,10 @@ This note captures the naming and routing direction for distributed light contro
 It is the design reference for implementation plan phase 7.
 See [Home Automation Landscape](home-automation-landscape.md) for the broader system comparison that motivates the transport capability and binding execution strategy choices.
 
-The immediate goal is to let `nest` represent cross-unit light control cleanly before Modbus execution exists.
-The longer-term goal is to let sysfs, MQTT, and Modbus act as transport actors behind the same controller-level semantic model.
+The global configuration, unit projection, MQTT source-event delivery, and Modbus execution are now implemented.
+See [Implementation Plan](implementation-plan.md) for progress and [test fixtures](../test/fixtures/) for current configuration examples.
+This note also retains earlier alternatives; illustrative schemas and phase-specific proposals are not current loader documentation.
+Production Modbus hardware verification remains pending.
 
 ## Core Direction
 
@@ -618,9 +620,10 @@ Bindings should remain transport-independent semantic rules.
 Projection should decide which bindings and source events are relevant to a unit.
 Actor capabilities should influence whether a binding is executed locally, through event replication, or through command routing.
 
-For MQTT, a likely direction is target-side execution from replicated semantic source events.
-For Modbus, the existing backup setup suggests a first direction where master writes deliver event signals to a target-side slave, and the target-side unit still resolves the action locally.
-Concrete Modbus command routing remains useful for transports or entities that expose actuator state directly.
+MQTT implements target-side execution from replicated semantic source events.
+Modbus implements master event-signal writes; the target-side slave resolves the action locally.
+Concrete Modbus command routing remains an unimplemented alternative.
+Cross-unit bindings require `execution_transport` to select delivery and prevent duplicate execution.
 
 This means phase 7 should represent remote bindings without committing to one universal routing strategy.
 Later transport phases can implement the appropriate execution strategy per actor.
@@ -755,9 +758,10 @@ Master mode declares event-signal writes and state polls.
 Slave mode declares exposed event signals and state points.
 This keeps semantic bindings transport-independent while still testing whether the routing model fits Modbus RTU.
 
-### Recommended Scope For Modbus
+### Earlier Modbus Alternative
 
-For the initial migration, Modbus should stay relatively low-level.
+The following low-level routing proposal predates the implemented event-signal model.
+It is retained as an alternative, not the current execution contract.
 
 Recommended direction:
 
@@ -795,7 +799,8 @@ That means:
 - some units may run a Modbus slave role when they expose local relay control to other units
 - a unit could support both later, but that is not required by the current migration plan
 
-We should avoid assuming that only one unit in the whole system can ever be the master unless a real deployment need forces that constraint.
+Current configuration requires exactly one master when Modbus is configured.
+Multiple buses or combined master/slave roles require further design; they are not implemented.
 
 ### Practical Interpretation Of The Existing Python
 
@@ -835,10 +840,15 @@ Phase 8 can then add Modbus-specific addressing and execution as an actor concer
 
 ## Open Questions
 
+Phase 8 resolves the original transport-selection and Modbus-addressing questions below:
+
+- Cross-unit bindings select MQTT or Modbus through `execution_transport`
+- Unit-local Modbus configuration declares master or slave mode and concrete coil routes
+- Slave event-signal writes reach the controller; local semantic actions control relays
+- State points expose light state for master polling
+
+Remaining design questions:
+
 - Should typed endpoint references need additional fields beyond `actor`, `kind`, and `id` for non-sysfs actors?
 - How much routing should be inferred from the unit prefix versus declared explicitly in config?
-- When cross-unit command routing exists, how should MQTT and Modbus be prioritized or selected?
-- What exact Modbus runtime configuration is needed to declare master versus slave mode?
-- Should the slave side emit controller-visible relay observations after incoming writes, or execute locally without publishing a transport-derived event?
-- How should resolved remote actuator targets map to slave address and coil address in phase 8?
 - When a unit supports both local and remote light control, what is the smallest clean runtime wiring for that mixed role?

@@ -4,6 +4,14 @@
 
 Motorized window shades controlled via relays on Unipi Neuron, with both physical push buttons and Home Assistant integration.
 
+## Status
+
+Reference material for the legacy cover service and earlier Nest design ideas.
+Nest has no cover configuration or runtime on this branch.
+The state machine, topics, and configuration below do not describe implemented Nest behavior.
+Reconsider the model through discussion before implementation; do not treat this document as a fixed behavior contract.
+See [Implementation Plan](implementation-plan.md#phase-9-local-cover-controller) for the proposed migration scope.
+
 ## Hardware
 
 ### Wiring
@@ -94,7 +102,7 @@ Position is tracked as percentage (0-100):
 
 ```
 covers/{name}/command     # Incoming commands (OPEN/CLOSE/STOP)
-covers/{name}/state       # Current state (OPEN/CLOSING/STOPPED/CLOSING/OPEN)
+covers/{name}/state       # Current state (OPEN/OPENING/STOPPED/CLOSING/CLOSED)
 covers/{name}/position    # Position as integer 0-100
 shady/{relay}/command      # Relay commands (ON/OFF)
 shady/{relay}/state       # Relay state (ON/OFF)
@@ -184,7 +192,7 @@ automation:
 
 **Todo:**
 
-- [ ] MQTT client (paho.mqtt.golang)
+- [x] MQTT client and Home Assistant light integration; cover integration remains pending
 - [ ] Cover entity with state machine
 - [ ] Position tracking
 - [ ] Push button input handling

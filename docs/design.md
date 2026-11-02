@@ -4,6 +4,10 @@
 
 Universal controller for Unipi hardware. Replaces evok2mqtt + modbusbackup with a single config-driven binary.
 
+This document combines current package responsibilities with design direction.
+Cover support remains unimplemented on this branch.
+See [Implementation Plan](implementation-plan.md) for progress and [Distributed Light Model](distributed-light-model.md) for configuration and routing.
+
 ## Goals
 
 - **Standalone**: Runs on each Unipi unit independently
@@ -31,7 +35,7 @@ flowchart TD
     entity["internal/entity<br/>semantic domain model and typed IDs"]
     registry["internal/registry<br/>in-memory lookup indexes"]
     controller["internal/controller<br/>semantic event queue and policy"]
-    actors["actor packages<br/>sysfs / mqtt / future modbus"]
+    actors["actor packages<br/>sysfs / mqtt / modbus"]
     external["external systems<br/>sysfs hardware / MQTT broker / RS-485"]
 
     cmd --> nest
@@ -68,17 +72,20 @@ They expose actor-specific observations and commands and should not translate di
 
 ## Key Design Decisions
 
-### Per-Unit Configs
+### Global Configuration, Unit-Local Runtime
 
-Each unit has its own config. No shared "source of truth" config.
+One global configuration describes actors, units, and bindings.
+Each process selects a unit and projects the configuration into its local runtime view.
+Configuration distribution remains out of scope.
 
 ### Input-Centric Mappings
 
-Actions originate at the input side. The sending unit knows what it controls.
+Bindings connect semantic sources to semantic targets.
+For cross-unit lights, the source unit delivers button events; the target unit executes its local bindings.
 
 ```
-Input unit: "I control the office lights"
-Output unit: "I expose these relays"
+Input unit: "This button was pressed"
+Output unit: "This button toggles my office light"
 ```
 
 ### Controller-Centric Integration Topology
@@ -94,7 +101,7 @@ It also fits sysfs, MQTT, and Modbus well.
 Each integration can own its protocol or device state locally while the controller remains the only router between domains.
 
 Actor packages should stay focused on their own protocol or device behavior.
-They should expose actor-specific observations and commands, such as `sysfs.StateChange`, `sysfs.Command`, or future actor equivalents.
+They expose actor-specific observations and commands, such as `sysfs.StateChange` and `sysfs.Command`.
 They should not translate directly to other actors.
 
 The controller owns runtime translation between actor-specific observations and controller-level events.
@@ -105,7 +112,8 @@ As new actors are added, each actor should add one controller-side normalization
 The registry is the runtime lookup layer built from domain entities.
 It maps configured entity relationships and actor-facing identifiers back to typed entities, such as sysfs device IDs to inputs or relays.
 Future transport address lookup indexes can live in the registry when command handling needs them.
-The registry should not carry actor runtime configuration, credentials, live clients, channels, or reconnect state.
+The registry also stores config-derived actor settings used during startup.
+Live clients, channels, and reconnect state belong to integrations, not the registry.
 
 The top-level `internal/nest` package owns application wiring.
 It loads config, builds domain entities, builds registries, discovers configured devices, maps domain config into actor-specific runtime config, starts actors, and coordinates shutdown.
@@ -200,7 +208,11 @@ A future dimmable light can extend the same pattern without splitting one logica
 Diagnostic MQTT topics should only be introduced when there is a concrete debugging or migration need.
 They should not be the default contract consumed by Home Assistant.
 
-## Config Structure
+## Historical Configuration Sketches
+
+The following sketches predate the global configuration model and are not accepted by the current loader.
+Use [test fixtures](../test/fixtures/) for current examples.
+Cover configuration requires further design discussion.
 
 ### Input Unit (Lights)
 
@@ -287,11 +299,11 @@ relays:
 
 ## Future Considerations
 
-- **MQTT auto-discovery** for HA
+- Extend implemented Home Assistant light discovery to new entity types
 - **REST API** for terraform provisioning
 - **Discovery** via mDNS (optional)
 
 ## Open Questions
 
-- Should output unit publish relay state to MQTT?
+- Raw relay telemetry stays out of MQTT by default; relay-backed light state is already published
 - How to handle multi-input triggers (same light, multiple buttons)?

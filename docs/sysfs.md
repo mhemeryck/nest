@@ -2,7 +2,8 @@
 
 ## Overview
 
-Unipi devices expose I/O through Linux sysfs at `/run/unipi` or `/sys/devices/platform/unipi_plc/`.
+Nest discovers device value files beneath `<root>/sys/devices/platform/unipi_plc/`.
+The configured root defaults to `/`; fixtures use `test/fixtures`.
 
 ## Directory Structure
 
@@ -53,60 +54,56 @@ Used for controlling lights, motors, motorized shades.
 
 ## Device Naming
 
-Format: `{type}-{io_group}-{number:02d}`
+Format: `{type}_{io_group}_{number:02d}`
 
 Examples:
 
-- `di-2-15` = Digital Input, IO Group 2, Number 15
-- `ro-3-14` = Relay Output, IO Group 3, Number 14
+- `di_2_15` = Digital Input, IO Group 2, Number 15
+- `ro_3_14` = Relay Output, IO Group 3, Number 14
 
 ## Polling Interface
 
 The current implementation uses polling (not inotify/fanotify):
 
-1. Open the value file
-2. Seek to start
-3. Read 1 byte (0 or 1)
-4. Compare with previous value
-5. If changed, emit event
-6. Sleep for poll interval (250ms default)
-7. Repeat
+1. Discover devices and read their initial values
+2. Group devices by type, with one worker per type
+3. Read each value file on the worker's polling tick
+4. Interpret the first byte as `0` or `1`
+5. Compare with the cached value and emit changed observations
+
+Relay workers also publish initial relay observations at startup.
+Read failures during polling skip that observation.
+
+Default polling intervals:
+
+| Device type    | Interval |
+| -------------- | -------- |
+| Digital input  | 100 ms   |
+| Digital output | 100 ms   |
+| Relay output   | 1 s      |
+
+Override these values under `units.<unit>.actors.sysfs.poll_intervals` with `digital_input`, `digital_output`, and `relay_output` durations.
 
 ## Nest Implementation
 
-From `pkg/device/device.go`:
+- [Device discovery and value access](../internal/sysfs/device.go)
+- [Worker configuration and polling defaults](../internal/sysfs/config.go)
+- [Polling and output execution](../internal/sysfs/worker.go)
+- [Command and observation types](../internal/sysfs/actor.go)
 
-```go
-const (
-    pollIntervalMillis = 250
-)
-
-var filenameRegex = regexp.MustCompile(
-    `/io_group(1|2|3)/(?P<device_fmt>di|do|ro)_(?P<io_group>1|2|3)_(?P<number>[0-9]{2})/(di|do|ro)_value$`
-)
-
-type Device struct {
-    Path       string
-    ReadEvents chan<- DevicePayload
-    // ...
-}
-
-func (d *Device) Read() (DevicePayload, error) {
-    // Open file, seek to start, read 1 byte
-    // Return MessageType_TurnOn or MessageType_TurnOff
-}
-
-func (d *Device) Write(payload bool) error {
-    // Open file, write "1" or "0"
-}
-```
+The sysfs actor accepts toggle, on, and off commands addressed by device ID.
+Workers serialize commands and polling for their device type.
+Output commands read the current value before writing and update cached state after successful writes.
+Changed writes emit state observations; unchanged successful writes do not emit completion events.
+Command failures are logged, not returned through a command-result channel.
+This interface is not yet a cover-control execution contract.
 
 ## Path Mapping
 
 | Sysfs Path                            | Device ID | Type          |
 | ------------------------------------- | --------- | ------------- |
-| `/sys/.../io_group2/di_2_15/di_value` | `di-2-15` | Digital Input |
-| `/sys/.../io_group3/ro_3_14/ro_value` | `ro-3-14` | Relay Output  |
+| `/sys/.../io_group2/di_2_15/di_value` | `di_2_15` | Digital Input |
+| `/sys/.../io_group3/ro_3_14/ro_value` | `ro_3_14` | Relay Output  |
 
 ## Testing Fixtures
 
