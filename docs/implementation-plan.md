@@ -347,8 +347,8 @@ Agree on the state, input, and effect model before implementation.
 - [ ] Keep functions at a consistent level of abstraction
 - [ ] Model Open, Close, and Stop requests independently of their source
 - [ ] Describe output effects without performing hardware I/O
-- [ ] Distinguish requested output changes from confirmed output state
-- [ ] Define initialization, stopping, timeout, and output-failure transitions
+- [ ] Model Stopped, Opening, and Closing as movement states
+- [ ] Model a bounded movement deadline and its stop effects
 - [ ] Test transitions and safety rules without actors or hardware
 
 This slice excludes configuration, registry changes, button bindings, MQTT, and sysfs integration.
@@ -366,10 +366,25 @@ Agreed movement behavior:
 These rules describe movement intent, not the complete safety-state model.
 Never activate both direction relays together.
 Do not treat an output command as confirmation that the output changed.
+Output confirmation and failure handling remain explicit integration concerns, not additional movement states by default.
+
+Movement deadlines:
+
+- Every movement has a deadline, independent of direction and estimated position
+- Allow full travel from any starting position, with a margin
+- Starting movement sets the deadline
+- Same-direction requests do not extend the deadline
+- Stop and opposite-direction requests turn both relays off and cancel the deadline
+- Reaching the deadline turns both relays off
+- The FSM describes these effects; runtime integration executes them
+
+The motors have internal end limits, but these limits do not deactivate the relays.
+The movement deadline removes relay power even when the motor has already reached an endpoint.
 
 ### 2. Cover Configuration and Registry
 
 - [ ] Add a plain cover struct with typed references to open and close relays
+- [ ] Configure the maximum movement duration independently of position calibration
 - [ ] Extend global configuration, unit projection, and entity translation
 - [ ] Validate distinct direction relays and exclusive ownership across covers and lights
 - [ ] Add registry lookups for covers and their relays
@@ -385,6 +400,7 @@ Use explicit references, not an entity hierarchy or a generic ownership framewor
 - [ ] Add required sysfs output-result reporting
 - [ ] Wire motion deadlines into controller execution
 - [ ] Integrate safe startup, shutdown, and output-failure handling
+- [ ] Distinguish requested output changes from confirmed output state
 - [ ] Verify the complete local control path with tests
 
 Sysfs owns hardware I/O, not cover policy.
@@ -419,15 +435,21 @@ MQTT cover mapping remains deferred to Phase 13 and must produce the same semant
 ## Phase 10: Cover Refinement
 
 - [ ] Add time-based position tracking
-- [ ] Add timing calibration and `max_time` handling
-- [ ] Define behavior when position is unknown after restart
-- [ ] Add recovery behavior after restart or interrupted movement
+- [ ] Add full-travel timing calibration for position estimation
+- [ ] Start with Unknown position after restart; do not trust a restored estimate
+- [ ] Establish an estimated endpoint after a full-travel run from any starting position
+- [ ] Keep position Unknown after shorter movements from Unknown
+- [ ] Test recovery from unknown or incorrect position estimates
 
 **Notes:**
 
 - Covers should build on the same config and event model defined earlier.
 - Safety rules must ensure up/down relays are never active simultaneously.
 - The cover state machine should remain independent of sysfs so it can be moved to better-suited hardware later.
+- Position and movement are separate: 0% means closed; 100% means open.
+- Open and Closed describe estimated position, not additional movement states.
+- Position estimates must not block explicit Open or Close requests or stop them early.
+- The Phase 9 movement deadline remains active regardless of estimated position.
 
 **Deliverable**: Cover entities behave predictably under real-world timing and interruption scenarios.
 
