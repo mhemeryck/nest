@@ -334,19 +334,77 @@ Working assumption:
 
 ## Phase 9: Local Cover Controller
 
-- [ ] Define a config-driven cover model with separate open and close actuator references
-- [ ] Configure local up and down relay endpoints
+Implement small slices, starting with the cover finite-state machine (FSM) alone.
+Agree on the state, input, and effect model before implementation.
+
+### 1. Cover FSM Only
+
+- [ ] Define explicit state, input, and effect types under `internal/controller/cover`
+- [ ] Implement package-level transition functions with explicit state and input arguments
+- [ ] Make state branches and transitions visible in the code
+- [ ] Keep the normal path clear and failure handling explicit
+- [ ] Use data structures that prevent invalid states rather than independent flags
+- [ ] Keep functions at a consistent level of abstraction
+- [ ] Model Open, Close, and Stop requests independently of their source
+- [ ] Describe output effects without performing hardware I/O
+- [ ] Distinguish requested output changes from confirmed output state
+- [ ] Define initialization, stopping, timeout, and output-failure transitions
+- [ ] Test transitions and safety rules without actors or hardware
+
+This slice excludes configuration, registry changes, button bindings, MQTT, and sysfs integration.
+It does not require position estimation or configurable button policies.
+
+Agreed movement behavior:
+
+| Current movement | Request        | Result                        |
+| ---------------- | -------------- | ----------------------------- |
+| Stopped          | Open or Close  | Start the requested direction |
+| Moving           | Same direction | Continue without restarting   |
+| Moving           | Opposite       | Stop; do not queue a reversal |
+| Any              | Stop           | Stop                          |
+
+These rules describe movement intent, not the complete safety-state model.
+Never activate both direction relays together.
+Do not treat an output command as confirmation that the output changed.
+
+### 2. Cover Configuration and Registry
+
+- [ ] Add a plain cover struct with typed references to open and close relays
+- [ ] Extend global configuration, unit projection, and entity translation
+- [ ] Validate distinct direction relays and exclusive ownership across covers and lights
+- [ ] Add registry lookups for covers and their relays
+
+Configured entities describe relationships and settings.
+Controller code owns live cover state and behavior.
+Use explicit references, not an entity hierarchy or a generic ownership framework.
+
+### 3. Local Runtime Integration
+
+- [ ] Route semantic cover requests through the existing central dispatch loop
+- [ ] Execute FSM effects through sysfs and feed output results back into the FSM
+- [ ] Add required sysfs output-result reporting
+- [ ] Wire motion deadlines into controller execution
+- [ ] Integrate safe startup, shutdown, and output-failure handling
+- [ ] Verify the complete local control path with tests
+
+Sysfs owns hardware I/O, not cover policy.
+`internal/nest` owns runtime wiring and lifecycle.
+
+### 4. Physical Button Bindings
+
 - [ ] Configure local open and close button inputs
-- [ ] Implement press-and-hold open button behavior
-- [ ] Implement press-and-hold close button behavior
-- [ ] Stop on button release
-- [ ] Stop remote motion when either physical button is pressed
-- [ ] Define deterministic behavior when both buttons are active
-- [ ] Implement open, close, stop, and remote movement commands
-- [ ] Enforce up/down relay interlocks and stop before reversing
-- [ ] Ensure both relays are off during startup and shutdown
-- [ ] Add motion timeout handling
-- [ ] Add unit tests for the state machine and safety rules
+- [ ] Extend light-only binding execution to support cover targets
+- [ ] Map button presses to semantic Open or Close requests
+- [ ] Map button releases to semantic Stop requests
+- [ ] Define deterministic handling of conflicting button observations
+- [ ] Test local press-and-hold behavior through the controller
+
+Existing press and release events are sufficient for this slice.
+Hold-duration tracking and press-to-move behavior remain deferred to Phase 12.
+MQTT cover mapping remains deferred to Phase 13 and must produce the same semantic cover requests.
+
+### 5. Isolated Migration
+
 - [ ] Run the controller on an isolated, non-critical unit with `hausmaus` and `covers` disabled
 - [ ] Replace the legacy `hausmaus` plus `covers` control path on that unit
 
