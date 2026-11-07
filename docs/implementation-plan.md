@@ -339,20 +339,28 @@ Agree on the state, input, and effect model before implementation.
 
 ### 1. Cover FSM Only
 
-- [ ] Define explicit state, input, and effect types under `internal/controller/cover`
-- [ ] Implement package-level transition functions with explicit state and input arguments
-- [ ] Make state branches and transitions visible in the code
-- [ ] Keep the normal path clear and failure handling explicit
-- [ ] Use data structures that prevent invalid states rather than independent flags
-- [ ] Keep functions at a consistent level of abstraction
-- [ ] Model Open, Close, and Stop requests independently of their source
-- [ ] Describe output effects without performing hardware I/O
-- [ ] Model Stopped, Opening, and Closing as movement states
-- [ ] Model a bounded movement deadline and its stop effects
-- [ ] Test transitions and safety rules without actors or hardware
+- [x] Define explicit state, input, and effect types under `internal/controller/cover`
+- [x] Implement package-level transition functions with explicit state and input arguments
+- [x] Make state branches and transitions visible in the code
+- [x] Keep the normal path clear and failure handling explicit
+- [x] Use explicit movement and effect alternatives instead of independent relay flags; validate deadline invariants
+- [x] Keep functions at a consistent level of abstraction
+- [x] Model Open, Close, and Stop requests independently of their source
+- [x] Describe output effects without performing hardware I/O
+- [x] Model Stopped, Opening, and Closing as movement states
+- [x] Model a bounded movement deadline and its stop effects
+- [x] Test transitions and safety rules without actors or hardware
 
 This slice excludes configuration, registry changes, button bindings, MQTT, and sysfs integration.
 It does not require position estimation or configurable button policies.
+
+`cover.Transition` takes state, input, current time, and maximum run duration.
+It returns movement intent and one coordinated output effect, without actor dependencies or live timers.
+Moving states carry an absolute deadline; Stopped has none.
+Expired deadlines take precedence over requests.
+Early or stale deadline checks cannot stop a newer movement before its deadline.
+Invalid arguments return an error, unchanged state, and no output effect.
+This slice does not confirm output changes or enforce physical relay sequencing.
 
 Agreed movement behavior:
 
