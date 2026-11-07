@@ -1,0 +1,46 @@
+cover_control:
+  max_run: 30s
+
+units:
+  controller_1:
+    actors:
+      sysfs:
+        root: test/fixtures
+        relays:
+          - id: office_up
+            name: Office up
+            device: ro_3_14
+          - id: office_down
+            name: Office down
+            device: ro_3_13
+          - id: office_light
+            name: Office light
+            device: ro_3_12
+    entities:
+      covers:
+        - id: office
+          name: Office
+          open_actuator: {actor: sysfs, kind: relay, id: office_up}
+          close_actuator: {actor: sysfs, kind: relay, id: office_down}
+      lights:
+        - id: office
+          name: Office
+          actuator: {actor: sysfs, kind: relay, id: office_light}
+
+  controller_2:
+    actors:
+      sysfs:
+        root: test/fixtures
+        relays:
+          - id: bedroom_up
+            name: Bedroom up
+            device: ro_3_14
+          - id: bedroom_down
+            name: Bedroom down
+            device: ro_3_13
+    entities:
+      covers:
+        - id: bedroom
+          name: Bedroom
+          open_actuator: {actor: sysfs, kind: relay, id: bedroom_up}
+          close_actuator: {actor: sysfs, kind: relay, id: bedroom_down}

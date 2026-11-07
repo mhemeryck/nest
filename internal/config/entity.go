@@ -12,9 +12,11 @@ func ToEntityRoot(root *Root) *entity.Root {
 		SysfsPollIntervals: pollIntervalsFromConfig(root.Sysfs.PollIntervals),
 		MQTT:               mqttFromConfig(root.MQTT),
 		Modbus:             modbusFromConfig(root.Modbus),
+		CoverControl:       entity.CoverControl{MaxRun: root.CoverControl.MaxRun},
 		DigitalInputs:      make([]entity.DigitalInput, 0, len(root.DigitalInputs)),
 		PushButtons:        make([]entity.PushButton, 0, len(root.PushButtons)),
 		Lights:             make([]entity.Light, 0, len(root.Lights)),
+		Covers:             make([]entity.Cover, 0, len(root.Covers)),
 		Relays:             make([]entity.Relay, 0, len(root.Relays)),
 		Bindings:           make([]entity.Binding, 0, len(root.Bindings)),
 		RemoteSourceBindings: make(
@@ -57,6 +59,15 @@ func ToEntityRoot(root *Root) *entity.Root {
 			ID:    entity.LightID(light.ID),
 			Name:  light.Name,
 			Relay: entity.RelayID(light.Relay),
+		})
+	}
+
+	for _, cover := range root.Covers {
+		entities.Covers = append(entities.Covers, entity.Cover{
+			ID:         entity.CoverID(cover.ID),
+			Name:       cover.Name,
+			OpenRelay:  entity.RelayID(cover.OpenRelay),
+			CloseRelay: entity.RelayID(cover.CloseRelay),
 		})
 	}
 

@@ -9,7 +9,7 @@ Phased approach to building `nest`, a universal controller for Unipi hardware.
 Completed phases record implementation history, including decisions superseded by later phases.
 Unchecked items describe proposed work, not fixed implementation requirements.
 Discuss the model and next increment before implementation; revise this plan as decisions change.
-Cover configuration and execution remain unimplemented on this branch.
+Cover configuration and the standalone movement FSM are implemented; runtime execution remains unimplemented on this branch.
 Historical cover experiments on other branches are reference material only.
 
 ## Migration Direction
@@ -391,11 +391,17 @@ The movement deadline removes relay power even when the motor has already reache
 
 ### 2. Cover Configuration and Registry
 
-- [ ] Add a plain cover struct with typed references to open and close relays
-- [ ] Configure the maximum movement duration independently of position calibration
-- [ ] Extend global configuration, unit projection, and entity translation
-- [ ] Validate distinct direction relays and exclusive ownership across covers and lights
-- [ ] Add registry lookups for covers and their relays
+- [x] Add a plain cover struct with typed references to open and close relays
+- [x] Configure one shared maximum movement duration independently of position calibration
+- [x] Extend global configuration, unit projection, and entity translation
+- [x] Validate distinct direction relays and exclusive ownership across covers and lights
+- [x] Add registry lookups for covers and their relays
+
+Global `cover_control.max_run` applies to every cover on every unit and defaults to 30 seconds.
+Per-cover duration overrides are not supported.
+Cover names describe the location without repeating the entity type.
+Ownership validation compares physical relay devices, not only relay IDs.
+Existing light-to-light relay sharing remains unchanged.
 
 Configured entities describe relationships and settings.
 Controller code owns live cover state and behavior.

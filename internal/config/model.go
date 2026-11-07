@@ -6,9 +6,11 @@ type Root struct {
 	Sysfs         SysfsConfig          `yaml:"sysfs"`
 	MQTT          MQTTConfig           `yaml:"mqtt"`
 	Modbus        ModbusConfig         `yaml:"modbus"`
+	CoverControl  CoverControlConfig   `yaml:"cover_control"`
 	DigitalInputs []DigitalInputConfig `yaml:"digital_inputs"`
 	PushButtons   []PushButtonConfig   `yaml:"push_buttons"`
 	Lights        []LightConfig        `yaml:"lights"`
+	Covers        []CoverConfig        `yaml:"covers"`
 	Relays        []RelayConfig        `yaml:"relays"`
 	Bindings      []BindingConfig      `yaml:"bindings"`
 
@@ -104,6 +106,17 @@ type LightConfig struct {
 	ID    string `yaml:"id"`
 	Name  string `yaml:"name"`
 	Relay string `yaml:"relay"`
+}
+
+type CoverConfig struct {
+	ID         string `yaml:"id"`
+	Name       string `yaml:"name"`
+	OpenRelay  string `yaml:"open_relay"`
+	CloseRelay string `yaml:"close_relay"`
+}
+
+type CoverControlConfig struct {
+	MaxRun time.Duration `yaml:"max_run"`
 }
 
 type BindingConfig struct {

@@ -5,7 +5,7 @@
 Universal controller for Unipi hardware. Replaces evok2mqtt + modbusbackup with a single config-driven binary.
 
 This document combines current package responsibilities with design direction.
-Cover support remains unimplemented on this branch.
+Cover configuration and a standalone movement FSM are implemented; runtime cover control remains unimplemented.
 See [Implementation Plan](implementation-plan.md) for progress and [Distributed Light Model](distributed-light-model.md) for configuration and routing.
 
 ## Goals

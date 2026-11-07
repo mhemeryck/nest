@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/mhemeryck/nest/internal/entity"
 )
@@ -14,9 +15,10 @@ const (
 )
 
 type GlobalRoot struct {
-	Actors   GlobalActorsConfig    `yaml:"actors"`
-	Units    map[string]UnitConfig `yaml:"units"`
-	Bindings []GlobalBindingConfig `yaml:"bindings"`
+	CoverControl CoverControlConfig    `yaml:"cover_control"`
+	Actors       GlobalActorsConfig    `yaml:"actors"`
+	Units        map[string]UnitConfig `yaml:"units"`
+	Bindings     []GlobalBindingConfig `yaml:"bindings"`
 }
 
 type GlobalActorsConfig struct {
@@ -54,6 +56,7 @@ type UnitSysfsConfig struct {
 type UnitEntitiesConfig struct {
 	Buttons []UnitPushButtonConfig `yaml:"buttons"`
 	Lights  []UnitLightConfig      `yaml:"lights"`
+	Covers  []UnitCoverConfig      `yaml:"covers"`
 }
 
 type GlobalBindingConfig struct {
@@ -81,6 +84,13 @@ type UnitLightConfig struct {
 	Actuator EndpointRefConfig `yaml:"actuator"`
 }
 
+type UnitCoverConfig struct {
+	ID            string            `yaml:"id"`
+	Name          string            `yaml:"name"`
+	OpenActuator  EndpointRefConfig `yaml:"open_actuator"`
+	CloseActuator EndpointRefConfig `yaml:"close_actuator"`
+}
+
 func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
 	if err := validateID("unit_id", unitID); err != nil {
 		return nil, err
@@ -101,8 +111,13 @@ func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
 
 	localButtons, buttonErr := projectPushButtons(unitID, unit.Entities.Buttons)
 	localLights, lightErr := projectLights(unitID, unit.Entities.Lights)
-	if err := errors.Join(buttonErr, lightErr); err != nil {
+	localCovers, coverErr := projectCovers(unitID, unit.Entities.Covers)
+	if err := errors.Join(buttonErr, lightErr, coverErr); err != nil {
 		return nil, err
+	}
+	coverControl := global.CoverControl
+	if coverControl.MaxRun == 0 {
+		coverControl.MaxRun = 30 * time.Second
 	}
 
 	local := &Root{
@@ -111,10 +126,12 @@ func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
 			PollIntervals: unit.Actors.Sysfs.PollIntervals,
 		},
 		MQTT:          mqtt,
+		CoverControl:  coverControl,
 		Modbus:        projectModbusConfig(global, unit.Actors.Modbus),
 		DigitalInputs: append([]DigitalInputConfig(nil), unit.Actors.Sysfs.DigitalInputs...),
 		PushButtons:   localButtons,
 		Lights:        localLights,
+		Covers:        localCovers,
 		Relays:        append([]RelayConfig(nil), unit.Actors.Sysfs.Relays...),
 	}
 

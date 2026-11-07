@@ -32,7 +32,7 @@ codebase.
 | [Design](design.md)                                       | Nest package responsibilities and design direction     |
 | [Long-Term Ideas](ideas.md)                               | Parked ideas and future directions                     |
 | [Repositories](repos.md)                                  | Repository roles and migration context                 |
-| [Covers](covers.md)                                       | Legacy cover behavior and earlier Nest design ideas    |
+| [Covers](covers.md)                                       | Nest cover FSM, configuration, and legacy reference    |
 | [Sysfs](sysfs.md)                                         | Unipi sysfs interface and current Nest implementation  |
 | [Home Automation Landscape](home-automation-landscape.md) | Protocol context behind the transport model            |
 | [Distributed Light Model](distributed-light-model.md)     | Semantic entities, bindings, and distributed execution |

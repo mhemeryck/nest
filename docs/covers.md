@@ -7,7 +7,8 @@ Motorized window shades controlled via relays on Unipi Neuron, with both physica
 ## Status
 
 Nest implements a standalone movement FSM in `internal/controller/cover`.
-Cover configuration, runtime integration, and position tracking remain unimplemented.
+Cover configuration, entity translation, and registry lookups are implemented.
+Runtime integration and position tracking remain unimplemented.
 The Nest diagram below describes current movement decisions, not confirmed hardware state.
 The later legacy sections describe the earlier cover service and design ideas, not implemented Nest behavior.
 See [Implementation Plan](implementation-plan.md#phase-9-local-cover-controller) for the proposed migration scope.
@@ -39,6 +40,40 @@ stateDiagram-v2
 - Runtime integration owns timers and submits `CheckDeadline` with the current time
 - Deadline checks use the current state, so stale notifications cannot stop a newer movement early
 - Effects perform no I/O; runtime integration must enforce relay interlocks and handle output failures
+
+## Nest Configuration
+
+Set one global maximum run duration for all covers:
+
+```yaml
+cover_control:
+  max_run: 30s
+```
+
+Omitting `max_run` or setting it to zero selects the 30-second default.
+Negative values are rejected.
+This duration bounds relay activation, independently of position calibration.
+Per-cover overrides are not supported.
+
+Declare covers under each unit's `entities`:
+
+```yaml
+covers:
+  - id: office
+    name: Office
+    open_actuator: { actor: sysfs, kind: relay, id: office_up }
+    close_actuator: { actor: sysfs, kind: relay, id: office_down }
+```
+
+Actuator references resolve to relays under the same unit's `actors.sysfs.relays`.
+Each cover requires two distinct, exclusively owned physical relays.
+Neither relay can serve another cover or a light, including through a differently named alias.
+The semantic cover ID is `<unit>.cover.office`.
+The cover entity contains identity and typed relay references, not live movement state or a per-cover duration.
+The registry exposes shared cover settings, cover lookup by ID, and owner lookup by relay ID.
+Button bindings and MQTT cover commands remain deferred.
+See [the cover fixture](../test/fixtures/config.covers.yaml) for a complete example with two units and a separate light.
+Loading this configuration does not start cover control.
 
 ## Hardware
 
