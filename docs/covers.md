@@ -6,11 +6,39 @@ Motorized window shades controlled via relays on Unipi Neuron, with both physica
 
 ## Status
 
-Reference material for the legacy cover service and earlier Nest design ideas.
-Nest has no cover configuration or runtime on this branch.
-The state machine, topics, and configuration below do not describe implemented Nest behavior.
-Reconsider the model through discussion before implementation; do not treat this document as a fixed behavior contract.
+Nest implements a standalone movement FSM in `internal/controller/cover`.
+Cover configuration, runtime integration, and position tracking remain unimplemented.
+The Nest diagram below describes current movement decisions, not confirmed hardware state.
+The later legacy sections describe the earlier cover service and design ideas, not implemented Nest behavior.
 See [Implementation Plan](implementation-plan.md#phase-9-local-cover-controller) for the proposed migration scope.
+
+## Nest Movement FSM
+
+```mermaid
+stateDiagram-v2
+    [*] --> Stopped
+    Stopped --> Opening: Open / StartOpening (set deadline)
+    Stopped --> Closing: Close / StartClosing (set deadline)
+    Stopped --> Stopped: Stop / StopMovement
+    Stopped --> Stopped: CheckDeadline / no effect
+    Opening --> Opening: Open / no effect (preserve deadline)
+    Closing --> Closing: Close / no effect (preserve deadline)
+    Opening --> Stopped: Close or Stop / StopMovement (clear deadline)
+    Closing --> Stopped: Open or Stop / StopMovement (clear deadline)
+    Opening --> Stopped: Deadline reached / StopMovement (clear deadline)
+    Closing --> Stopped: Deadline reached / StopMovement (clear deadline)
+```
+
+- Labels show input or condition, followed by effect and deadline change
+- State describes movement intent, not output confirmation or estimated position
+- The initial Stopped state does not confirm that hardware outputs are off
+- At or past the deadline, stopping takes precedence over every input
+- Before the deadline, `CheckDeadline` has no effect in either moving state
+- An opposite-direction request stops movement without queuing a reversal
+- A subsequent direction request can start another movement
+- Runtime integration owns timers and submits `CheckDeadline` with the current time
+- Deadline checks use the current state, so stale notifications cannot stop a newer movement early
+- Effects perform no I/O; runtime integration must enforce relay interlocks and handle output failures
 
 ## Hardware
 
@@ -29,7 +57,7 @@ Motorized shades typically use two relays:
 
 **Important:** Both relays should never be ON simultaneously (short circuit protection).
 
-## State Machine
+## Legacy State Machine
 
 ```
         ┌──────────────┐
