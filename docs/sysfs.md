@@ -89,14 +89,52 @@ Override these values under `units.<unit>.actors.sysfs.poll_intervals` with `dig
 - [Device discovery and value access](../internal/sysfs/device.go)
 - [Worker configuration and polling defaults](../internal/sysfs/config.go)
 - [Polling and output execution](../internal/sysfs/worker.go)
+- [Coordinated output execution](../internal/sysfs/outputs.go)
 - [Command and observation types](../internal/sysfs/actor.go)
 
 The sysfs actor accepts toggle, on, and off commands addressed by device ID.
 Workers serialize commands and polling for their device type.
-Output commands read the current value before writing and update cached state after successful writes.
+These single-device commands read the current value before writing and update cached state after successful writes.
 Changed writes emit state observations; unchanged successful writes do not emit completion events.
-Command failures are logged, not returned through a command-result channel.
-This interface is not yet a cover-control execution contract.
+Single-device command failures are logged.
+
+### Local Cover Execution
+
+`CoverCommand` identifies a configured cover and requests Open, Close, or Stop.
+`Options` supplies cover identities, their two device addresses, and the shared maximum run duration at startup.
+The cover execution owner exclusively owns these devices, separate from ordinary device workers.
+Direct single-device commands to cover outputs fail instead of bypassing the interlock.
+
+The owner runs the pure FSM, schedules the earliest movement deadline, and executes output effects locally.
+Internal output execution follows this sequence:
+
+1. Attempt both Off writes, even if one fails
+2. Verify each successful write by reading its sysfs value
+3. Activate the selected output only after both Off operations succeed and cancellation has not occurred
+4. Verify the selected output by reading its sysfs value
+5. If activation fails or cancellation is detected during activation, attempt both Off writes once
+6. Update the cover state only after output execution succeeds
+7. Queue the latest cover snapshot for publication on the existing states channel
+
+Safety-critical I/O completes before observation publishing can block.
+The operation does not interleave other cover requests or polling of its outputs.
+Missing output files produce errors; the operation does not create replacement files.
+Readback confirms sysfs values, not physical relay contacts or motor movement.
+There are no automatic activation retries or rollback guarantees.
+
+A states message with `Cover` contains a cover snapshot instead of a device observation.
+It identifies the cover and reports movement or failure, not relay addresses or individual write results.
+Snapshots coalesce per cover when consumers are slow; publishing never blocks cover deadlines or cleanup.
+Ordinary device observations leave `Cover` unset.
+No additional command-result channel is introduced.
+
+Startup attempts both Off operations on every configured cover before accepting movement requests.
+Output failures stop the actor and runtime; shutdown attempts both outputs on every cover independently of cancellation.
+Failure snapshots preserve the previous movement state and include an error rather than claim confirmed stopping.
+Runtime errors also carry failures when the states channel is blocked.
+Cleanup failures are logged and returned to the runtime.
+Unrelated light outputs retain their existing lifecycle behavior.
+See [Local Cover Execution Ownership](design.md#local-cover-execution-ownership) for the responsibilities and tradeoffs.
 
 ## Path Mapping
 

@@ -9,7 +9,8 @@ Phased approach to building `nest`, a universal controller for Unipi hardware.
 Completed phases record implementation history, including decisions superseded by later phases.
 Unchecked items describe proposed work, not fixed implementation requirements.
 Discuss the model and next increment before implementation; revise this plan as decisions change.
-Cover configuration and the standalone movement FSM are implemented; runtime execution remains unimplemented on this branch.
+Cover configuration, the movement FSM, and sysfs-owned runtime execution are implemented.
+Physical button bindings and production verification remain pending.
 Historical cover experiments on other branches are reference material only.
 
 ## Migration Direction
@@ -404,21 +405,43 @@ Ownership validation compares physical relay devices, not only relay IDs.
 Existing light-to-light relay sharing remains unchanged.
 
 Configured entities describe relationships and settings.
-Controller code owns live cover state and behavior.
+The sysfs actor owns live cover state and execution; the pure FSM describes movement decisions.
 Use explicit references, not an entity hierarchy or a generic ownership framework.
 
 ### 3. Local Runtime Integration
 
-- [ ] Route semantic cover requests through the existing central dispatch loop
-- [ ] Execute FSM effects through sysfs and feed output results back into the FSM
-- [ ] Add required sysfs output-result reporting
-- [ ] Wire motion deadlines into controller execution
-- [ ] Integrate safe startup, shutdown, and output-failure handling
-- [ ] Distinguish requested output changes from confirmed output state
-- [ ] Verify the complete local control path with tests
+- [x] Route semantic cover requests through the existing central dispatch loop
+- [x] Configure sysfs-owned covers from the registry through `internal/nest`
+- [x] Own each cover's FSM state, deadline timer, and output execution within the sysfs actor
+- [x] Accept cover requests and report cover state or failures through the existing commands and states channels
+- [x] Execute local relay sequencing and readback without intermediate controller acknowledgements
+- [x] Keep local relay execution internal rather than expose an output-pair completion API
+- [x] Keep the controller focused on routing cover requests and observations, not executing the cover FSM
+- [x] Integrate safe startup, shutdown, and output-failure handling
+- [x] Distinguish requested output changes from confirmed output state
+- [x] Ensure state publication cannot block movement deadlines or shutdown cleanup
+- [x] Verify the complete local control path with tests
 
-Sysfs owns hardware I/O, not cover policy.
+Sysfs owns local cover execution, including movement state, deadlines, hardware I/O, and cleanup.
+The controller owns request routing and observation normalization, not live cover movement state.
 `internal/nest` owns runtime wiring and lifecycle.
+The pure cover FSM remains independent of runtime ownership and hardware I/O.
+
+The actor attempts both Off writes and verifies readback before activating either output.
+A failed Off prevents activation; a failed activation triggers one attempt to turn both outputs off.
+Stop attempts both Off writes even if one fails.
+State observations identify the cover and report movement or failure, not the individual relay command sequence.
+The controller does not manage per-write acknowledgements, pending output transactions, or rollback.
+Local hardware failures remain real failures; this change removes cross-layer execution coordination, not failure handling.
+
+This replaces the earlier plan to keep the FSM and timers in the controller.
+Existing light control remains unchanged; its broader execution boundary is not part of this slice.
+Cover outputs have one local owner and are excluded from ordinary polling workers.
+One actor-local timer schedules the earliest cover deadline.
+Pending snapshots coalesce per cover so slow consumers cannot block deadlines or cleanup.
+Output failure stops the sysfs actor and runtime after cleanup attempts.
+Cleanup attempts both outputs on every cover and surfaces failures without claiming confirmed stopping.
+Physical button bindings and MQTT command mapping remain separate slices.
 
 ### 4. Physical Button Bindings
 

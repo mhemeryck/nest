@@ -3,6 +3,8 @@ package sysfs
 import (
 	"context"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestRunStartsAndStopsWorkers(t *testing.T) {
@@ -10,7 +12,9 @@ func TestRunStartsAndStopsWorkers(t *testing.T) {
 	commands := make(chan Command, 32)
 	states := make(chan StateChange, 32)
 	done := make(chan struct{})
-	go Run(ctx, []*Device{{Path: "/tmp/test1", Identifier: "test1"}}, commands, states, done)
+	go func() {
+		assert.NoError(t, Run(ctx, []*Device{{Path: "/tmp/test1", Identifier: "test1"}}, commands, states, done))
+	}()
 
 	cancel()
 	<-done

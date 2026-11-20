@@ -13,6 +13,7 @@ type (
 	RelayID             string
 	Action              string
 	LightAction         string
+	CoverAction         string
 	ExecutionTransport  string
 	ModbusMode          string
 	ModbusEventSignalID string
@@ -24,6 +25,9 @@ const (
 	LightActionToggle        LightAction        = "toggle"
 	LightActionOn            LightAction        = "on"
 	LightActionOff           LightAction        = "off"
+	CoverActionOpen          CoverAction        = "open"
+	CoverActionClose         CoverAction        = "close"
+	CoverActionStop          CoverAction        = "stop"
 	ModbusModeMaster         ModbusMode         = "master"
 	ModbusModeSlave          ModbusMode         = "slave"
 	ExecutionTransportMQTT   ExecutionTransport = "mqtt"

@@ -8,7 +8,7 @@ Motorized window shades controlled via relays on Unipi Neuron, with both physica
 
 Nest implements a standalone movement FSM in `internal/controller/cover`.
 Cover configuration, entity translation, and registry lookups are implemented.
-Runtime integration and position tracking remain unimplemented.
+Sysfs-owned runtime execution is implemented; physical button bindings, MQTT cover integration, and position tracking remain pending.
 The Nest diagram below describes current movement decisions, not confirmed hardware state.
 The later legacy sections describe the earlier cover service and design ideas, not implemented Nest behavior.
 See [Implementation Plan](implementation-plan.md#phase-9-local-cover-controller) for the proposed migration scope.
@@ -37,9 +37,32 @@ stateDiagram-v2
 - Before the deadline, `CheckDeadline` has no effect in either moving state
 - An opposite-direction request stops movement without queuing a reversal
 - A subsequent direction request can start another movement
-- Runtime integration owns timers and submits `CheckDeadline` with the current time
+- The sysfs runtime owner owns timers and submits `CheckDeadline` with the current time
 - Deadline checks use the current state, so stale notifications cannot stop a newer movement early
 - Effects perform no I/O; runtime integration must enforce relay interlocks and handle output failures
+
+## Runtime Ownership
+
+The sysfs actor owns each local cover's FSM state, deadline timer, relay execution, and cleanup.
+The controller routes semantic cover requests and normalizes cover observations.
+Physical button and MQTT command mapping remain separate work.
+The commands channel carries cover requests; the states channel carries cover state and failures.
+Neither channel requires an acknowledgement for each relay write.
+Cover observations identify the cover rather than repeat hardware addresses or output-pair commands.
+
+This deliberately makes sysfs cover-aware to avoid cross-layer movement coordination.
+The pure FSM remains unchanged and independent of I/O.
+Its current location under `internal/controller/cover` does not assign runtime ownership to the controller.
+See [Local Cover Execution Ownership](design.md#local-cover-execution-ownership) for responsibilities and safety constraints.
+Cover-owned outputs are excluded from ordinary polling workers and reject direct single-device commands.
+One actor-local timer schedules the earliest movement deadline.
+Cover snapshots coalesce when consumers are slow; they do not guarantee delivery of every intermediate transition.
+Output failures stop the actor and runtime after cleanup attempts.
+Failure snapshots include the previous movement state and an error, not a claim that the outputs stopped.
+Runtime errors preserve failures even if the states channel cannot accept a failure snapshot.
+Shutdown attempts to turn both outputs off for every cover without waiting for observation delivery.
+Cleanup failures are logged and returned; they cannot guarantee that the hardware stopped.
+Existing light control remains in the controller and continues to use single-device sysfs commands.
 
 ## Nest Configuration
 
@@ -73,7 +96,8 @@ The cover entity contains identity and typed relay references, not live movement
 The registry exposes shared cover settings, cover lookup by ID, and owner lookup by relay ID.
 Button bindings and MQTT cover commands remain deferred.
 See [the cover fixture](../test/fixtures/config.covers.yaml) for a complete example with two units and a separate light.
-Loading this configuration does not start cover control.
+Starting the runtime initializes configured covers with both outputs off and enables their local execution owner.
+Loading or validating configuration alone does not start cover control.
 
 ## Hardware
 

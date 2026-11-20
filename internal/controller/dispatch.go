@@ -34,6 +34,8 @@ func dispatchSysfsCommand(ctx context.Context, index *registry.Registry, command
 	switch busEvent.Kind {
 	case event.LightKind:
 		dispatchLightEvent(ctx, index, commands, *busEvent.Light)
+	case event.CoverKind:
+		dispatchCoverEvent(ctx, index, commands, *busEvent.Cover)
 	}
 }
 
@@ -89,6 +91,14 @@ func logSemanticEvent(busEvent event.Event) {
 		logPushButtonEvent(busEvent.Kind, *busEvent.PushButton)
 	case event.LightKind:
 		logLightEvent(*busEvent.Light)
+	case event.CoverKind:
+		slog.Info("cover request", "cover_id", busEvent.Cover.CoverID, "action", busEvent.Cover.Action)
+	case event.CoverStateKind:
+		if busEvent.CoverState.Error != nil {
+			slog.Error("cover failure", "cover_id", busEvent.CoverState.CoverID, "error", busEvent.CoverState.Error)
+		} else {
+			slog.Info("cover state", "cover_id", busEvent.CoverState.CoverID, "movement", busEvent.CoverState.Movement)
+		}
 	case event.MQTTConnectedKind:
 		slog.Info("mqtt actor connected")
 	case event.MQTTConnectFailedKind:
