@@ -445,14 +445,20 @@ Physical button bindings and MQTT command mapping remain separate slices.
 
 ### 4. Physical Button Bindings
 
-- [ ] Configure local open and close button inputs
-- [ ] Extend light-only binding execution to support cover targets
-- [ ] Map button presses to semantic Open or Close requests
-- [ ] Map button releases to semantic Stop requests
-- [ ] Define deterministic handling of conflicting button observations
-- [ ] Test local press-and-hold behavior through the controller
+- [x] Configure local open and close button inputs
+- [x] Extend light-only binding execution to support cover targets
+- [x] Map button presses to semantic Open or Close requests
+- [x] Map button releases to semantic Stop requests
+- [x] Define deterministic handling of conflicting button observations
+- [x] Test local press-and-hold behavior through the controller
 
-Existing press and release events are sufficient for this slice.
+Cover bindings use the existing press and release events and apply within one unit.
+Set the binding action to `open` or `close`.
+A press requests movement in the bound direction.
+Either release requests Stop.
+An opposite press during movement stops the cover through the existing FSM.
+A new press can start movement again.
+The file-backed process check covers presses, release, an opposite press, and a held-button timeout.
 Hold-duration tracking and press-to-move behavior remain deferred to Phase 12.
 MQTT cover mapping remains deferred to Phase 13 and must produce the same semantic cover requests.
 

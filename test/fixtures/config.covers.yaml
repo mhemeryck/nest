@@ -6,6 +6,9 @@ units:
     actors:
       sysfs:
         root: test/fixtures
+        digital_inputs:
+          - {id: office_open_input, device: di_3_15}
+          - {id: office_close_input, device: di_3_16}
         relays:
           - id: office_up
             name: Office up
@@ -17,6 +20,13 @@ units:
             name: Office light
             device: ro_3_12
     entities:
+      buttons:
+        - id: office_open
+          name: Office open
+          input: {actor: sysfs, kind: digital_input, id: office_open_input}
+        - id: office_close
+          name: Office close
+          input: {actor: sysfs, kind: digital_input, id: office_close_input}
       covers:
         - id: office
           name: Office
@@ -44,3 +54,11 @@ units:
           name: Bedroom
           open_actuator: {actor: sysfs, kind: relay, id: bedroom_up}
           close_actuator: {actor: sysfs, kind: relay, id: bedroom_down}
+
+bindings:
+  - source: controller_1.button.office_open
+    target: controller_1.cover.office
+    action: open
+  - source: controller_1.button.office_close
+    target: controller_1.cover.office
+    action: close

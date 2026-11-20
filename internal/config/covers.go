@@ -25,9 +25,10 @@ func projectCovers(unitID string, covers []UnitCoverConfig) ([]CoverConfig, erro
 	return projected, errs
 }
 
-func validateCovers(covers []CoverConfig, knownRelayIDs map[string]struct{}) error {
+func validateCovers(covers []CoverConfig, knownRelayIDs map[string]struct{}) (map[string]struct{}, error) {
 	var errs error
 	ids := make([]string, 0, len(covers))
+	knownCoverIDs := make(map[string]struct{}, len(covers))
 	for i, cover := range covers {
 		prefix := fmt.Sprintf("covers[%d]", i)
 		errs = errors.Join(
@@ -38,8 +39,9 @@ func validateCovers(covers []CoverConfig, knownRelayIDs map[string]struct{}) err
 			validateCoverRelay(prefix+".close_relay", cover.CloseRelay, knownRelayIDs),
 		)
 		ids = append(ids, cover.ID)
+		knownCoverIDs[cover.ID] = struct{}{}
 	}
-	return errors.Join(errs, validateUniqueValues("covers", "id", "id", ids))
+	return knownCoverIDs, errors.Join(errs, validateUniqueValues("covers", "id", "id", ids))
 }
 
 func validateCoverRelay(field, relayID string, knownRelayIDs map[string]struct{}) error {

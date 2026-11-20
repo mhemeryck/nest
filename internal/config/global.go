@@ -137,7 +137,8 @@ func ProjectUnit(global *GlobalRoot, unitID string) (*Root, error) {
 
 	for _, binding := range global.Bindings {
 		sourceLocal := entity.IsIDForUnit(binding.Source, unitID, entity.TypeButton)
-		targetLocal := entity.IsIDForUnit(binding.Target, unitID, entity.TypeLight)
+		targetLocal := entity.IsIDForUnit(binding.Target, unitID, entity.TypeLight) ||
+			entity.IsIDForUnit(binding.Target, unitID, entity.TypeCover)
 
 		switch {
 		case sourceLocal && targetLocal:

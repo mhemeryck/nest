@@ -19,7 +19,10 @@ func TestLoadCovers(t *testing.T) {
 		ID: "controller_1.cover.office", Name: "Office", OpenRelay: "office_up", CloseRelay: "office_down",
 	}}, root.Covers)
 	require.Len(t, root.Lights, 1)
-	assert.Empty(t, root.Bindings)
+	assert.Equal(t, []BindingConfig{
+		{Source: "controller_1.button.office_open", Target: "controller_1.cover.office", Action: "open"},
+		{Source: "controller_1.button.office_close", Target: "controller_1.cover.office", Action: "close"},
+	}, root.Bindings)
 	assert.False(t, root.MQTT.Enabled)
 
 	entities := ToEntityRoot(root)

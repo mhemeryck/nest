@@ -26,6 +26,11 @@ func TestSysfsActorConfiguresLocalCoverFromRegistry(t *testing.T) {
 		require.NoError(t, os.MkdirAll(dir, 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "ro_value"), []byte("0\n"), 0o600))
 	}
+	for _, input := range root.DigitalInputs {
+		dir := filepath.Join(root.SysfsRoot, "sys", "devices", "platform", "unipi_plc", "io_group3", string(input.SysfsDevice))
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "di_value"), []byte("0\n"), 0o600))
+	}
 	actor, err := newSysfsActor(registry.Build(root))
 	require.NoError(t, err)
 	assert.Equal(t, 30*time.Second, actor.maxRun)

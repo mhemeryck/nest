@@ -31,6 +31,10 @@
 
 ## Code Structure
 
+- Prefer `switch`/`case` over `if`/`else` chains when selecting among alternatives
+- Dispatch directly on a named kind or action
+- Keep dispatch cases at the same level of abstraction
+- Delegate case-specific conditions and construction to named helpers, even with one caller
 - Multi-step code: logical responsibilities over low-level implementation steps
 - Keep the main algorithm and failure decisions visible in the caller
 - Extract helpers when they reduce reasoning, not merely duplication or function length
@@ -45,6 +49,8 @@
 
 - Choose representations that prevent invalid states
 - Explicit alternatives over independent flags for mutually exclusive states
+- Model mutually exclusive cases as algebraic data types where practical
+- In Go, use a named kind or action with explicit cases and validate external values at the boundary
 - Derive state from existing information when possible
 - Make ownership, mutation, resource lifetimes, and side effects explicit
 - Distinguish expected failures from violated invariants
