@@ -33,14 +33,16 @@ type CoverRequest struct {
 type CoverState struct {
 	ID       entity.CoverID
 	Movement cover.Movement
+	Position *int // Estimated percent open. Nil means unknown.
 	Error    error
 }
 
 type localCover struct {
-	id    entity.CoverID
-	open  *Device
-	close *Device
-	state cover.State
+	id       entity.CoverID
+	open     *Device
+	close    *Device
+	state    cover.State
+	position *float64 // Estimate at the start of movement, or the last stop.
 }
 
 // Separate device ownership before starting any worker.
@@ -107,6 +109,13 @@ func runCovers(ctx context.Context, covers []localCover, maxRun time.Duration, c
 	timer := time.NewTimer(time.Hour)
 	defer timer.Stop()
 
+	var positionTicks <-chan time.Time
+	if len(covers) > 0 {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		positionTicks = ticker.C
+	}
+
 	// Expired movements before snapshot delivery or new requests.
 	for {
 		if ctx.Err() != nil {
@@ -135,6 +144,8 @@ func runCovers(ctx context.Context, covers []localCover, maxRun time.Duration, c
 			return nil
 		case <-deadline:
 			// Evaluate current deadlines at the top of the loop.
+		case <-positionTicks:
+			queueMovingPositions(covers, time.Now(), maxRun, pending)
 		case publish <- StateChange{Cover: &snapshot}:
 			delete(pending, snapshot.ID)
 		case request := <-commands:
@@ -179,24 +190,27 @@ func advanceCover(ctx context.Context, c *localCover, input cover.Input, now tim
 	if err != nil {
 		return err
 	}
-	if result.Effect == cover.NoEffect {
-		return nil
-	}
 	active := bothOff
+	position := c.position
 	switch result.Effect {
+	case cover.NoEffect:
+		return nil
 	case cover.StartOpening:
 		active = firstOn
 	case cover.StartClosing:
 		active = secondOn
 	case cover.StopMovement:
+		position = positionAfterStop(*c, now, maxRun)
 	default:
 		return fmt.Errorf("unsupported cover effect %d", result.Effect)
 	}
 	if err := executeExclusiveOutputs(ctx, c.open, c.close, active, writeAndConfirmOutput); err != nil {
 		return err
 	}
+	// Record confirmed cover state and queue its snapshot.
+	c.position = position
 	c.state = result.State
-	pending[c.id] = CoverState{ID: c.id, Movement: c.state.Movement}
+	pending[c.id] = coverSnapshot(*c, now, maxRun)
 	return nil
 }
 

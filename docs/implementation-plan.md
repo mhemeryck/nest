@@ -477,12 +477,12 @@ MQTT cover mapping remains deferred to Phase 13 and must produce the same semant
 
 ## Phase 10: Cover Refinement
 
-- [ ] Add time-based position tracking
-- [ ] Add full-travel timing calibration for position estimation
-- [ ] Start with Unknown position after restart; do not trust a restored estimate
-- [ ] Establish an estimated endpoint after a full-travel run from any starting position
-- [ ] Keep position Unknown after shorter movements from Unknown
-- [ ] Test recovery from unknown or incorrect position estimates
+- [x] Add time-based position tracking
+- [ ] Verify full travel fits within the configured movement deadline on hardware
+- [x] Start with Unknown position after restart; do not trust a restored estimate
+- [x] Establish an estimated endpoint after a full-travel run from any starting position
+- [x] Keep position Unknown after shorter movements from Unknown
+- [x] Test recovery from unknown or incorrect position estimates
 
 **Notes:**
 

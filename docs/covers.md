@@ -8,7 +8,8 @@ Motorized window shades controlled via relays on Unipi Neuron, with both physica
 
 Nest implements a standalone movement FSM in `internal/controller/cover`.
 Cover configuration, entity translation, and registry lookups are implemented.
-Sysfs-owned runtime execution is implemented; physical button bindings, MQTT cover integration, and position tracking remain pending.
+Nest implements sysfs cover execution, local button bindings, and time-based position estimates.
+MQTT cover integration remains pending.
 The Nest diagram below describes current movement decisions, not confirmed hardware state.
 The later legacy sections describe the earlier cover service and design ideas, not implemented Nest behavior.
 See [Implementation Plan](implementation-plan.md#phase-9-local-cover-controller) for the proposed migration scope.
@@ -45,7 +46,7 @@ stateDiagram-v2
 
 The sysfs actor owns each local cover's FSM state, deadline timer, relay execution, and cleanup.
 The controller routes semantic cover requests and normalizes cover observations.
-Physical button and MQTT command mapping remain separate work.
+The controller maps local button events to cover requests.
 The commands channel carries cover requests; the states channel carries cover state and failures.
 Neither channel requires an acknowledgement for each relay write.
 Cover observations identify the cover rather than repeat hardware addresses or output-pair commands.
@@ -64,6 +65,20 @@ Shutdown attempts to turn both outputs off for every cover without waiting for o
 Cleanup failures are logged and returned; they cannot guarantee that the hardware stopped.
 Existing light control remains in the controller and continues to use single-device sysfs commands.
 
+## Nest Position Estimates
+
+- Start at unknown after each restart
+- Keep position unknown after a stop before the first movement deadline
+- Estimate 100% after an opening deadline and 0% after a closing deadline
+- Apply the endpoint only after both relays turn off successfully
+- Estimate later positions from elapsed movement time and the last known estimate
+- Freeze the estimate when either direction stops
+- Report known estimates in movement snapshots and once per second during movement
+- Keep the movement deadline active regardless of the position estimate
+
+The estimate assumes a full travel fits within the configured maximum run duration.
+Verify that assumption on hardware before relying on the estimate.
+
 ## Nest Configuration
 
 Set one global maximum run duration for all covers:
@@ -75,7 +90,7 @@ cover_control:
 
 Omitting `max_run` or setting it to zero selects the 30-second default.
 Negative values are rejected.
-This duration bounds relay activation, independently of position calibration.
+This duration bounds relay activation and supplies the full-travel time for position estimates.
 Per-cover overrides are not supported.
 
 Declare covers under each unit's `entities`:
@@ -94,7 +109,7 @@ Neither relay can serve another cover or a light, including through a differentl
 The semantic cover ID is `<unit>.cover.office`.
 The cover entity contains identity and typed relay references, not live movement state or a per-cover duration.
 The registry exposes shared cover settings, cover lookup by ID, and owner lookup by relay ID.
-Button bindings and MQTT cover commands remain deferred.
+MQTT cover commands remain deferred.
 See [the cover fixture](../test/fixtures/config.covers.yaml) for a complete example with two units and a separate light.
 Starting the runtime initializes configured covers with both outputs off and enables their local execution owner.
 Loading or validating configuration alone does not start cover control.

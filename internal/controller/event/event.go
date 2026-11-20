@@ -66,6 +66,7 @@ type Cover struct {
 type CoverState struct {
 	CoverID  entity.CoverID
 	Movement cover.Movement
+	Position *int
 	Error    error
 }
 

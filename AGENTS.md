@@ -47,6 +47,7 @@
 
 ## Data and State
 
+- When returning a struct by value, prefer initializing it in one step and returning it directly
 - Choose representations that prevent invalid states
 - Explicit alternatives over independent flags for mutually exclusive states
 - Model mutually exclusive cases as algebraic data types where practical

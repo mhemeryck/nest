@@ -40,7 +40,7 @@ func semanticEventsFromStateChange(index *registry.Registry, stateChange sysfs.S
 			return nil, false
 		}
 		return []event.Event{{Kind: event.CoverStateKind, CoverState: &event.CoverState{
-			CoverID: state.ID, Movement: state.Movement, Error: state.Error,
+			CoverID: state.ID, Movement: state.Movement, Position: state.Position, Error: state.Error,
 		}}}, true
 	}
 

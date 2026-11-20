@@ -19,3 +19,18 @@ func dispatchCoverEvent(ctx context.Context, reg *registry.Registry, commands ch
 	case commands <- sysfs.Command{Kind: sysfs.CoverCommand, Cover: &sysfs.CoverRequest{ID: request.CoverID, Action: request.Action}}:
 	}
 }
+
+func logCoverState(state event.CoverState) {
+	if state.Error != nil {
+		slog.Error("cover failure", "cover_id", state.CoverID, "error", state.Error)
+		return
+	}
+	attrs := []slog.Attr{slog.String("cover_id", string(state.CoverID)), slog.Any("movement", state.Movement)}
+	switch state.Position {
+	case nil:
+		attrs = append(attrs, slog.String("position", "unknown"))
+	default:
+		attrs = append(attrs, slog.Int("position", *state.Position))
+	}
+	slog.LogAttrs(context.Background(), slog.LevelInfo, "cover state", attrs...)
+}
