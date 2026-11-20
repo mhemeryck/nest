@@ -17,6 +17,12 @@ type PublishMessage struct {
 type AvailabilityStatus string
 
 const (
+	CoverCommandOpen  = "OPEN"
+	CoverCommandClose = "CLOSE"
+	CoverCommandStop  = "STOP"
+)
+
+const (
 	AvailabilityOnline  AvailabilityStatus = "online"
 	AvailabilityOffline AvailabilityStatus = "offline"
 )

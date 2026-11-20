@@ -43,6 +43,37 @@ func LightCommandTopic(topics Topics, lightID entity.LightID) string {
 	return joinTopic(topics, "units", topics.UnitID, "lights", lightTopicSegment(lightID), "command")
 }
 
+func CoverCommandSubscriptionTopic(topics Topics) string {
+	return joinTopic(topics, "units", topics.UnitID, "covers", "+", "command")
+}
+
+func ParseEntityCommandTopic(topics Topics, topic string) (entity.Type, entity.ID) {
+	prefix := joinTopic(topics, "units", topics.UnitID) + "/"
+	path, ok := strings.CutPrefix(topic, prefix)
+	if !ok {
+		return "", ""
+	}
+	path, ok = strings.CutSuffix(path, "/command")
+	if !ok {
+		return "", ""
+	}
+	group, localID, ok := strings.Cut(path, "/")
+	if !ok || !entity.IsLocalID(localID) {
+		return "", ""
+	}
+
+	var kind entity.Type
+	switch group {
+	case "lights":
+		kind = entity.TypeLight
+	case "covers":
+		kind = entity.TypeCover
+	default:
+		return "", ""
+	}
+	return kind, entity.NewID(topics.UnitID, kind, localID)
+}
+
 func LightCommandSubscriptionTopic(topics Topics) string {
 	return joinTopic(topics, "units", topics.UnitID, "lights", "+", "command")
 }
@@ -71,20 +102,6 @@ func SemanticSourceEventSubscriptionTopics(topics Topics, bindings []entity.Bind
 	slices.Sort(subscriptions)
 
 	return subscriptions
-}
-
-func ParseLightCommandTopic(topics Topics, topic string) (entity.LightID, bool) {
-	prefix := joinTopic(topics, "units", topics.UnitID, "lights") + "/"
-	if !strings.HasPrefix(topic, prefix) || !strings.HasSuffix(topic, "/command") {
-		return "", false
-	}
-
-	localID := strings.TrimSuffix(strings.TrimPrefix(topic, prefix), "/command")
-	if !entity.IsLocalID(localID) || strings.Contains(localID, "/") {
-		return "", false
-	}
-
-	return entity.LightID(entity.NewID(topics.UnitID, entity.TypeLight, localID)), true
 }
 
 func HomeAssistantDeviceDiscoveryTopic(topics Topics) string {

@@ -165,19 +165,18 @@ func semanticEventFromMQTTEvent(index *registry.Registry, mqttTopics mqtt.Topics
 }
 
 func semanticEventFromMQTTMessage(index *registry.Registry, mqttTopics mqtt.Topics, message mqtt.ReceivedMessage) (event.Event, bool) {
-	if semanticEvent, ok := semanticLightEventFromMQTTMessage(index, mqttTopics, message); ok {
-		return semanticEvent, true
+	kind, id := mqtt.ParseEntityCommandTopic(mqttTopics, message.Topic)
+	switch kind {
+	case entity.TypeLight:
+		return semanticLightEventFromMQTTMessage(index, entity.LightID(id), message)
+	case entity.TypeCover:
+		return semanticCoverEventFromMQTTMessage(index, entity.CoverID(id), message.Payload)
+	default:
+		return semanticSourceEventFromMQTTMessage(index, mqttTopics, message)
 	}
-
-	return semanticSourceEventFromMQTTMessage(index, mqttTopics, message)
 }
 
-func semanticLightEventFromMQTTMessage(index *registry.Registry, mqttTopics mqtt.Topics, message mqtt.ReceivedMessage) (event.Event, bool) {
-	lightID, ok := mqtt.ParseLightCommandTopic(mqttTopics, message.Topic)
-	if !ok {
-		return event.Event{}, false
-	}
-
+func semanticLightEventFromMQTTMessage(index *registry.Registry, lightID entity.LightID, message mqtt.ReceivedMessage) (event.Event, bool) {
 	action, ok := lightActionFromMQTTPayload(message.Payload)
 	if !ok {
 		slog.Warn("invalid mqtt light command payload", "topic", message.Topic, "payload", string(bytes.TrimSpace(message.Payload)))

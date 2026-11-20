@@ -54,3 +54,42 @@ func TestSemanticCoverRequestThroughSysfs(t *testing.T) {
 		t.Fatal("missing semantic cover observation")
 	}
 }
+
+func TestMQTTCoverCommands(t *testing.T) {
+	id := entity.CoverID("unit.cover.office")
+	root := &entity.Root{
+		MQTT:   entity.MQTT{Enabled: true},
+		Covers: []entity.Cover{{ID: id}},
+	}
+	topics := mqtt.NewTopics("nest", "unit")
+	const commandTopic = "nest/units/unit/covers/office/command"
+	for _, tc := range []struct {
+		payload string
+		action  entity.CoverAction
+	}{
+		{"OPEN", entity.CoverActionOpen},
+		{"CLOSE", entity.CoverActionClose},
+		{"STOP", entity.CoverActionStop},
+		{"50", ""},
+	} {
+		t.Run(tc.payload, func(t *testing.T) {
+			got, ok := semanticEventFromMQTTMessage(registry.Build(root), topics, mqtt.ReceivedMessage{
+				Topic: commandTopic, Payload: []byte(tc.payload),
+			})
+			if tc.action == "" {
+				assert.False(t, ok)
+				return
+			}
+			require.True(t, ok)
+			assert.Equal(t, event.Event{Kind: event.CoverKind, Cover: &event.Cover{CoverID: id, Action: tc.action}}, got)
+		})
+	}
+	for _, topic := range []string{"nest/units/unit/covers/missing/command", "nest/units/other/covers/office/command"} {
+		_, ok := semanticEventFromMQTTMessage(registry.Build(root), topics, mqtt.ReceivedMessage{Topic: topic, Payload: []byte("OPEN")})
+		assert.False(t, ok)
+	}
+
+	root.MQTT.Enabled = false
+	_, ok := semanticEventFromMQTTMessage(registry.Build(root), topics, mqtt.ReceivedMessage{Topic: commandTopic, Payload: []byte("OPEN")})
+	assert.False(t, ok)
+}

@@ -45,16 +45,28 @@ func TestTopicsWithoutPrefix(t *testing.T) {
 	assert.Equal(t, "units/controller_1/availability", AvailabilityTopic(topics))
 }
 
-func TestParseLightCommandTopic(t *testing.T) {
+func TestParseEntityCommandTopic(t *testing.T) {
 	topics := NewTopics("nest", "controller_1")
 
-	lightID, ok := ParseLightCommandTopic(topics, "nest/units/controller_1/lights/office_light/command")
-	assert.True(t, ok)
-	assert.Equal(t, entity.LightID("controller_1.light.office_light"), lightID)
+	kind, id := ParseEntityCommandTopic(topics, "nest/units/controller_1/lights/office_light/command")
+	assert.Equal(t, entity.TypeLight, kind)
+	assert.Equal(t, entity.ID("controller_1.light.office_light"), id)
 
-	_, ok = ParseLightCommandTopic(topics, "nest/units/controller_1/lights/office_light/state")
-	assert.False(t, ok)
+	kind, id = ParseEntityCommandTopic(topics, "nest/units/controller_1/covers/office/command")
+	assert.Equal(t, entity.TypeCover, kind)
+	assert.Equal(t, entity.ID("controller_1.cover.office"), id)
 
-	_, ok = ParseLightCommandTopic(topics, "nest/units/controller_1/lights/office-light/command")
-	assert.False(t, ok)
+	for _, topic := range []string{
+		"nest/units/controller_1/lights/office_light/state",
+		"nest/units/controller_1/lights/office-light/command",
+		"nest/units/controller_1/covers/office/extra/command",
+		"nest/units/controller_2/covers/office/command",
+		"nest/units/controller_1/relays/office/command",
+	} {
+		t.Run(topic, func(t *testing.T) {
+			kind, id := ParseEntityCommandTopic(topics, topic)
+			assert.Empty(t, kind)
+			assert.Empty(t, id)
+		})
+	}
 }

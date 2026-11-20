@@ -49,7 +49,7 @@ func TestSubscribeLightCommands(t *testing.T) {
 	events := make(chan Event, 1)
 	client := &fakeClient{token: fakeToken{}}
 
-	err := subscribeLightCommands(t.Context(), client, NewTopics("nest", "controller_1"), events)
+	err := subscribeEntityCommands(t.Context(), client, LightCommandSubscriptionTopic(NewTopics("nest", "controller_1")), events)
 	require.NoError(t, err)
 	assert.Equal(t, "nest/units/controller_1/lights/+/command", client.subscribedTopic)
 
@@ -59,7 +59,7 @@ func TestSubscribeLightCommands(t *testing.T) {
 }
 
 func TestSubscribeLightCommandsReturnsSubscribeError(t *testing.T) {
-	err := subscribeLightCommands(t.Context(), &fakeClient{token: fakeToken{err: errors.New("subscribe failed")}}, NewTopics("nest", "controller_1"), make(chan Event, 1))
+	err := subscribeEntityCommands(t.Context(), &fakeClient{token: fakeToken{err: errors.New("subscribe failed")}}, LightCommandSubscriptionTopic(NewTopics("nest", "controller_1")), make(chan Event, 1))
 	require.EqualError(t, err, "subscribe failed")
 }
 
@@ -67,7 +67,7 @@ func TestSubscribeLightCommandsIgnoresRetainedMessages(t *testing.T) {
 	events := make(chan Event, 1)
 	client := &fakeClient{token: fakeToken{}}
 
-	err := subscribeLightCommands(t.Context(), client, NewTopics("nest", "controller_1"), events)
+	err := subscribeEntityCommands(t.Context(), client, LightCommandSubscriptionTopic(NewTopics("nest", "controller_1")), events)
 	require.NoError(t, err)
 
 	client.handler(nil, &fakeMessage{topic: "nest/units/controller_1/lights/office_light/command", payload: []byte("ON"), retained: true})

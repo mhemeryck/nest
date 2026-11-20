@@ -555,10 +555,14 @@ Press-to-move behavior is deferred until the standalone migration is stable.
 ## Phase 13: Cover MQTT Commands
 
 - [ ] Subscribe to cover command topics advertised in Home Assistant discovery
-- [ ] Require explicit configuration before cover commands are enabled
+- [x] Enable cover commands on units with MQTT enabled
 - [ ] Reflect cover command enablement in the discovery payload
-- [ ] Accept a minimal command set for migrated covers
+- [x] Accept a minimal command set for migrated covers
 - [ ] Publish resulting cover state changes after command execution
+
+Enable MQTT under the unit's `actors.mqtt` to receive light and cover commands.
+Nest accepts `OPEN`, `CLOSE`, and `STOP` on `<prefix>/units/<unit>/covers/<cover>/command`.
+Nest ignores retained commands received when it subscribes.
 
 Light command handling and discovery are already covered by Phase 6.
 
