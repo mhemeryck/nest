@@ -31,7 +31,9 @@ func TestPollWorkerDetectsChange(t *testing.T) {
 	commands := make(chan Command, 32)
 	states := make(chan StateChange, 32)
 	doneSysfs := make(chan struct{})
-	go Run(ctx, []*Device{{Path: path1, Identifier: "di_1_01"}, {Path: path2, Identifier: "di_1_02"}}, commands, states, doneSysfs)
+	go func() {
+		assert.NoError(t, Run(ctx, []*Device{{Path: path1, Identifier: "di_1_01"}, {Path: path2, Identifier: "di_1_02"}}, commands, states, doneSysfs))
+	}()
 
 	done := make(chan struct{})
 	go func() {
@@ -76,7 +78,9 @@ func TestWorkerCommandTogglesRelay(t *testing.T) {
 	commands := make(chan Command, 32)
 	states := make(chan StateChange, 32)
 	doneSysfs := make(chan struct{})
-	go Run(ctx, []*Device{{Path: path, Identifier: "ro_1_01", Type: RelayOutput, Value: Off}}, commands, states, doneSysfs)
+	go func() {
+		assert.NoError(t, Run(ctx, []*Device{{Path: path, Identifier: "ro_1_01", Type: RelayOutput, Value: Off}}, commands, states, doneSysfs))
+	}()
 	defer func() {
 		cancel()
 		<-doneSysfs
@@ -111,7 +115,9 @@ func TestWorkerCommandTogglesRelayFromActualSysfsState(t *testing.T) {
 	commands := make(chan Command, 32)
 	states := make(chan StateChange, 32)
 	doneSysfs := make(chan struct{})
-	go Run(ctx, []*Device{{Path: path, Identifier: "ro_1_01", Type: RelayOutput, Value: Off}}, commands, states, doneSysfs)
+	go func() {
+		assert.NoError(t, Run(ctx, []*Device{{Path: path, Identifier: "ro_1_01", Type: RelayOutput, Value: Off}}, commands, states, doneSysfs))
+	}()
 	defer func() {
 		cancel()
 		<-doneSysfs

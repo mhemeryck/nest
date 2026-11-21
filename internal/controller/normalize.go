@@ -34,6 +34,16 @@ func pushButtonEventsFromStateChange(index *registry.Registry, stateChange sysfs
 }
 
 func semanticEventsFromStateChange(index *registry.Registry, stateChange sysfs.StateChange) ([]event.Event, bool) {
+	if stateChange.Cover != nil {
+		state := stateChange.Cover
+		if _, ok := registry.CoverByID(index, state.ID); !ok {
+			return nil, false
+		}
+		return []event.Event{{Kind: event.CoverStateKind, CoverState: &event.CoverState{
+			CoverID: state.ID, Movement: state.Movement, Position: state.Position, Error: state.Error,
+		}}}, true
+	}
+
 	deviceID := entity.SysfsDeviceID(stateChange.Device.Identifier)
 	if input, ok := registry.DigitalInputBySysfsDevice(index, deviceID); ok {
 		events := []event.Event{{

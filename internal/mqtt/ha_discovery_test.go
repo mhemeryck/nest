@@ -41,7 +41,7 @@ func TestBuildHomeAssistantDeviceDiscovery(t *testing.T) {
 	root := testEntityRoot()
 	topics := NewTopics("nest", "controller_1")
 
-	doc := BuildHomeAssistantDeviceDiscovery(root.Lights, topics)
+	doc := BuildHomeAssistantDeviceDiscovery(root.Lights, nil, topics)
 
 	assert.Equal(t, HomeAssistantDevice{
 		Identifiers:  []string{"nest_controller_1_unit"},
@@ -50,7 +50,7 @@ func TestBuildHomeAssistantDeviceDiscovery(t *testing.T) {
 	}, doc.Device)
 	assert.Equal(t, HomeAssistantOrigin{Name: "nest"}, doc.Origin)
 	assert.Equal(t, "nest/units/controller_1/availability", doc.AvailabilityTopic)
-	require.Contains(t, doc.Components, "office_light")
+	require.Contains(t, doc.Components, "light-office_light")
 	assert.Equal(t, HomeAssistantComponentDiscovery{
 		Platform:           "light",
 		Name:               "Office light",
@@ -61,7 +61,7 @@ func TestBuildHomeAssistantDeviceDiscovery(t *testing.T) {
 		StateValueTemplate: "{{ value_json.state }}",
 		PayloadOn:          "ON",
 		PayloadOff:         "OFF",
-	}, doc.Components["office_light"])
+	}, doc.Components["light-office_light"])
 }
 
 func TestBuildHomeAssistantDeviceDiscoveryWithSemanticLightID(t *testing.T) {
@@ -69,9 +69,9 @@ func TestBuildHomeAssistantDeviceDiscoveryWithSemanticLightID(t *testing.T) {
 	root.Lights[0].ID = entity.LightID("controller_1.light.office_light")
 	topics := NewTopics("nest", "controller_1")
 
-	doc := BuildHomeAssistantDeviceDiscovery(root.Lights, topics)
+	doc := BuildHomeAssistantDeviceDiscovery(root.Lights, nil, topics)
 
-	require.Contains(t, doc.Components, "office_light")
+	require.Contains(t, doc.Components, "light-office_light")
 	assert.Equal(t, HomeAssistantComponentDiscovery{
 		Platform:           "light",
 		Name:               "Office light",
@@ -82,21 +82,21 @@ func TestBuildHomeAssistantDeviceDiscoveryWithSemanticLightID(t *testing.T) {
 		StateValueTemplate: "{{ value_json.state }}",
 		PayloadOn:          "ON",
 		PayloadOff:         "OFF",
-	}, doc.Components["office_light"])
+	}, doc.Components["light-office_light"])
 }
 
 func TestHomeAssistantDeviceDiscoveryPayload(t *testing.T) {
-	payload, err := HomeAssistantDeviceDiscoveryPayload(testEntityRoot().Lights, NewTopics("nest", "controller_1"))
+	message, err := HomeAssistantDeviceDiscoveryMessage(testEntityRoot().Lights, nil, NewTopics("nest", "controller_1"))
 	require.NoError(t, err)
 
 	var doc HomeAssistantDeviceDiscovery
-	require.NoError(t, json.Unmarshal(payload, &doc))
+	require.NoError(t, json.Unmarshal(message.Payload, &doc))
 	assert.Equal(t, "nest_controller_1_unit", doc.Device.Identifiers[0])
-	assert.Equal(t, "nest/units/controller_1/lights/office_light/command", doc.Components["office_light"].CommandTopic)
+	assert.Equal(t, "nest/units/controller_1/lights/office_light/command", doc.Components["light-office_light"].CommandTopic)
 }
 
 func TestHomeAssistantDeviceDiscoveryMessage(t *testing.T) {
-	message, err := HomeAssistantDeviceDiscoveryMessage(testEntityRoot().Lights, NewTopics("nest", "controller_1"))
+	message, err := HomeAssistantDeviceDiscoveryMessage(testEntityRoot().Lights, nil, NewTopics("nest", "controller_1"))
 	require.NoError(t, err)
 
 	assert.Equal(t, "homeassistant/device/nest_controller_1_unit/config", message.Topic)

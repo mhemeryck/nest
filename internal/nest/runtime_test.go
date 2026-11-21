@@ -2,6 +2,7 @@ package nest
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/mhemeryck/nest/internal/modbus"
@@ -64,4 +65,19 @@ func TestWaitForShutdownTreatsCancelledModbusActorAsGraceful(t *testing.T) {
 	}, controllerDone, sysfsActor, mqttActor, modbusActor)
 
 	require.NoError(t, err)
+}
+
+func TestWaitForShutdownReturnsSysfsFailure(t *testing.T) {
+	controllerDone := make(chan struct{})
+	actor := sysfsActor{states: make(chan sysfs.StateChange), done: make(chan struct{}), result: make(chan error, 1)}
+	actor.result <- fmt.Errorf("cover cleanup failed")
+	close(actor.done)
+	mqttActor := mqttActor{enabled: true, events: make(chan mqtt.Event), done: make(chan struct{})}
+	modbusActor := modbusActor{enabled: true, events: make(chan modbus.Event), done: make(chan struct{})}
+	err := waitForShutdown(t.Context(), func() {
+		close(controllerDone)
+		close(mqttActor.done)
+		close(modbusActor.done)
+	}, controllerDone, actor, mqttActor, modbusActor)
+	require.ErrorContains(t, err, "cover cleanup failed")
 }

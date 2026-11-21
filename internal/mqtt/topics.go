@@ -23,28 +23,59 @@ func AvailabilityTopic(topics Topics) string {
 	return joinTopic(topics, "units", topics.UnitID, "availability")
 }
 
-func DigitalInputStateTopic(topics Topics, inputID entity.DigitalInputID) string {
-	return joinTopic(topics, "units", topics.UnitID, "digital_inputs", string(inputID), "state")
+func digitalInputTopic(topics Topics, inputID entity.DigitalInputID, suffix topicSuffix) string {
+	return joinTopic(topics, "units", topics.UnitID, "digital_inputs", string(inputID), string(suffix))
 }
 
-func PushButtonStateTopic(topics Topics, buttonID entity.PushButtonID) string {
-	return joinTopic(topics, "units", topics.UnitID, "push_buttons", string(buttonID), "state")
+func pushButtonTopic(topics Topics, buttonID entity.PushButtonID, suffix topicSuffix) string {
+	return joinTopic(topics, "units", topics.UnitID, "push_buttons", string(buttonID), string(suffix))
 }
 
-func RelayStateTopic(topics Topics, relayID entity.RelayID) string {
-	return joinTopic(topics, "units", topics.UnitID, "relays", string(relayID), "state")
+func relayTopic(topics Topics, relayID entity.RelayID, suffix topicSuffix) string {
+	return joinTopic(topics, "units", topics.UnitID, "relays", string(relayID), string(suffix))
 }
 
-func LightStateTopic(topics Topics, lightID entity.LightID) string {
-	return joinTopic(topics, "units", topics.UnitID, "lights", lightTopicSegment(lightID), "state")
+func lightTopic(topics Topics, lightID entity.LightID, suffix topicSuffix) string {
+	localID, ok := entity.LocalID(string(lightID), entity.TypeLight)
+	if !ok {
+		localID = string(lightID)
+	}
+	return joinTopic(topics, "units", topics.UnitID, "lights", localID, string(suffix))
 }
 
-func LightCommandTopic(topics Topics, lightID entity.LightID) string {
-	return joinTopic(topics, "units", topics.UnitID, "lights", lightTopicSegment(lightID), "command")
+func CoverCommandSubscriptionTopic(topics Topics) string {
+	return joinTopic(topics, "units", topics.UnitID, "covers", "+", string(commandSuffix))
+}
+
+func ParseEntityCommandTopic(topics Topics, topic string) (entity.Type, entity.ID) {
+	prefix := joinTopic(topics, "units", topics.UnitID) + "/"
+	path, ok := strings.CutPrefix(topic, prefix)
+	if !ok {
+		return "", ""
+	}
+	path, ok = strings.CutSuffix(path, "/"+string(commandSuffix))
+	if !ok {
+		return "", ""
+	}
+	group, localID, ok := strings.Cut(path, "/")
+	if !ok || !entity.IsLocalID(localID) {
+		return "", ""
+	}
+
+	var kind entity.Type
+	switch group {
+	case "lights":
+		kind = entity.TypeLight
+	case "covers":
+		kind = entity.TypeCover
+	default:
+		return "", ""
+	}
+	return kind, entity.NewID(topics.UnitID, kind, localID)
 }
 
 func LightCommandSubscriptionTopic(topics Topics) string {
-	return joinTopic(topics, "units", topics.UnitID, "lights", "+", "command")
+	return joinTopic(topics, "units", topics.UnitID, "lights", "+", string(commandSuffix))
 }
 
 func SemanticSourceEventTopic(topics Topics, sourceID entity.ID) string {
@@ -73,20 +104,6 @@ func SemanticSourceEventSubscriptionTopics(topics Topics, bindings []entity.Bind
 	return subscriptions
 }
 
-func ParseLightCommandTopic(topics Topics, topic string) (entity.LightID, bool) {
-	prefix := joinTopic(topics, "units", topics.UnitID, "lights") + "/"
-	if !strings.HasPrefix(topic, prefix) || !strings.HasSuffix(topic, "/command") {
-		return "", false
-	}
-
-	localID := strings.TrimSuffix(strings.TrimPrefix(topic, prefix), "/command")
-	if !entity.IsLocalID(localID) || strings.Contains(localID, "/") {
-		return "", false
-	}
-
-	return entity.LightID(entity.NewID(topics.UnitID, entity.TypeLight, localID)), true
-}
-
 func HomeAssistantDeviceDiscoveryTopic(topics Topics) string {
 	return strings.Join([]string{"homeassistant", "device", homeAssistantUniqueID(topics, "unit"), "config"}, "/")
 }
@@ -105,14 +122,6 @@ func homeAssistantUniqueID(topics Topics, entityID string) string {
 	return strings.Join([]string{"nest", topics.UnitID, entityID}, "_")
 }
 
-func lightTopicSegment(lightID entity.LightID) string {
-	if localID, ok := entity.LocalID(string(lightID), entity.TypeLight); ok {
-		return localID
-	}
-
-	return string(lightID)
-}
-
 func semanticSourceUnitID(sourceID entity.ID) (string, bool) {
 	parts := strings.Split(string(sourceID), ".")
 	if len(parts) != 3 || !entity.IsLocalID(parts[0]) {
@@ -120,4 +129,20 @@ func semanticSourceUnitID(sourceID entity.ID) (string, bool) {
 	}
 
 	return parts[0], true
+}
+
+type topicSuffix string
+
+const (
+	commandSuffix  topicSuffix = "command"
+	stateSuffix    topicSuffix = "state"
+	positionSuffix topicSuffix = "position"
+)
+
+func coverTopic(topics Topics, id entity.CoverID, suffix topicSuffix) string {
+	localID, ok := entity.LocalID(string(id), entity.TypeCover)
+	if !ok {
+		localID = string(id)
+	}
+	return joinTopic(topics, "units", topics.UnitID, "covers", localID, string(suffix))
 }

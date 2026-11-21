@@ -34,6 +34,8 @@ func dispatchSysfsCommand(ctx context.Context, index *registry.Registry, command
 	switch busEvent.Kind {
 	case event.LightKind:
 		dispatchLightEvent(ctx, index, commands, *busEvent.Light)
+	case event.CoverKind:
+		dispatchCoverEvent(ctx, index, commands, *busEvent.Cover)
 	}
 }
 
@@ -43,6 +45,8 @@ func dispatchMQTTCommand(ctx context.Context, reg *registry.Registry, commands c
 		publishPushButtonSourceEvent(ctx, reg, commands, topics, busEvent.Kind, *busEvent.PushButton)
 	case event.LightStateKind:
 		publishLightState(ctx, commands, topics, *busEvent.LightState)
+	case event.CoverStateKind:
+		publishCoverState(ctx, commands, topics, *busEvent.CoverState)
 	case event.MQTTConnectedKind:
 		if err := publishMQTTStartup(ctx, reg, commands); err != nil {
 			slog.Error("mqtt startup publish failed", "error", err)
@@ -89,6 +93,10 @@ func logSemanticEvent(busEvent event.Event) {
 		logPushButtonEvent(busEvent.Kind, *busEvent.PushButton)
 	case event.LightKind:
 		logLightEvent(*busEvent.Light)
+	case event.CoverKind:
+		slog.Info("cover request", "cover_id", busEvent.Cover.CoverID, "action", busEvent.Cover.Action)
+	case event.CoverStateKind:
+		logCoverState(*busEvent.CoverState)
 	case event.MQTTConnectedKind:
 		slog.Info("mqtt actor connected")
 	case event.MQTTConnectFailedKind:

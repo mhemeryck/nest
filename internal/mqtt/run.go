@@ -21,7 +21,15 @@ const (
 	gracefulOfflineTimeout = 2 * time.Second
 )
 
-func Run(ctx context.Context, cfg entity.MQTT, sourceEventTopics []string, commands <-chan Command, events chan<- Event, done chan<- struct{}) {
+func Run(
+	ctx context.Context,
+	cfg entity.MQTT,
+	startupMessages []PublishMessage,
+	sourceEventTopics []string,
+	commands <-chan Command,
+	events chan<- Event,
+	done chan<- struct{},
+) {
 	defer close(done)
 
 	topics := NewTopics(cfg.TopicPrefix, cfg.UnitID)
@@ -39,6 +47,11 @@ func Run(ctx context.Context, cfg entity.MQTT, sourceEventTopics []string, comma
 		client.Disconnect(uint(disconnectQuiesce / time.Millisecond))
 		publishEvent(ctx, events, DisconnectedEvent())
 	}()
+
+	// Publish startup messages once before processing queued commands.
+	for _, message := range startupMessages {
+		publish(ctx, client, events, message)
+	}
 
 	for {
 		select {
@@ -80,8 +93,13 @@ func clientOptions(ctx context.Context, cfg entity.MQTT, topics Topics, sourceEv
 	offline := AvailabilityMessage(topics, AvailabilityOffline)
 	options.SetWill(offline.Topic, string(offline.Payload), offline.QoS, offline.Retain)
 	options.SetOnConnectHandler(func(client paho.Client) {
-		if err := subscribeLightCommands(ctx, client, topics, events); err != nil {
-			slog.Error("mqtt subscribe failed", "topic", LightCommandSubscriptionTopic(topics), "error", err)
+		lightTopic := LightCommandSubscriptionTopic(topics)
+		if err := subscribeEntityCommands(ctx, client, lightTopic, events); err != nil {
+			slog.Error("mqtt subscribe failed", "topic", lightTopic, "error", err)
+		}
+		coverTopic := CoverCommandSubscriptionTopic(topics)
+		if err := subscribeEntityCommands(ctx, client, coverTopic, events); err != nil {
+			slog.Error("mqtt subscribe failed", "topic", coverTopic, "error", err)
 		}
 		if err := subscribeSourceEvents(ctx, client, sourceEventTopics, events); err != nil {
 			slog.Error("mqtt source event subscribe failed", "error", err)
@@ -102,15 +120,14 @@ func clientOptions(ctx context.Context, cfg entity.MQTT, topics Topics, sourceEv
 	return options
 }
 
-func subscribeLightCommands(ctx context.Context, client client, topics Topics, events chan<- Event) error {
+func subscribeEntityCommands(ctx context.Context, client client, topic string, events chan<- Event) error {
 	if client == nil {
 		return nil
 	}
 
-	topic := LightCommandSubscriptionTopic(topics)
 	token := client.Subscribe(topic, 0, func(_ paho.Client, message paho.Message) {
 		if message.Retained() {
-			slog.Warn("ignoring retained mqtt light command", "topic", message.Topic())
+			slog.Warn("ignoring retained mqtt command", "topic", message.Topic())
 			return
 		}
 

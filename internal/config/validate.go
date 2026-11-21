@@ -23,6 +23,7 @@ func Validate(f *Root) error {
 	knownButtonIDs, buttonErr := validatePushButtons(f.PushButtons, knownInputIDs)
 	knownRelayIDs, relayErr := validateRelays(f.Relays)
 	knownLightIDs, lightErr := validateLights(f.Lights, knownRelayIDs)
+	knownCoverIDs, coverErr := validateCovers(f.Covers, knownRelayIDs)
 
 	if len(f.DigitalInputs) == 0 && len(f.Relays) == 0 {
 		errs = errors.Join(errs, fmt.Errorf("at least one digital_input or relay is required"))
@@ -37,7 +38,10 @@ func Validate(f *Root) error {
 		buttonErr,
 		relayErr,
 		lightErr,
-		validateBindings(f.Bindings, knownButtonIDs, knownLightIDs),
+		coverErr,
+		validateCoverRelayOwnership(f.Covers, f.Lights, f.Relays),
+		validateCoverControl(f.CoverControl, len(f.Covers) > 0),
+		validateBindings(f.Bindings, knownButtonIDs, knownLightIDs, knownCoverIDs),
 		validateRemoteBindings("remote_source_bindings", f.RemoteSourceBindings),
 		validateRemoteBindings("remote_target_bindings", f.RemoteTargetBindings),
 	)
@@ -325,8 +329,12 @@ func validateGlobalBindings(global *GlobalRoot) error {
 	for i, binding := range global.Bindings {
 		prefix := fmt.Sprintf("bindings[%d]", i)
 		sourceErr := validateGlobalBindingEndpoint(global, prefix+".source", binding.Source, entity.TypeButton)
-		targetErr := validateGlobalBindingEndpoint(global, prefix+".target", binding.Target, entity.TypeLight)
-		actionErr := validateModbusBindingAction(prefix+".action", binding.Action)
+		targetType := entity.TypeLight
+		if entity.IsID(binding.Target, entity.TypeCover) {
+			targetType = entity.TypeCover
+		}
+		targetErr := validateGlobalBindingEndpoint(global, prefix+".target", binding.Target, targetType)
+		actionErr := validateBindingAction(prefix+".action", binding.Action, targetType)
 		transportErr := error(nil)
 
 		if sourceErr == nil && targetErr == nil && actionErr == nil {
@@ -336,6 +344,8 @@ func validateGlobalBindings(global *GlobalRoot) error {
 				if binding.ExecutionTransport != "" {
 					transportErr = fmt.Errorf("%s.execution_transport: only valid for cross-unit bindings", prefix)
 				}
+			} else if targetType == entity.TypeCover {
+				transportErr = fmt.Errorf("%s: cover bindings must be local to one unit", prefix)
 			} else {
 				transportErr = validateExecutionTransport(prefix+".execution_transport", binding.ExecutionTransport)
 				if binding.ExecutionTransport == string(entity.ExecutionTransportModbus) {
@@ -412,6 +422,12 @@ func validateGlobalBindingEndpoint(global *GlobalRoot, field string, value strin
 	case entity.TypeLight:
 		for _, light := range unit.Entities.Lights {
 			if light.ID == localID {
+				return nil
+			}
+		}
+	case entity.TypeCover:
+		for _, cover := range unit.Entities.Covers {
+			if cover.ID == localID {
 				return nil
 			}
 		}
@@ -706,7 +722,22 @@ func validateLights(lights []LightConfig, knownRelayIDs map[string]struct{}) (ma
 	return knownLightIDs, err
 }
 
-func validateBindings(bindings []BindingConfig, knownButtonIDs map[string]struct{}, knownLightIDs map[string]struct{}) error {
+func validateBindingAction(field, action string, targetType entity.Type) error {
+	if targetType == entity.TypeLight {
+		return validateModbusBindingAction(field, action)
+	}
+	if err := validateRequiredField(field, action); err != nil {
+		return err
+	}
+	switch entity.CoverAction(action) {
+	case entity.CoverActionOpen, entity.CoverActionClose:
+		return nil
+	default:
+		return fmt.Errorf("%s: unsupported action %q", field, action)
+	}
+}
+
+func validateBindings(bindings []BindingConfig, knownButtonIDs, knownLightIDs, knownCoverIDs map[string]struct{}) error {
 	var errs error
 	seen := make(map[string]int, len(bindings))
 
@@ -719,17 +750,23 @@ func validateBindings(bindings []BindingConfig, knownButtonIDs map[string]struct
 			sourceErr = fmt.Errorf("%s.source: unknown push button %q", prefix, binding.Source)
 		}
 
+		targetType := entity.TypeLight
+		if entity.IsID(binding.Target, entity.TypeCover) ||
+			binding.Action == string(entity.CoverActionOpen) || binding.Action == string(entity.CoverActionClose) {
+			targetType = entity.TypeCover
+		}
 		var targetErr error
 		if err := validateRequiredField(prefix+".target", binding.Target); err != nil {
 			targetErr = err
+		} else if targetType == entity.TypeCover {
+			if _, ok := knownCoverIDs[binding.Target]; !ok {
+				targetErr = fmt.Errorf("%s.target: unknown cover %q", prefix, binding.Target)
+			}
 		} else if _, ok := knownLightIDs[binding.Target]; !ok {
 			targetErr = fmt.Errorf("%s.target: unknown light %q", prefix, binding.Target)
 		}
 
-		actionErr := validateRequiredField(prefix+".action", binding.Action)
-		if actionErr == nil && binding.Action != BindingActionToggle {
-			actionErr = fmt.Errorf("%s.action: unsupported action %q", prefix, binding.Action)
-		}
+		actionErr := validateBindingAction(prefix+".action", binding.Action, targetType)
 
 		if sourceErr == nil && targetErr == nil && actionErr == nil {
 			key := binding.Source + "\x00" + binding.Target + "\x00" + binding.Action

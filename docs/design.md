@@ -5,7 +5,8 @@
 Universal controller for Unipi hardware. Replaces evok2mqtt + modbusbackup with a single config-driven binary.
 
 This document combines current package responsibilities with design direction.
-Cover support remains unimplemented on this branch.
+Cover configuration, a pure movement FSM, and sysfs-owned runtime execution are implemented.
+Physical cover button bindings and MQTT integration remain pending.
 See [Implementation Plan](implementation-plan.md) for progress and [Distributed Light Model](distributed-light-model.md) for configuration and routing.
 
 ## Goals
@@ -66,9 +67,12 @@ It maps semantic IDs and actor-facing identifiers to entities and relationships,
 
 `internal/controller` owns semantic event dispatch and runtime policy.
 It normalizes actor observations into semantic events, evaluates bindings, and emits actor commands.
+For covers, it routes movement requests and observations but does not own the movement FSM or deadline timer.
 
 Actor packages own protocol or hardware IO.
 They expose actor-specific observations and commands and should not translate directly to other actors.
+Local cover execution is a deliberate exception to domain-agnostic actor behavior.
+The sysfs actor owns cover movement state, deadlines, relay sequencing, and cleanup together.
 
 ## Key Design Decisions
 
@@ -100,7 +104,7 @@ This keeps ownership explicit.
 It also fits sysfs, MQTT, and Modbus well.
 Each integration can own its protocol or device state locally while the controller remains the only router between domains.
 
-Actor packages should stay focused on their own protocol or device behavior.
+Actor packages should stay focused on their own protocol or device behavior, including local cover execution within sysfs.
 They expose actor-specific observations and commands, such as `sysfs.StateChange` and `sysfs.Command`.
 They should not translate directly to other actors.
 
@@ -118,6 +122,54 @@ Live clients, channels, and reconnect state belong to integrations, not the regi
 The top-level `internal/nest` package owns application wiring.
 It loads config, builds domain entities, builds registries, discovers configured devices, maps domain config into actor-specific runtime config, starts actors, and coordinates shutdown.
 The `cmd/nest` package should remain a thin process entrypoint for CLI parsing, signal handling, and exit status.
+
+### Local Cover Execution Ownership
+
+Keep cover movement decisions and hardware execution under one runtime owner in the sysfs actor.
+Splitting these responsibilities across asynchronous layers requires pending-operation state, late-result handling, and cancellation coordination.
+Local ownership avoids that additional protocol without removing hardware failures.
+
+```text
+button event or MQTT command
+  -> controller normalization and bindings
+  -> cover request on the sysfs commands channel
+  -> sysfs-owned FSM, deadline timer, and relay execution
+  -> cover state or failure on the sysfs states channel
+  -> controller normalization and external publishing
+```
+
+- Controller: route Open, Close, and Stop requests to the configured cover
+- Sysfs actor: own live cover state, timers, output interlocks, and startup/shutdown cleanup
+- Pure cover FSM: calculate transitions and effects without I/O or live timers
+- Registry: store configured cover relationships and shared settings, not live state
+- `internal/nest`: translate configuration into actor setup and coordinate actor lifecycle
+
+The controller does not coordinate individual relay writes or wait for per-write acknowledgements.
+The sysfs actor handles requests, deadlines, and output execution under the same local owner.
+The existing commands and states channels remain the integration boundary; no command-result channel is added.
+Cover observations identify the cover and report movement or failure, not an echoed relay command.
+Relay addresses remain actor setup and hardware execution details.
+The controller still routes observations to MQTT; actors do not communicate directly.
+
+Keep the existing pure FSM and its movement rules unchanged.
+Its current package location does not imply controller ownership of runtime state.
+Initialize outputs safely before accepting movement requests.
+Attempt both Off writes when stopping, even if one fails.
+An Off failure prevents activation; activation failure requires an attempt to remove power from both outputs.
+Readback confirms sysfs values, not physical relay contacts or motor movement.
+Do not report confirmed stopping when output shutdown fails.
+Do not let state publication prevent deadline handling or shutdown cleanup.
+Do not introduce automatic retries, rollback guarantees, or distributed transaction handling.
+
+This boundary intentionally makes sysfs cover-aware.
+It favors one understandable execution owner over a domain-agnostic actor with a controller-side acknowledgement protocol.
+The sysfs actor excludes cover-owned outputs from ordinary polling workers and rejects direct commands to those outputs.
+One actor-local timer handles the earliest active cover deadline.
+Pending cover snapshots coalesce by identity so slow consumers cannot block deadline handling or cleanup.
+An output failure stops the actor and runtime after local cleanup attempts.
+Shutdown attempts both Off operations on every cover, even after cancellation or another cleanup failure.
+Cleanup failures reach the runtime result; successful sysfs readback does not prove physical stopping.
+Existing controller-side light control remains unchanged; no synchronous hardware command API is added.
 
 ### Runtime Flow
 

@@ -9,7 +9,8 @@ Phased approach to building `nest`, a universal controller for Unipi hardware.
 Completed phases record implementation history, including decisions superseded by later phases.
 Unchecked items describe proposed work, not fixed implementation requirements.
 Discuss the model and next increment before implementation; revise this plan as decisions change.
-Cover configuration and execution remain unimplemented on this branch.
+Cover configuration, the movement FSM, and sysfs-owned runtime execution are implemented.
+Physical button bindings and production verification remain pending.
 Historical cover experiments on other branches are reference material only.
 
 ## Migration Direction
@@ -334,19 +335,135 @@ Working assumption:
 
 ## Phase 9: Local Cover Controller
 
-- [ ] Define a config-driven cover model with separate open and close actuator references
-- [ ] Configure local up and down relay endpoints
-- [ ] Configure local open and close button inputs
-- [ ] Implement press-and-hold open button behavior
-- [ ] Implement press-and-hold close button behavior
-- [ ] Stop on button release
-- [ ] Stop remote motion when either physical button is pressed
-- [ ] Define deterministic behavior when both buttons are active
-- [ ] Implement open, close, stop, and remote movement commands
-- [ ] Enforce up/down relay interlocks and stop before reversing
-- [ ] Ensure both relays are off during startup and shutdown
-- [ ] Add motion timeout handling
-- [ ] Add unit tests for the state machine and safety rules
+Implement small slices, starting with the cover finite-state machine (FSM) alone.
+Agree on the state, input, and effect model before implementation.
+
+### 1. Cover FSM Only
+
+- [x] Define explicit state, input, and effect types under `internal/controller/cover`
+- [x] Implement package-level transition functions with explicit state and input arguments
+- [x] Make state branches and transitions visible in the code
+- [x] Keep the normal path clear and failure handling explicit
+- [x] Use explicit movement and effect alternatives instead of independent relay flags; validate deadline invariants
+- [x] Keep functions at a consistent level of abstraction
+- [x] Model Open, Close, and Stop requests independently of their source
+- [x] Describe output effects without performing hardware I/O
+- [x] Model Stopped, Opening, and Closing as movement states
+- [x] Model a bounded movement deadline and its stop effects
+- [x] Test transitions and safety rules without actors or hardware
+
+This slice excludes configuration, registry changes, button bindings, MQTT, and sysfs integration.
+It does not require position estimation or configurable button policies.
+
+`cover.Transition` takes state, input, current time, and maximum run duration.
+It returns movement intent and one coordinated output effect, without actor dependencies or live timers.
+Moving states carry an absolute deadline; Stopped has none.
+Expired deadlines take precedence over requests.
+Early or stale deadline checks cannot stop a newer movement before its deadline.
+Invalid arguments return an error, unchanged state, and no output effect.
+This slice does not confirm output changes or enforce physical relay sequencing.
+
+Agreed movement behavior:
+
+| Current movement | Request        | Result                        |
+| ---------------- | -------------- | ----------------------------- |
+| Stopped          | Open or Close  | Start the requested direction |
+| Moving           | Same direction | Continue without restarting   |
+| Moving           | Opposite       | Stop; do not queue a reversal |
+| Any              | Stop           | Stop                          |
+
+These rules describe movement intent, not the complete safety-state model.
+Never activate both direction relays together.
+Do not treat an output command as confirmation that the output changed.
+Output confirmation and failure handling remain explicit integration concerns, not additional movement states by default.
+
+Movement deadlines:
+
+- Every movement has a deadline, independent of direction and estimated position
+- Allow full travel from any starting position, with a margin
+- Starting movement sets the deadline
+- Same-direction requests do not extend the deadline
+- Stop and opposite-direction requests turn both relays off and cancel the deadline
+- Reaching the deadline turns both relays off
+- The FSM describes these effects; runtime integration executes them
+
+The motors have internal end limits, but these limits do not deactivate the relays.
+The movement deadline removes relay power even when the motor has already reached an endpoint.
+
+### 2. Cover Configuration and Registry
+
+- [x] Add a plain cover struct with typed references to open and close relays
+- [x] Configure one shared maximum movement duration independently of position calibration
+- [x] Extend global configuration, unit projection, and entity translation
+- [x] Validate distinct direction relays and exclusive ownership across covers and lights
+- [x] Add registry lookups for covers and their relays
+
+Global `cover_control.max_run` applies to every cover on every unit and defaults to 30 seconds.
+Per-cover duration overrides are not supported.
+Cover names describe the location without repeating the entity type.
+Ownership validation compares physical relay devices, not only relay IDs.
+Existing light-to-light relay sharing remains unchanged.
+
+Configured entities describe relationships and settings.
+The sysfs actor owns live cover state and execution; the pure FSM describes movement decisions.
+Use explicit references, not an entity hierarchy or a generic ownership framework.
+
+### 3. Local Runtime Integration
+
+- [x] Route semantic cover requests through the existing central dispatch loop
+- [x] Configure sysfs-owned covers from the registry through `internal/nest`
+- [x] Own each cover's FSM state, deadline timer, and output execution within the sysfs actor
+- [x] Accept cover requests and report cover state or failures through the existing commands and states channels
+- [x] Execute local relay sequencing and readback without intermediate controller acknowledgements
+- [x] Keep local relay execution internal rather than expose an output-pair completion API
+- [x] Keep the controller focused on routing cover requests and observations, not executing the cover FSM
+- [x] Integrate safe startup, shutdown, and output-failure handling
+- [x] Distinguish requested output changes from confirmed output state
+- [x] Ensure state publication cannot block movement deadlines or shutdown cleanup
+- [x] Verify the complete local control path with tests
+
+Sysfs owns local cover execution, including movement state, deadlines, hardware I/O, and cleanup.
+The controller owns request routing and observation normalization, not live cover movement state.
+`internal/nest` owns runtime wiring and lifecycle.
+The pure cover FSM remains independent of runtime ownership and hardware I/O.
+
+The actor attempts both Off writes and verifies readback before activating either output.
+A failed Off prevents activation; a failed activation triggers one attempt to turn both outputs off.
+Stop attempts both Off writes even if one fails.
+State observations identify the cover and report movement or failure, not the individual relay command sequence.
+The controller does not manage per-write acknowledgements, pending output transactions, or rollback.
+Local hardware failures remain real failures; this change removes cross-layer execution coordination, not failure handling.
+
+This replaces the earlier plan to keep the FSM and timers in the controller.
+Existing light control remains unchanged; its broader execution boundary is not part of this slice.
+Cover outputs have one local owner and are excluded from ordinary polling workers.
+One actor-local timer schedules the earliest cover deadline.
+Pending snapshots coalesce per cover so slow consumers cannot block deadlines or cleanup.
+Output failure stops the sysfs actor and runtime after cleanup attempts.
+Cleanup attempts both outputs on every cover and surfaces failures without claiming confirmed stopping.
+Physical button bindings and MQTT command mapping remain separate slices.
+
+### 4. Physical Button Bindings
+
+- [x] Configure local open and close button inputs
+- [x] Extend light-only binding execution to support cover targets
+- [x] Map button presses to semantic Open or Close requests
+- [x] Map button releases to semantic Stop requests
+- [x] Define deterministic handling of conflicting button observations
+- [x] Test local press-and-hold behavior through the controller
+
+Cover bindings use the existing press and release events and apply within one unit.
+Set the binding action to `open` or `close`.
+A press requests movement in the bound direction.
+Either release requests Stop.
+An opposite press during movement stops the cover through the existing FSM.
+A new press can start movement again.
+The file-backed process check covers presses, release, an opposite press, and a held-button timeout.
+Hold-duration tracking and press-to-move behavior remain deferred to Phase 12.
+MQTT cover mapping remains deferred to Phase 13 and must produce the same semantic cover requests.
+
+### 5. Isolated Migration
+
 - [ ] Run the controller on an isolated, non-critical unit with `hausmaus` and `covers` disabled
 - [ ] Replace the legacy `hausmaus` plus `covers` control path on that unit
 
@@ -360,16 +477,22 @@ Working assumption:
 
 ## Phase 10: Cover Refinement
 
-- [ ] Add time-based position tracking
-- [ ] Add timing calibration and `max_time` handling
-- [ ] Define behavior when position is unknown after restart
-- [ ] Add recovery behavior after restart or interrupted movement
+- [x] Add time-based position tracking
+- [ ] Verify full travel fits within the configured movement deadline on hardware
+- [x] Start with Unknown position after restart; do not trust a restored estimate
+- [x] Establish an estimated endpoint after a full-travel run from any starting position
+- [x] Keep position Unknown after shorter movements from Unknown
+- [x] Test recovery from unknown or incorrect position estimates
 
 **Notes:**
 
 - Covers should build on the same config and event model defined earlier.
 - Safety rules must ensure up/down relays are never active simultaneously.
 - The cover state machine should remain independent of sysfs so it can be moved to better-suited hardware later.
+- Position and movement are separate: 0% means closed; 100% means open.
+- Open and Closed describe estimated position, not additional movement states.
+- Position estimates must not block explicit Open or Close requests or stop them early.
+- The Phase 9 movement deadline remains active regardless of estimated position.
 
 **Deliverable**: Cover entities behave predictably under real-world timing and interruption scenarios.
 
@@ -431,11 +554,22 @@ Press-to-move behavior is deferred until the standalone migration is stable.
 
 ## Phase 13: Cover MQTT Commands
 
-- [ ] Subscribe to cover command topics advertised in Home Assistant discovery
-- [ ] Require explicit configuration before cover commands are enabled
-- [ ] Reflect cover command enablement in the discovery payload
-- [ ] Accept a minimal command set for migrated covers
-- [ ] Publish resulting cover state changes after command execution
+- [x] Subscribe to cover command topics advertised in Home Assistant discovery
+- [x] Enable cover commands on units with MQTT enabled
+- [x] Advertise covers when the unit enables MQTT
+- [x] Accept a minimal command set for migrated covers
+- [x] Publish cover movement and estimated position after command execution
+
+Enable MQTT under the unit's `actors.mqtt` to receive light and cover commands.
+Nest accepts `OPEN`, `CLOSE`, and `STOP` on `<prefix>/units/<unit>/covers/<cover>/command`.
+Nest ignores retained commands received when it subscribes.
+
+Publish `opening`, `closing`, or `stopped` on the retained state topic.
+Publish `None` when a stopped cover has no position estimate.
+Publish known percentages on the retained position topic.
+Clear the retained percentage when the estimate is unknown.
+Reset retained cover state on the first broker connection after Nest starts.
+After a broker reconnect, the last retained state remains until the next cover update.
 
 Light command handling and discovery are already covered by Phase 6.
 

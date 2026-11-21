@@ -13,13 +13,13 @@ func TestTopics(t *testing.T) {
 	assert.Equal(t, "nest", topics.Prefix)
 	assert.Equal(t, "controller_1", topics.UnitID)
 	assert.Equal(t, "nest/units/controller_1/availability", AvailabilityTopic(topics))
-	assert.Equal(t, "nest/units/controller_1/digital_inputs/office_button_input/state", DigitalInputStateTopic(topics, entity.DigitalInputID("office_button_input")))
-	assert.Equal(t, "nest/units/controller_1/push_buttons/office_button/state", PushButtonStateTopic(topics, entity.PushButtonID("office_button")))
-	assert.Equal(t, "nest/units/controller_1/relays/office_light_relay/state", RelayStateTopic(topics, entity.RelayID("office_light_relay")))
-	assert.Equal(t, "nest/units/controller_1/lights/office_light/state", LightStateTopic(topics, entity.LightID("office_light")))
-	assert.Equal(t, "nest/units/controller_1/lights/office_light/command", LightCommandTopic(topics, entity.LightID("office_light")))
-	assert.Equal(t, "nest/units/controller_1/lights/office_light/state", LightStateTopic(topics, entity.LightID("controller_1.light.office_light")))
-	assert.Equal(t, "nest/units/controller_1/lights/office_light/command", LightCommandTopic(topics, entity.LightID("controller_1.light.office_light")))
+	assert.Equal(t, "nest/units/controller_1/digital_inputs/office_button_input/state", digitalInputTopic(topics, entity.DigitalInputID("office_button_input"), stateSuffix))
+	assert.Equal(t, "nest/units/controller_1/push_buttons/office_button/state", pushButtonTopic(topics, entity.PushButtonID("office_button"), stateSuffix))
+	assert.Equal(t, "nest/units/controller_1/relays/office_light_relay/state", relayTopic(topics, entity.RelayID("office_light_relay"), stateSuffix))
+	assert.Equal(t, "nest/units/controller_1/lights/office_light/state", lightTopic(topics, entity.LightID("office_light"), stateSuffix))
+	assert.Equal(t, "nest/units/controller_1/lights/office_light/command", lightTopic(topics, entity.LightID("office_light"), commandSuffix))
+	assert.Equal(t, "nest/units/controller_1/lights/office_light/state", lightTopic(topics, entity.LightID("controller_1.light.office_light"), stateSuffix))
+	assert.Equal(t, "nest/units/controller_1/lights/office_light/command", lightTopic(topics, entity.LightID("controller_1.light.office_light"), commandSuffix))
 	assert.Equal(t, "nest/units/controller_1/lights/+/command", LightCommandSubscriptionTopic(topics))
 	assert.Equal(t, "nest/units/controller_1/sources/controller_1.button.office_button/event", SemanticSourceEventTopic(topics, entity.ID("controller_1.button.office_button")))
 	assert.Equal(t, "nest/units/controller_2/sources/controller_2.button.hall_button/event", SemanticSourceEventTopic(topics, entity.ID("controller_2.button.hall_button")))
@@ -45,16 +45,28 @@ func TestTopicsWithoutPrefix(t *testing.T) {
 	assert.Equal(t, "units/controller_1/availability", AvailabilityTopic(topics))
 }
 
-func TestParseLightCommandTopic(t *testing.T) {
+func TestParseEntityCommandTopic(t *testing.T) {
 	topics := NewTopics("nest", "controller_1")
 
-	lightID, ok := ParseLightCommandTopic(topics, "nest/units/controller_1/lights/office_light/command")
-	assert.True(t, ok)
-	assert.Equal(t, entity.LightID("controller_1.light.office_light"), lightID)
+	kind, id := ParseEntityCommandTopic(topics, "nest/units/controller_1/lights/office_light/command")
+	assert.Equal(t, entity.TypeLight, kind)
+	assert.Equal(t, entity.ID("controller_1.light.office_light"), id)
 
-	_, ok = ParseLightCommandTopic(topics, "nest/units/controller_1/lights/office_light/state")
-	assert.False(t, ok)
+	kind, id = ParseEntityCommandTopic(topics, "nest/units/controller_1/covers/office/command")
+	assert.Equal(t, entity.TypeCover, kind)
+	assert.Equal(t, entity.ID("controller_1.cover.office"), id)
 
-	_, ok = ParseLightCommandTopic(topics, "nest/units/controller_1/lights/office-light/command")
-	assert.False(t, ok)
+	for _, topic := range []string{
+		"nest/units/controller_1/lights/office_light/state",
+		"nest/units/controller_1/lights/office-light/command",
+		"nest/units/controller_1/covers/office/extra/command",
+		"nest/units/controller_2/covers/office/command",
+		"nest/units/controller_1/relays/office/command",
+	} {
+		t.Run(topic, func(t *testing.T) {
+			kind, id := ParseEntityCommandTopic(topics, topic)
+			assert.Empty(t, kind)
+			assert.Empty(t, id)
+		})
+	}
 }

@@ -3,7 +3,6 @@ package sysfs
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -61,19 +60,4 @@ func TestRouteCommandsIgnoresUnknownDevice(t *testing.T) {
 		require.Failf(t, "unexpected forwarded command", "%+v", cmd)
 	default:
 	}
-}
-
-func TestStartConfiguredWorkersRegistersRoutes(t *testing.T) {
-	states := make(chan StateChange, 1)
-	ctx, cancel := context.WithCancel(t.Context())
-	workers := startConfiguredWorkers(ctx, []WorkerConfig{{
-		Interval: 10 * time.Millisecond,
-		Devices:  []*Device{{Identifier: "di_1_01"}, {Identifier: "ro_1_01"}},
-	}}, states)
-	require.NotNil(t, workers)
-	require.Contains(t, workers.routes, "di_1_01")
-	require.Contains(t, workers.routes, "ro_1_01")
-
-	cancel()
-	workers.wg.Wait()
 }

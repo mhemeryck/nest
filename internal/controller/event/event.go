@@ -1,6 +1,9 @@
 package event
 
-import "github.com/mhemeryck/nest/internal/entity"
+import (
+	"github.com/mhemeryck/nest/internal/controller/cover"
+	"github.com/mhemeryck/nest/internal/entity"
+)
 
 type Kind string
 
@@ -11,6 +14,8 @@ const (
 	RelayStateKind         Kind = "relay_state"
 	LightStateKind         Kind = "light_state"
 	LightKind              Kind = "light"
+	CoverKind              Kind = "cover"
+	CoverStateKind         Kind = "cover_state"
 	MQTTConnectedKind      Kind = "mqtt_connected"
 	MQTTConnectFailedKind  Kind = "mqtt_connect_failed"
 	MQTTDisconnectedKind   Kind = "mqtt_disconnected"
@@ -25,6 +30,8 @@ type Event struct {
 	Relay        *Relay
 	LightState   *LightState
 	Light        *Light
+	Cover        *Cover
+	CoverState   *CoverState
 	MQTT         *MQTT
 }
 
@@ -49,6 +56,18 @@ type Light struct {
 	LightID entity.LightID
 	Name    string
 	Action  entity.LightAction
+}
+
+type Cover struct {
+	CoverID entity.CoverID
+	Action  entity.CoverAction
+}
+
+type CoverState struct {
+	CoverID  entity.CoverID
+	Movement cover.Movement
+	Position *int
+	Error    error
 }
 
 type LightState struct {

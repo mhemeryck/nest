@@ -9,9 +9,11 @@ type (
 	DigitalInputID      string
 	PushButtonID        string
 	LightID             string
+	CoverID             string
 	RelayID             string
 	Action              string
 	LightAction         string
+	CoverAction         string
 	ExecutionTransport  string
 	ModbusMode          string
 	ModbusEventSignalID string
@@ -23,6 +25,9 @@ const (
 	LightActionToggle        LightAction        = "toggle"
 	LightActionOn            LightAction        = "on"
 	LightActionOff           LightAction        = "off"
+	CoverActionOpen          CoverAction        = "open"
+	CoverActionClose         CoverAction        = "close"
+	CoverActionStop          CoverAction        = "stop"
 	ModbusModeMaster         ModbusMode         = "master"
 	ModbusModeSlave          ModbusMode         = "slave"
 	ExecutionTransportMQTT   ExecutionTransport = "mqtt"
@@ -34,9 +39,11 @@ type Root struct {
 	SysfsPollIntervals   PollIntervals
 	MQTT                 MQTT
 	Modbus               Modbus
+	CoverControl         CoverControl
 	DigitalInputs        []DigitalInput
 	PushButtons          []PushButton
 	Lights               []Light
+	Covers               []Cover
 	Relays               []Relay
 	Bindings             []Binding
 	RemoteSourceBindings []Binding
@@ -126,6 +133,17 @@ type Light struct {
 	ID    LightID
 	Name  string
 	Relay RelayID
+}
+
+type Cover struct {
+	ID         CoverID
+	Name       string
+	OpenRelay  RelayID
+	CloseRelay RelayID
+}
+
+type CoverControl struct {
+	MaxRun time.Duration
 }
 
 type Binding struct {
