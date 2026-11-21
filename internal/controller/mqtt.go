@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/mhemeryck/nest/internal/controller/cover"
 	"github.com/mhemeryck/nest/internal/controller/event"
 	"github.com/mhemeryck/nest/internal/entity"
 	"github.com/mhemeryck/nest/internal/mqtt"
@@ -70,4 +71,27 @@ func pushButtonSourceEventName(eventKind event.Kind) string {
 	}
 
 	return "released"
+}
+
+func publishCoverState(ctx context.Context, commands chan<- mqtt.Command, topics mqtt.Topics, snapshot event.CoverState) {
+	if snapshot.Error != nil {
+		return
+	}
+	var state string
+	switch snapshot.Movement {
+	case cover.Opening:
+		state = mqtt.CoverStateOpening
+	case cover.Closing:
+		state = mqtt.CoverStateClosing
+	case cover.Stopped:
+		state = mqtt.CoverStateUnknown
+		if snapshot.Position != nil {
+			state = mqtt.CoverStateStopped
+		}
+	default:
+		return
+	}
+	for _, message := range mqtt.CoverStateMessages(topics, snapshot.CoverID, state, snapshot.Position) {
+		publishMQTT(ctx, commands, message)
+	}
 }

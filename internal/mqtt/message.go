@@ -2,6 +2,7 @@ package mqtt
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 
 	"github.com/mhemeryck/nest/internal/entity"
@@ -25,6 +26,13 @@ const (
 const (
 	AvailabilityOnline  AvailabilityStatus = "online"
 	AvailabilityOffline AvailabilityStatus = "offline"
+)
+
+const (
+	CoverStateOpening = "opening"
+	CoverStateClosing = "closing"
+	CoverStateStopped = "stopped"
+	CoverStateUnknown = "None"
 )
 
 type LightObservation struct {
@@ -55,7 +63,7 @@ func LightStateMessage(topics Topics, observation LightObservation) (PublishMess
 	}
 
 	return PublishMessage{
-		Topic:   LightStateTopic(topics, observation.LightID),
+		Topic:   lightTopic(topics, observation.LightID, stateSuffix),
 		Payload: payload,
 		Retain:  true,
 		QoS:     0,
@@ -129,4 +137,16 @@ func parseSemanticSourceEventTopic(topicPrefix string, topic string) (entity.ID,
 	}
 
 	return entity.ID(sourceID), true
+}
+
+// CoverStateMessages clear any retained percentage when the estimate is unknown.
+func CoverStateMessages(topics Topics, id entity.CoverID, state string, position *int) [2]PublishMessage {
+	var percentage []byte
+	if position != nil {
+		percentage = strconv.AppendInt(nil, int64(*position), 10)
+	}
+	return [2]PublishMessage{
+		{Topic: coverTopic(topics, id, positionSuffix), Payload: percentage, Retain: true},
+		{Topic: coverTopic(topics, id, stateSuffix), Payload: []byte(state), Retain: true},
+	}
 }

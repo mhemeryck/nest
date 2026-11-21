@@ -45,6 +45,8 @@ func dispatchMQTTCommand(ctx context.Context, reg *registry.Registry, commands c
 		publishPushButtonSourceEvent(ctx, reg, commands, topics, busEvent.Kind, *busEvent.PushButton)
 	case event.LightStateKind:
 		publishLightState(ctx, commands, topics, *busEvent.LightState)
+	case event.CoverStateKind:
+		publishCoverState(ctx, commands, topics, *busEvent.CoverState)
 	case event.MQTTConnectedKind:
 		if err := publishMQTTStartup(ctx, reg, commands); err != nil {
 			slog.Error("mqtt startup publish failed", "error", err)

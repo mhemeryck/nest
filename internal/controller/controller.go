@@ -126,7 +126,11 @@ func popEvent(events []event.Event) (event.Event, []event.Event, bool) {
 }
 
 func publishMQTTStartup(ctx context.Context, reg *registry.Registry, commands chan<- mqtt.Command) error {
-	startupCommands, err := mqtt.StartupCommands(registry.MQTT(reg), registry.Lights(reg))
+	startupCommands, err := mqtt.StartupCommands(
+		registry.MQTT(reg),
+		registry.Lights(reg),
+		registry.Covers(reg),
+	)
 	if err != nil {
 		return fmt.Errorf("build mqtt startup commands: %w", err)
 	}

@@ -30,39 +30,64 @@ type HomeAssistantComponentDiscovery struct {
 	Name               string `json:"name"`
 	UniqueID           string `json:"unique_id"`
 	DefaultEntityID    string `json:"default_entity_id"`
+	PositionTopic      string `json:"position_topic,omitempty"`
 	StateTopic         string `json:"state_topic"`
 	CommandTopic       string `json:"command_topic"`
-	StateValueTemplate string `json:"state_value_template"`
-	PayloadOn          string `json:"payload_on"`
-	PayloadOff         string `json:"payload_off"`
+	StateValueTemplate string `json:"state_value_template,omitempty"`
+	PayloadOn          string `json:"payload_on,omitempty"`
+	PayloadOff         string `json:"payload_off,omitempty"`
 }
 
-func BuildHomeAssistantDeviceDiscovery(lights []entity.Light, topics Topics) HomeAssistantDeviceDiscovery {
-	doc := HomeAssistantDeviceDiscovery{
+func BuildHomeAssistantDeviceDiscovery(lights []entity.Light, covers []entity.Cover, topics Topics) HomeAssistantDeviceDiscovery {
+	components := make(map[string]HomeAssistantComponentDiscovery, len(lights)+len(covers))
+
+	// Add light components.
+	for _, light := range lights {
+		localID, ok := entity.LocalID(string(light.ID), entity.TypeLight)
+		if !ok {
+			localID = string(light.ID)
+		}
+		entityID := homeAssistantLightEntityID(light.ID)
+		components["light-"+localID] = HomeAssistantComponentDiscovery{
+			Platform:           "light",
+			Name:               light.Name,
+			UniqueID:           homeAssistantUniqueID(topics, entityID),
+			DefaultEntityID:    fmt.Sprintf("light.%s_%s", topics.UnitID, localID),
+			StateTopic:         lightTopic(topics, light.ID, stateSuffix),
+			CommandTopic:       lightTopic(topics, light.ID, commandSuffix),
+			StateValueTemplate: "{{ value_json.state }}",
+			PayloadOn:          "ON",
+			PayloadOff:         "OFF",
+		}
+	}
+
+	// Add cover components.
+	for _, cover := range covers {
+		localID, ok := entity.LocalID(string(cover.ID), entity.TypeCover)
+		if !ok {
+			localID = string(cover.ID)
+		}
+		components["cover-"+localID] = HomeAssistantComponentDiscovery{
+			Platform:        "cover",
+			Name:            cover.Name,
+			UniqueID:        homeAssistantUniqueID(topics, "cover_"+localID),
+			DefaultEntityID: fmt.Sprintf("cover.%s_%s", topics.UnitID, localID),
+			StateTopic:      coverTopic(topics, cover.ID, stateSuffix),
+			PositionTopic:   coverTopic(topics, cover.ID, positionSuffix),
+			CommandTopic:    coverTopic(topics, cover.ID, commandSuffix),
+		}
+	}
+
+	return HomeAssistantDeviceDiscovery{
 		Device:            homeAssistantDevice(topics),
 		Origin:            HomeAssistantOrigin{Name: "nest"},
-		Components:        make(map[string]HomeAssistantComponentDiscovery, len(lights)),
+		Components:        components,
 		AvailabilityTopic: AvailabilityTopic(topics),
 	}
-
-	for _, light := range lights {
-		doc.Components[lightTopicSegment(light.ID)] = homeAssistantLightComponent(light, topics)
-	}
-
-	return doc
 }
 
-func HomeAssistantDeviceDiscoveryPayload(lights []entity.Light, topics Topics) ([]byte, error) {
-	payload, err := json.Marshal(BuildHomeAssistantDeviceDiscovery(lights, topics))
-	if err != nil {
-		return nil, err
-	}
-
-	return payload, nil
-}
-
-func HomeAssistantDeviceDiscoveryMessage(lights []entity.Light, topics Topics) (PublishMessage, error) {
-	payload, err := HomeAssistantDeviceDiscoveryPayload(lights, topics)
+func HomeAssistantDeviceDiscoveryMessage(lights []entity.Light, covers []entity.Cover, topics Topics) (PublishMessage, error) {
+	payload, err := json.Marshal(BuildHomeAssistantDeviceDiscovery(lights, covers, topics))
 	if err != nil {
 		return PublishMessage{}, err
 	}
@@ -73,21 +98,6 @@ func HomeAssistantDeviceDiscoveryMessage(lights []entity.Light, topics Topics) (
 		Retain:  true,
 		QoS:     0,
 	}, nil
-}
-
-func homeAssistantLightComponent(light entity.Light, topics Topics) HomeAssistantComponentDiscovery {
-	entityID := homeAssistantLightEntityID(light.ID)
-	return HomeAssistantComponentDiscovery{
-		Platform:           "light",
-		Name:               light.Name,
-		UniqueID:           homeAssistantUniqueID(topics, entityID),
-		DefaultEntityID:    fmt.Sprintf("light.%s_%s", topics.UnitID, lightTopicSegment(light.ID)),
-		StateTopic:         LightStateTopic(topics, light.ID),
-		CommandTopic:       LightCommandTopic(topics, light.ID),
-		StateValueTemplate: "{{ value_json.state }}",
-		PayloadOn:          "ON",
-		PayloadOff:         "OFF",
-	}
 }
 
 func homeAssistantLightEntityID(lightID entity.LightID) string {

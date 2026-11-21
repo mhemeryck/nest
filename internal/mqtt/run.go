@@ -21,7 +21,15 @@ const (
 	gracefulOfflineTimeout = 2 * time.Second
 )
 
-func Run(ctx context.Context, cfg entity.MQTT, sourceEventTopics []string, commands <-chan Command, events chan<- Event, done chan<- struct{}) {
+func Run(
+	ctx context.Context,
+	cfg entity.MQTT,
+	startupMessages []PublishMessage,
+	sourceEventTopics []string,
+	commands <-chan Command,
+	events chan<- Event,
+	done chan<- struct{},
+) {
 	defer close(done)
 
 	topics := NewTopics(cfg.TopicPrefix, cfg.UnitID)
@@ -39,6 +47,11 @@ func Run(ctx context.Context, cfg entity.MQTT, sourceEventTopics []string, comma
 		client.Disconnect(uint(disconnectQuiesce / time.Millisecond))
 		publishEvent(ctx, events, DisconnectedEvent())
 	}()
+
+	// Publish startup messages once before processing queued commands.
+	for _, message := range startupMessages {
+		publish(ctx, client, events, message)
+	}
 
 	for {
 		select {
