@@ -49,6 +49,7 @@ in
     "dev:lint".exec = "golangci-lint run ./...";
     "dev:vet".exec = "go vet ./...";
     "dev:build".exec = "go build ./...";
+    "dev:artifacts".exec = "goreleaser release --snapshot --clean --skip=publish";
     "dev:check".after = [
       "dev:format-check"
       "dev:lint"
