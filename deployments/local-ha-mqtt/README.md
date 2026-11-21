@@ -3,7 +3,22 @@
 This deployment starts a disposable Home Assistant instance and Mosquitto broker for testing MQTT discovery behavior.
 It is intended for local development only.
 
-## Start
+## Start the native smoke test
+
+```nu
+devenv up
+```
+
+Open Home Assistant at <http://127.0.0.1:8123> and complete onboarding.
+Add the MQTT integration with broker host `127.0.0.1` and the port in `MOSQUITTO_PORT`.
+The requested broker port is `1883`.
+Nest runs with copied sysfs fixtures under the devenv state directory.
+Find the Office cover, send Open or Close, and check that it stops at the five-second deadline.
+Check that Home Assistant receives an estimated endpoint.
+
+## Start with Compose
+
+Stop the devenv stack before starting Compose because both stacks use the same ports.
 
 ```sh
 docker compose --project-directory deployments/local-ha-mqtt up
