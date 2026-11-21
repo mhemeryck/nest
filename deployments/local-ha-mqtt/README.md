@@ -10,6 +10,8 @@ devenv up
 ```
 
 Open Home Assistant at <http://127.0.0.1:8123> and complete onboarding.
+Manage HTTP settings under Settings > System > Network.
+A fresh Home Assistant instance uses its default HTTP bind addresses.
 Add the MQTT integration with broker host `127.0.0.1` and the port in `MOSQUITTO_PORT`.
 The requested broker port is `1883`.
 Nest runs with copied sysfs fixtures under the devenv state directory.

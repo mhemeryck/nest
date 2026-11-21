@@ -12,7 +12,6 @@ if not ($sysfs | path exists) {
     frontend: null
     lovelace: null
     recorder: null
-    http: {server_host: "127.0.0.1", server_port: 8123}
 } | to yaml | save --force ($home_assistant | path join configuration.yaml)
 
 let broker = {
