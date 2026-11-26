@@ -10,6 +10,7 @@
 - Explicit user approval before `git add`, commits, pushes, merges, rebases, or other repository mutations
 - Normal GPG signing only
 - Use the [Nest Git skill](.agents/skills/nest-git/SKILL.md) for commits and pull requests.
+- Keep validation sections and check results out of merge request descriptions. CI reports validation.
 
 ## Code Style
 
