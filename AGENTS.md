@@ -92,9 +92,7 @@
    Discuss new architectural concepts before introducing them.
    Document responsibilities, data flow, significant decisions, and tradeoffs.
 3. Review the implementation together.
-   Show an architecture diagram of the implemented components, responsibilities, and data flow.
-   Show call graphs for the relevant entry points and use them to walk through the code together.
-   Link the diagrams and call graphs to the relevant code when useful.
+   Use the [Nest implementation review skill](.agents/skills/nest-implementation-review/SKILL.md) for architecture diagrams and call graphs.
    Refine the implementation in small, reviewable changes.
 
 - Use representative scenarios to clarify the model
