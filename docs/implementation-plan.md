@@ -515,61 +515,51 @@ Edison and Tesla remain outside this rollout.
 
 **Deliverable**: Cover entities behave predictably under real-world timing and interruption scenarios.
 
-## Phase 11: Light Control Migration
+## Phase 11: Relay Light Migration
 
-### 1. DALI-Only Pilot
+### Tesla-to-Edison Pilot
 
-- [ ] Select one commissioned DALI-only light and one Tesla button
-- [ ] Confirm the Modbus path from Tesla to the DALI controller
-- [ ] Implement Nest on/off control and level feedback on the DALI controller
+- [ ] Select one Tesla wall button and one relay-only light on Edison
+- [ ] Record the existing RS-485 roles, serial settings, and register mappings
+- [ ] Test Nest-to-Nest on/off control over the existing wired Modbus RTU link
+- [ ] Verify the wall button switches the light with Home Assistant and the MQTT broker offline
+- [ ] Verify Home Assistant commands and Edison state reports when MQTT is available
+- [ ] Verify restart, reconnect, and rollback before expanding circuit by circuit
+
+Keep one Modbus master and one controller writing the pilot relay.
+Keep the Python controller and `evok2mqtt` available for rollback.
+Capture existing MQTT topics, discovery, availability, and retained state before replacing `evok2mqtt`.
+Document any intentional MQTT contract changes.
+
+Home Assistant uses MQTT for optional commands and state reporting.
+Wall-button control uses Modbus RTU independently of Home Assistant and MQTT.
+
+**Deliverable**: Verify Nest-to-Nest relay control on the existing Tesla-to-Edison link before migrating more relay lights.
+
+## Phase 11.1: DALI Light Migration
+
+### DALI-Only Pilot
+
+- [ ] Check and wire the RS-485 connection from Tesla to the DALI controller
+- [ ] Select one commissioned DALI-only light and one Tesla wall button
+- [ ] Receive Tesla actions through Modbus RTU in Nest on the DALI controller
+- [ ] Implement on/off control and level feedback through the existing local UniPi Modbus TCP service
 - [ ] Verify wall-button control with Home Assistant and the MQTT broker offline
 - [ ] Add hold-to-dim after on/off works and verify that release stops dimming
-- [ ] Verify Home Assistant shows the state reported by Nest when MQTT is available
+- [ ] Verify Home Assistant commands and Nest state reports when MQTT is available
 
-Keep the existing wiring, gateway, and DALI addresses.
-Keep the Python bridge available for rollback.
-Use the existing local UniPi interface for the pilot.
-Evaluate direct kernel access separately.
-Defer commissioning and mixed relay/DALI circuits.
-
-### 2. Relay Lights and `evok2mqtt` Replacement
-
-- [ ] Capture Edison and Tesla MQTT topics, discovery, availability, retained state, and command behavior
-- [ ] Configure Nest as the MQTT replacement while the Python light controller remains local-control owner
-- [ ] Edison rollout with `evok2mqtt` stopped
-- [ ] Verify command behavior, restart and reconnect state convergence, broker-outage local control, and rollback
-- [ ] Tesla rollout after Edison acceptance
-- [ ] Preserve the current MQTT contract unless an intentional migration is documented
-
-Boundary:
-
-- Nest: MQTT integration and sysfs I/O
-- Python light controller: local button behavior and light-control semantics
-- Shared UniPi sysfs hardware boundary
-- No concurrent `evok2mqtt` and Nest MQTT integrations
-
-Acceptance:
-
-- Existing Home Assistant entities and commands
-- Local buttons with Nest or MQTT unavailable
-- State recovery after Nest restart and broker reconnection
-- Tested rollback to `evok2mqtt`
-
-- [ ] Start with one migrated light circuit
-- [ ] Enable relay writes only for selected migrated lights
-- [ ] Compare command execution and relay feedback through MQTT observability
-- [ ] Expand migration circuit by circuit
-- [ ] Keep existing controller behavior available until each circuit is verified
+Keep the existing light wiring, gateway, and DALI addresses.
+Keep the Python MQTT DALI bridge available for rollback.
+Defer commissioning and direct kernel access.
 
 **Notes:**
 
-- Verify the DALI-only pilot before expanding to other lights.
 - Evaluate mixed relay/DALI circuits after both lighting paths pass.
 - Plan the alarm migration separately.
 - Prefer local alarm logic and an offline disarm control if the alarm moves off Home Assistant.
 - Keep the Home Assistant panel for arm and disarm commands and state display.
 
-**Deliverable**: Existing distributed light control is migrated safely to `nest` after cover behavior and transport foundations have been proven.
+**Deliverable**: Nest controls a commissioned DALI-only light from a Tesla button over Modbus RTU.
 
 ## Phase 12: Controller-Side Button Semantics
 
