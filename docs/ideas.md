@@ -37,6 +37,11 @@ Some entries extend behavior that already exists.
 - Configuration-management API
 - Terraform provider for that API
 
+## Shady Rollout Follow-up
+
+- Configure the dining-room outlet (`eetkamer stopcontact`, relay `ro_3_01`) as an explicit controllable relay
+- Preserve MQTT on/off control without a physical button binding
+
 ## Operations
 
 - Dedicated `validate` command

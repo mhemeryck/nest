@@ -462,23 +462,42 @@ The file-backed process check covers presses, release, an opposite press, and a 
 Hold-duration tracking and press-to-move behavior remain deferred to Phase 12.
 MQTT cover mapping remains deferred to Phase 13 and must produce the same semantic cover requests.
 
-### 5. Isolated Migration
+### 5. Shady Rollout
 
-- [ ] Run the controller on an isolated, non-critical unit with `hausmaus` and `covers` disabled
-- [ ] Replace the legacy `hausmaus` plus `covers` control path on that unit
+- [x] Verify Inkomkelder on hardware with local buttons and shared Home Assistant
+- [x] Deploy Nest as a systemd service on Shady under the dedicated `nest` account
+- [x] Move all 12 covers and 24 button bindings to Nest
+- [x] Repoint the manual Home Assistant cover entries to Nest MQTT topics
+- [x] Remove the duplicate Home Assistant button automations and verify both control paths
+- [x] Verify the dining-room outlet on relay `ro_3_01` from Home Assistant through Nest
 
-**Deliverable**: `nest` can safely control and observe covers on one physical unit without depending on Modbus, MQTT, Home Assistant, `hausmaus`, or the legacy `covers` service.
+**Status (2026-11-21)**
 
-**Migration boundary:**
+Nest owns cover control on Shady.
+Local buttons work independently of Home Assistant and MQTT.
+The legacy `covers` deployment stays at zero replicas overnight for rollback.
+`evok2mqtt` stays stopped on Shady.
+Edison and Tesla remain outside this rollout.
 
-- `nest` owns the configured cover inputs and relays on the migrated unit.
-- Existing light controllers remain unchanged on other units.
-- MQTT and Home Assistant are external command and state interfaces, not local cover-control dependencies.
+**Next steps**
+
+- [ ] Review the Nest journal after the overnight run
+- [ ] Recheck physical buttons and Home Assistant commands and state updates
+- [ ] If those checks pass, remove the legacy `covers` deployment and its config from Homelab and the cluster
+
+**Rollout follow-ups**
+
+- [ ] Add an explicit controllable relay configuration for the dining-room outlet on `ro_3_01`
+  - The current configuration uses a light entity for MQTT on/off control
+- [ ] Replace the remaining manual Home Assistant entries with MQTT discovery
+  - Full migration requires moving Tesla, Edison, and Alarm to Nest
 
 ## Phase 10: Cover Refinement
 
 - [x] Add time-based position tracking
-- [ ] Verify full travel fits within the configured movement deadline on hardware
+- [ ] Reduce the shared 30-second cutoff after measuring travel in both directions per cover
+  - Inkomkelder reached both endpoints during the 15-second hardware trial
+  - Position remains a time-based estimate for display
 - [x] Start with Unknown position after restart; do not trust a restored estimate
 - [x] Establish an estimated endpoint after a full-travel run from any starting position
 - [x] Keep position Unknown after shorter movements from Unknown
