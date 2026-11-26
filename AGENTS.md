@@ -9,11 +9,7 @@
 - Use lowercase kebab case for new branch names. Do not use slashes.
 - Explicit user approval before `git add`, commits, pushes, merges, rebases, or other repository mutations
 - Normal GPG signing only
-- Commit subject: concise, 50 characters maximum
-- Commit body: what and why, 72-column wrapping
-- Multi-line commit messages: `git commit -F -` with a quoted heredoc
-- PR title and description: intended squash commit message
-- PR descriptions: plain commit-message body, not review templates
+- Use the [Nest Git skill](.agents/skills/nest-git/SKILL.md) for commits and pull requests.
 
 ## Code Style
 
