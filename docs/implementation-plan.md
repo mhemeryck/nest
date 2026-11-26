@@ -285,7 +285,7 @@ Current status:
 - Transaction failures emit failure events without automatic retries.
 - Failed state polls retry on the next configured polling interval.
 - Fatal serial or Modbus client failures stop the actor and runtime.
-- Production hardware verification remains deferred.
+- Phase 12 verifies Modbus RTU on the installed Tesla-to-Edison link.
 
 Implementation work is recorded in five groups:
 
@@ -316,7 +316,7 @@ Working assumption:
 - Initial Modbus event signals represent remote push-button press delivery.
 - A configured event-signal coil written `true` produces a button-press semantic event on the receiving unit.
 - The initial implementation does not define `false` writes, release, hold, repeated-press, or arbitrary payload semantics.
-- Revisit those semantics in Phase 12 before using Modbus event signals for hold-aware controls such as covers.
+- Revisit those semantics in Phase 14 before using Modbus event signals for hold-aware controls such as covers.
 - Cross-unit bindings declare an explicit execution transport so MQTT and Modbus may both publish semantic events without executing the binding twice.
 
 ### 4. State Polling Policy
@@ -325,13 +325,12 @@ Working assumption:
 - [x] Implement a master-owned polling loop that serializes reads with command writes.
 - [x] Test startup and periodic polling behavior.
 
-### 5. Hardening and Hardware Verification
+### 5. Transport Hardening
 
 - [x] Define no automatic transaction retries: command failures emit events; failed polls retry on the next interval.
 - [x] Keep fatal serial and Modbus client failures actor-fatal until production evidence justifies reconnect behavior.
 - [x] Add a PTY-backed integration test for the production `modbus.Run` serial-opening path.
 - [x] Test master and slave actors together across the serial abstraction.
-- [ ] Verify the complete path against physical RS-485 hardware when a component migration requires it
 
 ## Phase 9: Local Cover Controller
 
@@ -459,8 +458,8 @@ Either release requests Stop.
 An opposite press during movement stops the cover through the existing FSM.
 A new press can start movement again.
 The file-backed process check covers presses, release, an opposite press, and a held-button timeout.
-Hold-duration tracking and press-to-move behavior remain deferred to Phase 12.
-MQTT cover mapping remains deferred to Phase 13 and must produce the same semantic cover requests.
+Hold-duration tracking and press-to-move behavior remain deferred to Phase 14.
+Phase 10 maps MQTT commands to the same semantic cover requests.
 
 ### 5. Shady Rollout
 
@@ -492,96 +491,7 @@ Edison and Tesla remain outside this rollout.
 - [ ] Replace the remaining manual Home Assistant entries with MQTT discovery
   - Full migration requires moving Tesla, Edison, and Alarm to Nest
 
-## Phase 10: Cover Refinement
-
-- [x] Add time-based position tracking
-- [ ] Reduce the shared 30-second cutoff after measuring travel in both directions per cover
-  - Inkomkelder reached both endpoints during the 15-second hardware trial
-  - Position remains a time-based estimate for display
-- [x] Start with Unknown position after restart; do not trust a restored estimate
-- [x] Establish an estimated endpoint after a full-travel run from any starting position
-- [x] Keep position Unknown after shorter movements from Unknown
-- [x] Test recovery from unknown or incorrect position estimates
-
-**Notes:**
-
-- Covers should build on the same config and event model defined earlier.
-- Safety rules must ensure up/down relays are never active simultaneously.
-- The cover state machine should remain independent of sysfs so it can be moved to better-suited hardware later.
-- Position and movement are separate: 0% means closed; 100% means open.
-- Open and Closed describe estimated position, not additional movement states.
-- Position estimates must not block explicit Open or Close requests or stop them early.
-- The Phase 9 movement deadline remains active regardless of estimated position.
-
-**Deliverable**: Cover entities behave predictably under real-world timing and interruption scenarios.
-
-## Phase 11: Relay Light Migration
-
-### Tesla-to-Edison Pilot
-
-- [ ] Select one Tesla wall button and one relay-only light on Edison
-- [ ] Record the existing RS-485 roles, serial settings, and register mappings
-- [ ] Test Nest-to-Nest on/off control over the existing wired Modbus RTU link
-- [ ] Verify the wall button switches the light with Home Assistant and the MQTT broker offline
-- [ ] Verify Home Assistant commands and Edison state reports when MQTT is available
-- [ ] Verify restart, reconnect, and rollback before expanding circuit by circuit
-
-Keep one Modbus master and one controller writing the pilot relay.
-Keep the Python controller and `evok2mqtt` available for rollback.
-Capture existing MQTT topics, discovery, availability, and retained state before replacing `evok2mqtt`.
-Document any intentional MQTT contract changes.
-
-Home Assistant uses MQTT for optional commands and state reporting.
-Wall-button control uses Modbus RTU independently of Home Assistant and MQTT.
-
-**Deliverable**: Verify Nest-to-Nest relay control on the existing Tesla-to-Edison link before migrating more relay lights.
-
-## Phase 11.1: DALI Light Migration
-
-### DALI-Only Pilot
-
-- [ ] Check and wire the RS-485 connection from Tesla to the DALI controller
-- [ ] Select one commissioned DALI-only light and one Tesla wall button
-- [ ] Receive Tesla actions through Modbus RTU in Nest on the DALI controller
-- [ ] Implement on/off control and level feedback through the existing local UniPi Modbus TCP service
-- [ ] Verify wall-button control with Home Assistant and the MQTT broker offline
-- [ ] Add hold-to-dim after on/off works and verify that release stops dimming
-- [ ] Verify Home Assistant commands and Nest state reports when MQTT is available
-
-Keep the existing light wiring, gateway, and DALI addresses.
-Keep the Python MQTT DALI bridge available for rollback.
-Defer commissioning and direct kernel access.
-
-**Notes:**
-
-- Evaluate mixed relay/DALI circuits after both lighting paths pass.
-- Plan the alarm migration separately.
-- Prefer local alarm logic and an offline disarm control if the alarm moves off Home Assistant.
-- Keep the Home Assistant panel for arm and disarm commands and state display.
-
-**Deliverable**: Nest controls a commissioned DALI-only light from a Tesla button over Modbus RTU.
-
-## Phase 12: Controller-Side Button Semantics
-
-- [ ] Verify whether hardware and sysfs behavior already provide sufficient debounce for deployed buttons
-- [x] Treat `pressed` and `released` as controller-owned semantic events derived from sysfs state changes
-- [ ] Add press duration tracking for button holds
-- [ ] Add semantic events such as `long_press` or `held_for` for actions like dimmer control
-- [ ] Define deterministic behavior for repeated physical button events and timer cancellation
-- [ ] Add one global cover-button mode selected at startup
-  - Default to hold-to-move
-  - In press-to-move mode, a press starts movement and release has no effect
-  - Press either button for a moving cover to stop it
-- [ ] Add multi-input trigger support when a concrete lighting or cover use case requires it
-
-Current status:
-Press and release button events already exist in controller normalization.
-The first standalone cover migration preserves the current press-and-hold behavior.
-Press-to-move behavior is deferred until the standalone migration is stable.
-
-**Deliverable**: Controller-side button semantics support configurable hold-aware and edge-triggered actions without pushing timing policy into sysfs.
-
-## Phase 13: Cover MQTT Commands
+## Phase 10: Cover MQTT Commands
 
 - [x] Subscribe to cover command topics advertised in Home Assistant discovery
 - [x] Enable cover commands on units with MQTT enabled
@@ -604,14 +514,95 @@ Light command handling and discovery are already covered by Phase 6.
 
 **Deliverable**: Home Assistant can control migrated covers through MQTT without becoming a local cover-control dependency.
 
-## Phase 14: MQTT and Home Assistant Expansion
+## Phase 11: Cover Refinement
 
-- [ ] Refine topic structure as needed for Home Assistant integration
-- [ ] Expand Home Assistant discovery coverage when additional entity classes are ready
-- [ ] Finalize availability and state payloads
-- [ ] Document deployment and migration behavior
+- [x] Add time-based position tracking
+- [ ] Reduce the shared 30-second cutoff after measuring travel in both directions per cover
+  - Inkomkelder reached both endpoints during the 15-second hardware trial
+  - Position remains a time-based estimate for display
+- [x] Start with Unknown position after restart; do not trust a restored estimate
+- [x] Establish an estimated endpoint after a full-travel run from any starting position
+- [x] Keep position Unknown after shorter movements from Unknown
+- [x] Test recovery from unknown or incorrect position estimates
 
-**Deliverable**: MQTT interface evolves from a development/testing interface into a stable HA-facing integration.
+**Notes:**
+
+- Covers should build on the same config and event model defined earlier.
+- Safety rules must ensure up/down relays are never active simultaneously.
+- The cover state machine should remain independent of sysfs so it can be moved to better-suited hardware later.
+- Position and movement are separate: 0% means closed; 100% means open.
+- Open and Closed describe estimated position, not additional movement states.
+- Position estimates must not block explicit Open or Close requests or stop them early.
+- The Phase 9 movement deadline remains active regardless of estimated position.
+
+**Deliverable**: Cover entities behave predictably under real-world timing and interruption scenarios.
+
+## Phase 12: Relay Light Migration
+
+### Tesla-to-Edison Pilot
+
+- [ ] Select one Tesla wall button and one relay-only light on Edison
+- [ ] Record the existing RS-485 roles, serial settings, and register mappings
+- [ ] Test Nest-to-Nest on/off control over the existing wired Modbus RTU link
+- [ ] Verify the wall button switches the light with Home Assistant and the MQTT broker offline
+- [ ] Verify Home Assistant discovery, commands, and Edison state and availability over MQTT
+- [ ] Verify restart, reconnect, and rollback before expanding circuit by circuit
+
+Keep one Modbus master and one controller writing the pilot relay.
+Keep the Python controller and `evok2mqtt` available for rollback.
+Capture existing MQTT topics, discovery, availability, and retained state before replacing `evok2mqtt`.
+Document the relay cutover and any intentional MQTT contract changes.
+
+Home Assistant uses MQTT for optional commands and state reporting.
+Wall-button control uses Modbus RTU independently of Home Assistant and MQTT.
+
+**Deliverable**: Verify Nest-to-Nest relay control on the existing Tesla-to-Edison link before migrating more relay lights.
+
+## Phase 13: DALI Light Migration
+
+### DALI-Only Pilot
+
+- [ ] Check and wire the RS-485 connection from Tesla to the DALI controller
+- [ ] Select one commissioned DALI-only light and one Tesla wall button
+- [ ] Receive Tesla actions through Modbus RTU in Nest on the DALI controller
+- [ ] Implement on/off control and level feedback through the existing local UniPi Modbus TCP service
+- [ ] Verify wall-button control with Home Assistant and the MQTT broker offline
+- [ ] Add hold-to-dim after on/off works and verify that release stops dimming
+- [ ] Verify Home Assistant discovery, commands, and DALI state and availability over MQTT
+
+Keep the existing light wiring, gateway, and DALI addresses.
+Keep the Python MQTT DALI bridge available for rollback.
+Defer commissioning and direct kernel access.
+Document the DALI cutover and its MQTT contract.
+
+**Notes:**
+
+- Evaluate mixed relay/DALI circuits after both lighting paths pass.
+- Plan the alarm migration separately.
+- Prefer local alarm logic and an offline disarm control if the alarm moves off Home Assistant.
+- Keep the Home Assistant panel for arm and disarm commands and state display.
+
+**Deliverable**: Nest controls a commissioned DALI-only light from a Tesla button over Modbus RTU.
+
+## Phase 14: Controller-Side Button Semantics
+
+- [ ] Verify whether hardware and sysfs behavior already provide sufficient debounce for deployed buttons
+- [x] Treat `pressed` and `released` as controller-owned semantic events derived from sysfs state changes
+- [ ] Add press duration tracking for button holds
+- [ ] Add semantic events such as `long_press` or `held_for` for actions like dimmer control
+- [ ] Define deterministic behavior for repeated physical button events and timer cancellation
+- [ ] Add one global cover-button mode selected at startup
+  - Default to hold-to-move
+  - In press-to-move mode, a press starts movement and release has no effect
+  - Press either button for a moving cover to stop it
+- [ ] Add multi-input trigger support when a concrete lighting or cover use case requires it
+
+Current status:
+Press and release button events already exist in controller normalization.
+The first standalone cover migration preserves the current press-and-hold behavior.
+Press-to-move behavior is deferred until the standalone migration is stable.
+
+**Deliverable**: Controller-side button semantics support configurable hold-aware and edge-triggered actions without pushing timing policy into sysfs.
 
 ## Early Decisions
 
