@@ -4,10 +4,10 @@
 
 This note captures the naming and routing direction for distributed light control.
 It is the design reference for implementation plan phase 7.
-See [Home Automation Landscape](home-automation-landscape.md) for the broader system comparison that motivates the transport capability and binding execution strategy choices.
+See [Home Automation Landscape](../reference/home-automation-landscape.md) for the broader system comparison that motivates the transport capability and binding execution strategy choices.
 
 The global configuration, unit projection, MQTT source-event delivery, and Modbus execution are now implemented.
-See [Implementation Plan](implementation-plan.md) for progress and [test fixtures](../test/fixtures/) for current configuration examples.
+See [Implementation Plan](../planning/implementation-plan.md) for progress and [test fixtures](../../test/fixtures/) for current configuration examples.
 This note also retains earlier alternatives; illustrative schemas and phase-specific proposals are not current loader documentation.
 Production Modbus hardware verification remains pending.
 

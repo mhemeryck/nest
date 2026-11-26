@@ -40,4 +40,4 @@ OpenSpec is no longer the development workflow.
 Historical plans and specifications provide context, not automatic requirements or mandatory architecture.
 
 - [Documentation index](docs/README.md)
-- [Implementation roadmap](docs/implementation-plan.md)
+- [Implementation roadmap](docs/planning/implementation-plan.md)

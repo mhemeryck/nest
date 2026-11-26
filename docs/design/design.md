@@ -7,7 +7,7 @@ Universal controller for Unipi hardware. Replaces evok2mqtt + modbusbackup with 
 This document combines current package responsibilities with design direction.
 Cover configuration, a pure movement FSM, and sysfs-owned runtime execution are implemented.
 Physical cover button bindings and MQTT integration remain pending.
-See [Implementation Plan](implementation-plan.md) for progress and [Distributed Light Model](distributed-light-model.md) for configuration and routing.
+See [Implementation Plan](../planning/implementation-plan.md) for progress and [Distributed Light Model](distributed-light-model.md) for configuration and routing.
 
 ## Goals
 
@@ -263,7 +263,7 @@ They should not be the default contract consumed by Home Assistant.
 ## Historical Configuration Sketches
 
 The following sketches predate the global configuration model and are not accepted by the current loader.
-Use [test fixtures](../test/fixtures/) for current examples.
+Use [test fixtures](../../test/fixtures/) for current examples.
 Cover configuration requires further design discussion.
 
 ### Input Unit (Lights)

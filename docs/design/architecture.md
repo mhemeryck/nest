@@ -6,7 +6,7 @@ Wired home automation system for a house, built with open-source components and 
 
 The evok-based flows below describe the legacy system, not the current Nest runtime.
 External deployment status requires verification before migration.
-See [Design](design.md) for Nest responsibilities and [Implementation Plan](implementation-plan.md) for progress.
+See [Design](design.md) for Nest responsibilities and [Implementation Plan](../planning/implementation-plan.md) for progress.
 
 **Guiding Principles:**
 

@@ -86,11 +86,11 @@ Override these values under `units.<unit>.actors.sysfs.poll_intervals` with `dig
 
 ## Nest Implementation
 
-- [Device discovery and value access](../internal/sysfs/device.go)
-- [Worker configuration and polling defaults](../internal/sysfs/config.go)
-- [Polling and output execution](../internal/sysfs/worker.go)
-- [Coordinated output execution](../internal/sysfs/outputs.go)
-- [Command and observation types](../internal/sysfs/actor.go)
+- [Device discovery and value access](../../internal/sysfs/device.go)
+- [Worker configuration and polling defaults](../../internal/sysfs/config.go)
+- [Polling and output execution](../../internal/sysfs/worker.go)
+- [Coordinated output execution](../../internal/sysfs/outputs.go)
+- [Command and observation types](../../internal/sysfs/actor.go)
 
 The sysfs actor accepts toggle, on, and off commands addressed by device ID.
 Workers serialize commands and polling for their device type.
@@ -134,7 +134,7 @@ Failure snapshots preserve the previous movement state and include an error rath
 Runtime errors also carry failures when the states channel is blocked.
 Cleanup failures are logged and returned to the runtime.
 Unrelated light outputs retain their existing lifecycle behavior.
-See [Local Cover Execution Ownership](design.md#local-cover-execution-ownership) for the responsibilities and tradeoffs.
+See [Local Cover Execution Ownership](../design/design.md#local-cover-execution-ownership) for the responsibilities and tradeoffs.
 
 ## Path Mapping
 

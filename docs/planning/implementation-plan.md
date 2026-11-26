@@ -10,7 +10,7 @@ Completed phases record implementation history, including decisions superseded b
 Unchecked items describe proposed work, not fixed implementation requirements.
 Discuss the model and next increment before implementation; revise this plan as decisions change.
 Cover configuration, the movement FSM, and sysfs-owned runtime execution are implemented.
-Physical button bindings and production verification remain pending.
+Shady runs Nest with physical button bindings and Home Assistant MQTT control.
 Historical cover experiments on other branches are reference material only.
 
 ## Migration Direction
@@ -181,7 +181,7 @@ Notes from the current Home Assistant migration context:
 
 ## Phase 7: Distributed Light Control Model
 
-See [Distributed Light Model](distributed-light-model.md) for the current naming and routing direction.
+See [Distributed Light Model](../design/distributed-light-model.md) for the current naming and routing direction.
 
 - [x] Replace the local flat config with the global `actors` / `units` / `bindings` tree
 - [x] Add explicit runtime unit selection via positional CLI argument
