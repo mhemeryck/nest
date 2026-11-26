@@ -11,6 +11,8 @@
 
 ## Git
 
+- Use lowercase kebab case for new branch names. Do not use slashes.
+
 - Explicit user approval before `git add`, commits, pushes, merges, rebases, or other repository mutations
 - Normal GPG signing only
 - Commit subject: concise, 50 characters maximum
@@ -82,16 +84,22 @@
 
 ## Development Workflow
 
-- Discuss substantial changes before implementation: problem, data model, invariants, and main algorithm
-- Challenge assumptions and compare alternatives; observations do not automatically become requirements
-- Keep lightweight, living design documents in `/docs/`
-- Document responsibilities, data flow, significant decisions, and tradeoffs
-- Representative scenarios only when they clarify the model; no exhaustive scenario catalogs
-- Historical plans, OpenSpec artifacts, and existing code: evidence for discussion, not authoritative implementation instructions
-- Do not generate OpenSpec artifacts or use the OpenSpec workflow
-- Agree on a sufficiently clear model before implementation; refine it through small, reviewable changes
-- Discuss new architectural concepts before introducing them
-- Reconsider an inadequate model instead of accumulating workarounds
+1. Discuss the problem, data model, invariants, and main algorithm.
+   Challenge assumptions and compare alternatives.
+   Agree on an initial plan and record it in a document before implementation.
+   Keep rollout plans in `docs/planning/` and living design notes in `docs/design/`.
+2. Implement the agreed first increment.
+   Discuss new architectural concepts before introducing them.
+   Document responsibilities, data flow, significant decisions, and tradeoffs.
+3. Review the implementation together.
+   Show an architecture diagram of the implemented components, responsibilities, and data flow.
+   Show call graphs for the relevant entry points and use them to walk through the code together.
+   Link the diagrams and call graphs to the relevant code when useful.
+   Refine the implementation in small, reviewable changes.
+
+- Use representative scenarios to clarify the model
+- Use historical plans and existing code as evidence for discussion
+- Reconsider the model when implementation exposes a problem
 - Optimize for understanding, minimal necessary state, and real failure conditions
 - Run `devenv tasks run dev:check` before task completion
 - Nushell for development scripts and shell examples
@@ -102,6 +110,6 @@
 - `/internal/`: private application code
 - `/pkg/`: external libraries
 - `/test/`: integration tests and fixtures
-- `/docs/`: documentation
+- `/docs/`: documentation ([index](docs/README.md))
 - No `/vendor/`
 - `/internal/` over `/pkg/` for non-public code
