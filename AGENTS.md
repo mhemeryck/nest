@@ -2,12 +2,7 @@
 
 ## Writing
 
-- Fragments over full sentences
-- Full sentences only for narrative or necessary precision
-- One sentence per line in Markdown prose
-- Compact scan-oriented comments, lists, and headings
-- Design documents: ASD-STE100 Simplified Technical English; active voice, consistent terms, one idea per sentence
-- Format all Markdown files with dprint; run `devenv tasks run dev:format` after edits
+- Use the [Nest Markdown skill](.agents/skills/nest-markdown/SKILL.md) when writing or editing Markdown.
 
 ## Git
 
