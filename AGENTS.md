@@ -2,22 +2,15 @@
 
 ## Writing
 
-- Fragments over full sentences
-- Full sentences only for narrative or necessary precision
-- One sentence per line in Markdown prose
-- Compact scan-oriented comments, lists, and headings
-- Design documents: ASD-STE100 Simplified Technical English; active voice, consistent terms, one idea per sentence
-- Format all Markdown files with dprint; run `devenv tasks run dev:format` after edits
+- Use the [Nest Markdown skill](.agents/skills/nest-markdown/SKILL.md) when writing or editing Markdown.
 
 ## Git
 
+- Use lowercase kebab case for new branch names. Do not use slashes.
 - Explicit user approval before `git add`, commits, pushes, merges, rebases, or other repository mutations
 - Normal GPG signing only
-- Commit subject: concise, 50 characters maximum
-- Commit body: what and why, 72-column wrapping
-- Multi-line commit messages: `git commit -F -` with a quoted heredoc
-- PR title and description: intended squash commit message
-- PR descriptions: plain commit-message body, not review templates
+- Use the [Nest Git skill](.agents/skills/nest-git/SKILL.md) for commits and pull requests.
+- Keep validation sections and check results out of merge request descriptions. CI reports validation.
 
 ## Code Style
 
@@ -82,16 +75,20 @@
 
 ## Development Workflow
 
-- Discuss substantial changes before implementation: problem, data model, invariants, and main algorithm
-- Challenge assumptions and compare alternatives; observations do not automatically become requirements
-- Keep lightweight, living design documents in `/docs/`
-- Document responsibilities, data flow, significant decisions, and tradeoffs
-- Representative scenarios only when they clarify the model; no exhaustive scenario catalogs
-- Historical plans, OpenSpec artifacts, and existing code: evidence for discussion, not authoritative implementation instructions
-- Do not generate OpenSpec artifacts or use the OpenSpec workflow
-- Agree on a sufficiently clear model before implementation; refine it through small, reviewable changes
-- Discuss new architectural concepts before introducing them
-- Reconsider an inadequate model instead of accumulating workarounds
+1. Discuss the problem, data model, invariants, and main algorithm.
+   Challenge assumptions and compare alternatives.
+   Agree on an initial plan and record it in a document before implementation.
+   Keep rollout plans in `docs/planning/` and living design notes in `docs/design/`.
+2. Implement the agreed first increment.
+   Discuss new architectural concepts before introducing them.
+   Document responsibilities, data flow, significant decisions, and tradeoffs.
+3. Review the implementation together.
+   Use the [Nest implementation review skill](.agents/skills/nest-implementation-review/SKILL.md) for architecture diagrams and call graphs.
+   Refine the implementation in small, reviewable changes.
+
+- Use representative scenarios to clarify the model
+- Use historical plans and existing code as evidence for discussion
+- Reconsider the model when implementation exposes a problem
 - Optimize for understanding, minimal necessary state, and real failure conditions
 - Run `devenv tasks run dev:check` before task completion
 - Nushell for development scripts and shell examples
@@ -102,6 +99,6 @@
 - `/internal/`: private application code
 - `/pkg/`: external libraries
 - `/test/`: integration tests and fixtures
-- `/docs/`: documentation
+- `/docs/`: documentation ([index](docs/README.md))
 - No `/vendor/`
 - `/internal/` over `/pkg/` for non-public code
