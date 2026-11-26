@@ -517,7 +517,22 @@ Edison and Tesla remain outside this rollout.
 
 ## Phase 11: Light Control Migration
 
-### Pre-Migration: `evok2mqtt` Replacement
+### 1. DALI-Only Pilot
+
+- [ ] Select one commissioned DALI-only light and one Tesla button
+- [ ] Confirm the Modbus path from Tesla to the DALI controller
+- [ ] Implement Nest on/off control and level feedback on the DALI controller
+- [ ] Verify wall-button control with Home Assistant and the MQTT broker offline
+- [ ] Add hold-to-dim after on/off works and verify that release stops dimming
+- [ ] Verify Home Assistant shows the state reported by Nest when MQTT is available
+
+Keep the existing wiring, gateway, and DALI addresses.
+Keep the Python bridge available for rollback.
+Use the existing local UniPi interface for the pilot.
+Evaluate direct kernel access separately.
+Defer commissioning and mixed relay/DALI circuits.
+
+### 2. Relay Lights and `evok2mqtt` Replacement
 
 - [ ] Capture Edison and Tesla MQTT topics, discovery, availability, retained state, and command behavior
 - [ ] Configure Nest as the MQTT replacement while the Python light controller remains local-control owner
@@ -548,8 +563,11 @@ Acceptance:
 
 **Notes:**
 
-- This phase is intentionally deferred while the existing light integration remains operational.
-- Modbus runtime integration and the longer-term controller hardware direction should be settled before critical light migration.
+- Verify the DALI-only pilot before expanding to other lights.
+- Evaluate mixed relay/DALI circuits after both lighting paths pass.
+- Plan the alarm migration separately.
+- Prefer local alarm logic and an offline disarm control if the alarm moves off Home Assistant.
+- Keep the Home Assistant panel for arm and disarm commands and state display.
 
 **Deliverable**: Existing distributed light control is migrated safely to `nest` after cover behavior and transport foundations have been proven.
 
@@ -560,8 +578,10 @@ Acceptance:
 - [ ] Add press duration tracking for button holds
 - [ ] Add semantic events such as `long_press` or `held_for` for actions like dimmer control
 - [ ] Define deterministic behavior for repeated physical button events and timer cancellation
-- [ ] Define configurable edge-triggered cover behavior where a press starts movement without requiring the button to be held
-- [ ] Define behavior for repeated presses and opposite-direction presses
+- [ ] Add one global cover-button mode selected at startup
+  - Default to hold-to-move
+  - In press-to-move mode, a press starts movement and release has no effect
+  - Press either button for a moving cover to stop it
 - [ ] Add multi-input trigger support when a concrete lighting or cover use case requires it
 
 Current status:
