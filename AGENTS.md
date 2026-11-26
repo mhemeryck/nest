@@ -7,7 +7,6 @@
 ## Git
 
 - Use lowercase kebab case for new branch names. Do not use slashes.
-
 - Explicit user approval before `git add`, commits, pushes, merges, rebases, or other repository mutations
 - Normal GPG signing only
 - Commit subject: concise, 50 characters maximum
