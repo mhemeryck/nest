@@ -34,8 +34,16 @@ Some entries extend behavior that already exists.
 - GPIO v2 ABI over UniPi sysfs
 - Home Assistant discovery contract refinements
 - Existing MQTT-facing options in discovery; no separate HA config layer
-- Configuration-management API
-- Terraform provider for that API
+- Discovery behavior for disabled entities
+- Ownership of transport address parsing and lookup
+- Actor package grouping as integrations grow
+
+## Configuration Distribution
+
+- Configuration-management API and Terraform provider
+- Remote delivery of unit configuration over a control plane
+- The current runtime reads a shared configuration file and selects one unit
+- Keep domain lookups in the registry and transport addresses with their integrations
 
 ## Shady Rollout Follow-up
 

@@ -567,7 +567,8 @@ Wall-button control uses Modbus RTU independently of Home Assistant and MQTT.
 - [ ] Receive Tesla actions through Modbus RTU in Nest on the DALI controller
 - [ ] Implement on/off control and level feedback through the existing local UniPi Modbus TCP service
 - [ ] Verify wall-button control with Home Assistant and the MQTT broker offline
-- [ ] Add hold-to-dim after on/off works and verify that release stops dimming
+- [ ] Detect button holds in the controller after on/off works
+- [ ] Add hold-to-dim and verify that release stops dimming
 - [ ] Verify Home Assistant discovery, commands, and DALI state and availability over MQTT
 
 Keep the existing light wiring, gateway, and DALI addresses.
@@ -588,8 +589,6 @@ Document the DALI cutover and its MQTT contract.
 
 - [ ] Verify whether hardware and sysfs behavior already provide sufficient debounce for deployed buttons
 - [x] Treat `pressed` and `released` as controller-owned semantic events derived from sysfs state changes
-- [ ] Add press duration tracking for button holds
-- [ ] Add semantic events such as `long_press` or `held_for` for actions like dimmer control
 - [ ] Define deterministic behavior for repeated physical button events and timer cancellation
 - [ ] Add one global cover-button mode selected at startup
   - Default to hold-to-move
@@ -602,49 +601,4 @@ Press and release button events already exist in controller normalization.
 The first standalone cover migration preserves the current press-and-hold behavior.
 Press-to-move behavior is deferred until the standalone migration is stable.
 
-**Deliverable**: Controller-side button semantics support configurable hold-aware and edge-triggered actions without pushing timing policy into sysfs.
-
-## Early Decisions
-
-These should be decided before transport and entity complexity increase.
-
-- [ ] Testing strategy (mock sysfs vs real hardware)
-- [x] Config file shape and CLI interface design
-- [x] Local event model boundary between actor observations, semantic events, and actor commands
-- [ ] Controller-side button semantics for long press, hold, and repeated presses
-- [x] MQTT topic and autodiscovery schema centered on the Home Assistant discovery contract
-- [x] Modbus master/slave topology, event-signal coils, and state-point addressing
-
-## Open Questions
-
-- [ ] Cover support timing requirements
-- [x] Publish relay-backed light state to MQTT; raw relay telemetry remains excluded by default
-- [ ] Final topic structure refinements around the HA-facing MQTT contract
-- [ ] Whether command topics should be advertised for disabled entities
-- [x] Modbus output units execute local semantic actions from event-signal writes, not direct remote relay writes
-- [ ] Whether command topics or transport addresses should be parsed by the actor or resolved through registry mappings
-- [ ] Whether actor grouping should move integrations under `internal/actors` once a second actor makes the grouping useful
-
-## Future Config Distribution Direction
-
-The global configuration tree and unit-local projection are already implemented.
-Each process reads the configuration from a file and selects its unit explicitly.
-Remote distribution, possibly over MQTT or another control plane, remains a future option rather than an implementation commitment.
-
-The intended layering should stay roughly:
-
-```text
-parsed global config
-  -> unit-local config projection
-  -> domain entities
-  -> runtime registries/indexes
-  -> actor-specific addressing
-```
-
-Implications:
-
-- The domain registry should stay focused on semantic/domain lookup for the local unit
-- MQTT topic names and other transport addresses should not be stored directly in the domain registry by default
-- MQTT topics should remain actor-specific addressing, owned by the MQTT package or a future MQTT topic index
-- If topic generation spreads or the contract hardens, introduce a dedicated MQTT topic index built from domain entities and MQTT configuration
-- Global config projection should decide what each unit knows about, while actor-specific indexes decide how that local knowledge maps to transports
+**Deliverable**: Nest supports both hold-to-move and press-to-move for physical cover buttons.
